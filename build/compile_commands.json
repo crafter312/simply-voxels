@@ -1,0 +1,14 @@
+[
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
+  "command": "/usr/bin/c++   -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/main.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/main.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o"
+},
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
+  "command": "/usr/bin/c++   -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o"
+}
+]

@@ -1,0 +1,168 @@
+{
+	"inputs" : 
+	[
+		{
+			"path" : "CMakeLists.txt"
+		},
+		{
+			"isGenerated" : true,
+			"path" : "build/CMakeFiles/4.0.1/CMakeSystem.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/CMakeSystemSpecificInitialize.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/Linux-Initialize.cmake"
+		},
+		{
+			"isGenerated" : true,
+			"path" : "build/CMakeFiles/4.0.1/CMakeCXXCompiler.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/CMakeSystemSpecificInformation.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/CMakeGenericSystem.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/CMakeInitializeConfigs.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/Linux.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/UnixPaths.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/CMakeCXXInformation.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/CMakeLanguageInformation.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Compiler/GNU-CXX.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Compiler/GNU.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Compiler/CMakeCommonCompilerMacros.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/Linux-GNU-CXX.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/Linux-GNU.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/CMakeCommonLanguageInclude.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Internal/CMakeCXXLinkerInformation.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Internal/CMakeCommonLinkerInformation.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Linker/GNU-CXX.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Linker/GNU.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/Linker/Linux-GNU-CXX.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/Linker/Linux-GNU.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/Platform/Linker/GNU.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/FindVulkan.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/FindPackageHandleStandardArgs.cmake"
+		},
+		{
+			"isCMake" : true,
+			"isExternal" : true,
+			"path" : "/usr/share/cmake-4.0/Modules/FindPackageMessage.cmake"
+		},
+		{
+			"isExternal" : true,
+			"path" : "/usr/lib/x86_64-linux-gnu/cmake/glfw3/glfw3ConfigVersion.cmake"
+		},
+		{
+			"isExternal" : true,
+			"path" : "/usr/lib/x86_64-linux-gnu/cmake/glfw3/glfw3Config.cmake"
+		},
+		{
+			"isExternal" : true,
+			"path" : "/usr/lib/x86_64-linux-gnu/cmake/glfw3/glfw3Targets.cmake"
+		},
+		{
+			"isExternal" : true,
+			"path" : "/usr/lib/x86_64-linux-gnu/cmake/glfw3/glfw3Targets-none.cmake"
+		}
+	],
+	"kind" : "cmakeFiles",
+	"paths" : 
+	{
+		"build" : "/home/hswebb/Desktop/Programming/vulkan-test/build",
+		"source" : "/home/hswebb/Desktop/Programming/vulkan-test"
+	},
+	"version" : 
+	{
+		"major" : 1,
+		"minor" : 1
+	}
+}
