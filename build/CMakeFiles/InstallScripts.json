@@ -1,7 +1,9 @@
 {
 	"InstallScripts" : 
 	[
-		"/home/hswebb/Desktop/Programming/vulkan-test/build/cmake_install.cmake"
+		"/home/hswebb/Desktop/Programming/vulkan-test/build/cmake_install.cmake",
+		"/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-build/cmake_install.cmake",
+		"/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-build/glm/cmake_install.cmake"
 	],
 	"Parallel" : false
 }

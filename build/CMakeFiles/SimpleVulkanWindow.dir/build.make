@@ -129,6 +129,7 @@ SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o
 SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/build.make
 SimpleVulkanWindow: /usr/lib/x86_64-linux-gnu/libvulkan.so
 SimpleVulkanWindow: /usr/lib/x86_64-linux-gnu/libglfw.so.3.3
+SimpleVulkanWindow: _deps/glm-build/glm/libglm.a
 SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX executable SimpleVulkanWindow"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/SimpleVulkanWindow.dir/link.txt --verbose=$(VERBOSE)

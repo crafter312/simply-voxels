@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR) # Explicitly set policies to 3.10
 
 # Project name and language
 project(SimpleVulkanWindow LANGUAGES CXX)
@@ -14,7 +14,27 @@ find_package(Vulkan REQUIRED)
 # Find GLFW package (make sure GLFW is installed or provide it)
 find_package(glfw3 REQUIRED)
 
-# Find glslc (SPIR-V compiler)
+# --- Fetch GLM using FetchContent ---
+# Include the module
+include(FetchContent)
+
+# Explicitly set where FetchContent stores its stuff (usually defaults to build/_deps)
+set(FETCHCONTENT_BASE_DIR ${CMAKE_BINARY_DIR}/_deps)
+
+# Declare the dependency
+FetchContent_Declare(
+  glm
+  GIT_REPOSITORY https://github.com/g-truc/glm.git
+  GIT_TAG 1.0.1 # Try the latest stable release tag
+)
+
+# Explicitly prevent find_package from finding the system GLM
+set(glm_DIR "" CACHE INTERNAL "Prevent find_package for system GLM")
+
+# Make it available (downloads/configures if needed)
+FetchContent_MakeAvailable(glm)
+
+# Find glslc (SPIR-V compiler) - Keep this as is
 find_program(GLSLANG_VALIDATOR_EXECUTABLE glslangValidator HINTS ENV VULKAN_SDK PATHS ENV PATH)
 if(NOT GLSLANG_VALIDATOR_EXECUTABLE)
     message(FATAL_ERROR "glslangValidator not found. Make sure the Vulkan SDK is installed and in your PATH.")
@@ -57,7 +77,10 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV})
 add_dependencies(SimpleVulkanWindow Shaders)
 
 # Link libraries
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw)
+# Link Vulkan, GLFW, and the fetched GLM target.
+# The target name provided by FetchContent for GLM is typically 'glm'.
+# Note: GLM is often header-only, but FetchContent sets up an INTERFACE library target.
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm)
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")

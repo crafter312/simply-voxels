@@ -142,6 +142,19 @@ Shaders/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Shaders.dir/build.make CMakeFiles/Shaders.dir/build
 .PHONY : Shaders/fast
 
+#=============================================================================
+# Target rules for targets named glm
+
+# Build rule for target.
+glm: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 glm
+.PHONY : glm
+
+# fast build rule for target.
+glm/fast:
+	$(MAKE) $(MAKESILENT) -f _deps/glm-build/glm/CMakeFiles/glm.dir/build.make _deps/glm-build/glm/CMakeFiles/glm.dir/build
+.PHONY : glm/fast
+
 src/HelloVulkanApp.o: src/HelloVulkanApp.cpp.o
 .PHONY : src/HelloVulkanApp.o
 
@@ -224,6 +237,7 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... Shaders"
 	@echo "... SimpleVulkanWindow"
+	@echo "... glm"
 	@echo "... src/HelloVulkanApp.o"
 	@echo "... src/HelloVulkanApp.i"
 	@echo "... src/HelloVulkanApp.s"
