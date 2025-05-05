@@ -2,16 +2,16 @@
 
 // Input vertex attributes from the vertex buffer
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inColor; // Let's add color per vertex
+// We don't need per-vertex color for a solid cube
 
-// Output to the fragment shader
-layout(location = 0) out vec3 fragColor;
+// Uniform Buffer Object containing transformation matrices
+layout(binding = 0) uniform UniformBufferObject {
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} ubo;
 
 void main() {
-    // For now, just pass the position through (no transformation yet)
-    // We'll add MVP matrix multiplication here later
-    gl_Position = vec4(inPosition, 1.0);
-
-    // Pass the color to the fragment shader
-    fragColor = inColor;
+    // Calculate final position in clip space using Model-View-Projection matrices
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
 }
