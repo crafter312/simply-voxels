@@ -129,6 +129,19 @@ SimpleVulkanWindow/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/build
 .PHONY : SimpleVulkanWindow/fast
 
+#=============================================================================
+# Target rules for targets named Shaders
+
+# Build rule for target.
+Shaders: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 Shaders
+.PHONY : Shaders
+
+# fast build rule for target.
+Shaders/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Shaders.dir/build.make CMakeFiles/Shaders.dir/build
+.PHONY : Shaders/fast
+
 src/HelloVulkanApp.o: src/HelloVulkanApp.cpp.o
 .PHONY : src/HelloVulkanApp.o
 
@@ -209,6 +222,7 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
+	@echo "... Shaders"
 	@echo "... SimpleVulkanWindow"
 	@echo "... src/HelloVulkanApp.o"
 	@echo "... src/HelloVulkanApp.i"

@@ -11,7 +11,8 @@
 		"commands" : 
 		[
 			"add_executable",
-			"target_link_libraries"
+			"target_link_libraries",
+			"add_dependencies"
 		],
 		"files" : 
 		[
@@ -25,13 +26,19 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 18,
+				"line" : 24,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 24,
+				"line" : 60,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 57,
 				"parent" : 0
 			}
 		]
@@ -60,6 +67,13 @@
 				1,
 				2
 			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 3,
+			"id" : "Shaders::@6890427a1f51a3e7e1df"
 		}
 	],
 	"id" : "SimpleVulkanWindow::@6890427a1f51a3e7e1df",

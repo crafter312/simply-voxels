@@ -64,10 +64,12 @@ CMAKE_BINARY_DIR = /home/hswebb/Desktop/Programming/vulkan-test/build
 
 # The main recursive "all" target.
 all: CMakeFiles/SimpleVulkanWindow.dir/all
+all: CMakeFiles/Shaders.dir/all
 .PHONY : all
 
 # The main recursive "codegen" target.
 codegen: CMakeFiles/SimpleVulkanWindow.dir/codegen
+codegen: CMakeFiles/Shaders.dir/codegen
 .PHONY : codegen
 
 # The main recursive "preinstall" target.
@@ -76,21 +78,22 @@ preinstall:
 
 # The main recursive "clean" target.
 clean: CMakeFiles/SimpleVulkanWindow.dir/clean
+clean: CMakeFiles/Shaders.dir/clean
 .PHONY : clean
 
 #=============================================================================
 # Target rules for target CMakeFiles/SimpleVulkanWindow.dir
 
 # All Build rule for target.
-CMakeFiles/SimpleVulkanWindow.dir/all:
+CMakeFiles/SimpleVulkanWindow.dir/all: CMakeFiles/Shaders.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2,3,4 "Built target SimpleVulkanWindow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=3,4,5,6 "Built target SimpleVulkanWindow"
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/SimpleVulkanWindow.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 4
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/SimpleVulkanWindow.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 0
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/rule
@@ -100,15 +103,47 @@ SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/rule
 .PHONY : SimpleVulkanWindow
 
 # codegen rule for target.
-CMakeFiles/SimpleVulkanWindow.dir/codegen:
+CMakeFiles/SimpleVulkanWindow.dir/codegen: CMakeFiles/Shaders.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2,3,4 "Finished codegen for target SimpleVulkanWindow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=3,4,5,6 "Finished codegen for target SimpleVulkanWindow"
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/codegen
 
 # clean rule for target.
 CMakeFiles/SimpleVulkanWindow.dir/clean:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/clean
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/clean
+
+#=============================================================================
+# Target rules for target CMakeFiles/Shaders.dir
+
+# All Build rule for target.
+CMakeFiles/Shaders.dir/all:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Shaders.dir/build.make CMakeFiles/Shaders.dir/depend
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Shaders.dir/build.make CMakeFiles/Shaders.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2 "Built target Shaders"
+.PHONY : CMakeFiles/Shaders.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/Shaders.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 2
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/Shaders.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 0
+.PHONY : CMakeFiles/Shaders.dir/rule
+
+# Convenience name for target.
+Shaders: CMakeFiles/Shaders.dir/rule
+.PHONY : Shaders
+
+# codegen rule for target.
+CMakeFiles/Shaders.dir/codegen:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Shaders.dir/build.make CMakeFiles/Shaders.dir/codegen
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2 "Finished codegen for target Shaders"
+.PHONY : CMakeFiles/Shaders.dir/codegen
+
+# clean rule for target.
+CMakeFiles/Shaders.dir/clean:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Shaders.dir/build.make CMakeFiles/Shaders.dir/clean
+.PHONY : CMakeFiles/Shaders.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.

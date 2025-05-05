@@ -1051,7 +1051,31 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "[/usr/lib/x86_64-linux-gnu/libvulkan.so][/usr/include][ missing components: glslc glslangValidator][v1.3.280()]"
+			"value" : "[/usr/lib/x86_64-linux-gnu/libvulkan.so][/usr/include][found components: glslangValidator missing components: glslc][v1.3.280()]"
+		},
+		{
+			"name" : "GLSLANG_VALIDATOR_EXECUTABLE",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a program."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "/usr/bin/glslangValidator"
+		},
+		{
+			"name" : "GLSLC_EXECUTABLE",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a program."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "GLSLC_EXECUTABLE-NOTFOUND"
 		},
 		{
 			"name" : "SimpleVulkanWindow_BINARY_DIR",
@@ -1103,7 +1127,7 @@
 				}
 			],
 			"type" : "FILEPATH",
-			"value" : "Vulkan_GLSLANG_VALIDATOR_EXECUTABLE-NOTFOUND"
+			"value" : "/bin/glslangValidator"
 		},
 		{
 			"name" : "Vulkan_GLSLC_EXECUTABLE",
