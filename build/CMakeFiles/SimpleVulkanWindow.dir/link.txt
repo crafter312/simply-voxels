@@ -1,1 +1,1 @@
-/usr/bin/c++ -g CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o -o SimpleVulkanWindow  /usr/lib/x86_64-linux-gnu/libvulkan.so /usr/lib/x86_64-linux-gnu/libglfw.so.3.3
+/usr/bin/c++ -g CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o -o SimpleVulkanWindow  /usr/lib/x86_64-linux-gnu/libvulkan.so /usr/lib/x86_64-linux-gnu/libglfw.so.3.3

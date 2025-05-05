@@ -17,7 +17,8 @@ find_package(glfw3 REQUIRED)
 # Add executable
 add_executable(SimpleVulkanWindow
     src/main.cpp
-    src/HelloVulkanApp.cpp)
+    src/HelloVulkanApp.cpp
+    src/VulkanRenderer.cpp) # Add the new renderer source file
 
 # Link libraries
 target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw)

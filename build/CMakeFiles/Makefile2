@@ -85,12 +85,12 @@ clean: CMakeFiles/SimpleVulkanWindow.dir/clean
 CMakeFiles/SimpleVulkanWindow.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2,3 "Built target SimpleVulkanWindow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2,3,4 "Built target SimpleVulkanWindow"
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/SimpleVulkanWindow.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 4
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/SimpleVulkanWindow.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 0
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/rule
@@ -102,7 +102,7 @@ SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/rule
 # codegen rule for target.
 CMakeFiles/SimpleVulkanWindow.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2,3 "Finished codegen for target SimpleVulkanWindow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=1,2,3,4 "Finished codegen for target SimpleVulkanWindow"
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/codegen
 
 # clean rule for target.
