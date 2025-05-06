@@ -51,7 +51,7 @@ private:
     std::unique_ptr<VulkanRenderer> renderer;
 
     // --- Input ---
-    std::unique_ptr<InputManager> inputManager;
+    std::shared_ptr<InputManager> inputManager;
 
     void initWindow();
     void initVulkan();

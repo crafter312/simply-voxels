@@ -117,7 +117,7 @@ void HelloVulkanApp::initWindow() {
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
     // --- Initialize Input Manager ---
-    inputManager = std::make_unique<InputManager>(window);
+    inputManager = std::make_shared<InputManager>(window);
     std::cout << "InputManager initialized." << std::endl;
 }
 
