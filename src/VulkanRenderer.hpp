@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>   // For shader file loading
 #include <fstream>  // For shader file loading
+#include <array>    // For Vertex attributes
 #include <cstdint> // Required for uint32_t
 
 // Forward declare HelloVulkanApp types needed here
@@ -111,17 +112,13 @@ struct UniformBufferObject {
     glm::mat4 proj;
 };
 
-// Structure to hold swap chain support details (Moved from HelloVulkanApp.hpp)
-struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes;
-};
+// Forward declare VulkanSwapChain
+class VulkanSwapChain;
 
 class VulkanRenderer {
 public:
     // Constructor takes necessary handles and pre-queried support details
-    VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle, const std::unique_ptr<SwapChainSupportDetails> swapChainSupport);
+    VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle);
     ~VulkanRenderer(); // Use destructor for cleanup
 
     // Call this after constructor to create pipeline resources
@@ -133,9 +130,6 @@ public:
     // Public flag to signal resize from callback
     bool framebufferResized = false;
 
-    // Made static, takes surface as argument
-    static std::unique_ptr<SwapChainSupportDetails> querySwapChainSupport(VkPhysicalDevice targetDevice, VkSurfaceKHR surface);
-
 private:
     // --- References to external objects ---
     GLFWwindow* window;
@@ -143,21 +137,15 @@ private:
     VkSurfaceKHR surfaceRef;
     VkPhysicalDevice physicalDeviceRef;
     VkDevice deviceRef;
-    std::unique_ptr<QueueFamilyIndices> queueIndicesRef;
+    // Use shared_ptr as both Renderer and SwapChain need these indices
+    std::shared_ptr<QueueFamilyIndices> queueIndicesRef;
     VkQueue graphicsQueueRef;
-    std::unique_ptr<SwapChainSupportDetails> swapChainSupportRef; // Store pre-queried details
     VkQueue presentQueueRef;
 
     // --- Constants ---
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
-    // --- Swap Chain ---
-    VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-    std::vector<VkImage> swapChainImages;
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
-    std::vector<VkImageView> swapChainImageViews;
-    std::vector<VkFramebuffer> swapChainFramebuffers;
+    std::unique_ptr<VulkanSwapChain> swapChainManager;
 
     // --- Rendering ---
     VkRenderPass renderPass = VK_NULL_HANDLE;
@@ -189,10 +177,7 @@ private:
     std::vector<void*> uniformBuffersMapped; // For persistent mapping
 
     // --- Setup Steps (Internal) ---
-    void createSwapChain();
-    void createImageViews();
     void createRenderPass();
-    void createFramebuffers();
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
@@ -204,8 +189,9 @@ private:
     void createGraphicsPipeline();
     void createIndexBuffer();
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-    void cleanupSwapChain();
-    void recreateSwapChain();
+
+    // Renamed from recreateSwapChain to reflect it recreates more now
+    void recreateSwapChainResources();
 
     void updateUniformBuffer(uint32_t currentImage);
     // --- Helpers (Internal) ---
@@ -216,9 +202,6 @@ private:
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     VkShaderModule createShaderModule(const std::vector<char>& code);
     static std::vector<char> readFile(const std::string& filename); // Static helper
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 };
 
 #endif // VULKAN_RENDERER_HPP

@@ -1,4 +1,5 @@
 #include "VulkanRenderer.hpp"
+#include "VulkanSwapChain.hpp" // Include the new swap chain class
 #include "HelloVulkanApp.hpp" // Include for QueueFamilyIndices definition
 
 #include <iostream>
@@ -12,23 +13,26 @@
 #include <fstream>  // For shader file loading
 #include <cstring> // For memcpy
 
-VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle, std::unique_ptr<SwapChainSupportDetails> swapChainSupport)
+VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle)
     : window(glfwWindow),
       instanceRef(instance),
       surfaceRef(surface),
       physicalDeviceRef(physicalDevice),
       deviceRef(logicalDevice),
-      swapChainSupportRef(std::move(swapChainSupport)), // Initialize member
       graphicsQueueRef(graphicsQueueHandle),
       presentQueueRef(presentQueueHandle)
 {
-    queueIndicesRef = std::make_unique<QueueFamilyIndices>(queueIndices); // Store a copy of the queue indices
+    // Create a shared instance of QueueFamilyIndices
+    queueIndicesRef = std::make_shared<QueueFamilyIndices>(queueIndices);
     if (!window || instanceRef == VK_NULL_HANDLE || surfaceRef == VK_NULL_HANDLE ||
         physicalDeviceRef == VK_NULL_HANDLE || deviceRef == VK_NULL_HANDLE ||
         !queueIndicesRef->isComplete() || graphicsQueueRef == VK_NULL_HANDLE || presentQueueRef == VK_NULL_HANDLE)
     {
         throw std::runtime_error("VulkanRenderer received null or invalid handles during construction!");
     }
+    // Create the swap chain manager
+    // Pass the shared pointer to the swap chain manager
+    swapChainManager = std::make_unique<VulkanSwapChain>(instanceRef, physicalDeviceRef, deviceRef, surfaceRef, window, queueIndicesRef);
     std::cout << "VulkanRenderer constructed." << std::endl;
 }
 
@@ -36,7 +40,8 @@ VulkanRenderer::~VulkanRenderer() {
     std::cout << "Cleaning up VulkanRenderer..." << std::endl;
     // Note: vkDeviceWaitIdle should be called before this destructor is invoked (e.g., in HelloVulkanApp::cleanup)
 
-    cleanupSwapChain(); // Clean up swap chain resources first
+    // Swap chain resources are cleaned up by swapChainManager's destructor
+    swapChainManager.reset(); // Explicitly reset before other resources if needed, though RAII handles it
 
     // Destroy graphics pipeline and layout
     if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(deviceRef, graphicsPipeline, nullptr);
@@ -85,17 +90,17 @@ VulkanRenderer::~VulkanRenderer() {
 
 void VulkanRenderer::init() {
     std::cout << "Initializing VulkanRenderer..." << std::endl;
-    createSwapChain();
-    std::cout << "Swap Chain created." << std::endl;
-    createImageViews();
-    std::cout << "Image Views created." << std::endl;
+    // Initialize swap chain (creates chain and image views)
+    swapChainManager->init();
+    std::cout << "Swap Chain initialized." << std::endl;
+    // Create render pass (needs swap chain format)
     createRenderPass();
+    std::cout << "Render Pass created." << std::endl;
     // Create descriptor layout before pipeline layout
     createDescriptorSetLayout();
-    std::cout << "Render Pass created." << std::endl;
     createGraphicsPipeline(); // Create pipeline after render pass
     std::cout << "Graphics Pipeline created." << std::endl;
-    createFramebuffers();
+    swapChainManager->createFramebuffers(renderPass); // Create framebuffers (needs render pass and image views)
     std::cout << "Framebuffers created." << std::endl;
     createCommandPool();
     std::cout << "Command Pool created." << std::endl;
@@ -118,84 +123,12 @@ void VulkanRenderer::init() {
     std::cout << "VulkanRenderer initialization complete." << std::endl;
 }
 
-void VulkanRenderer::createSwapChain() {
-    // Use the stored swap chain support details
-    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupportRef->formats);
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupportRef->presentModes);
-    VkExtent2D extent = chooseSwapExtent(swapChainSupportRef->capabilities);
-
-    uint32_t imageCount = swapChainSupportRef->capabilities.minImageCount + 1;
-    if (swapChainSupportRef->capabilities.maxImageCount > 0 && imageCount > swapChainSupportRef->capabilities.maxImageCount) {
-        imageCount = swapChainSupportRef->capabilities.maxImageCount;
-    }
-
-    VkSwapchainCreateInfoKHR createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = surfaceRef;
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-    uint32_t queueFamilyIndicesArray[] = {queueIndicesRef->graphicsFamily.value(), queueIndicesRef->presentFamily.value()};
-
-    if (queueIndicesRef->graphicsFamily != queueIndicesRef->presentFamily) {
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndicesArray;
-    } else {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;
-        createInfo.pQueueFamilyIndices = nullptr;
-    }
-
-    createInfo.preTransform = swapChainSupportRef->capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE; // Will be handled in recreateSwapChain
-
-    if (vkCreateSwapchainKHR(deviceRef, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create swap chain!");
-    }
-
-    vkGetSwapchainImagesKHR(deviceRef, swapChain, &imageCount, nullptr);
-    swapChainImages.resize(imageCount);
-    vkGetSwapchainImagesKHR(deviceRef, swapChain, &imageCount, swapChainImages.data());
-
-    swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
-}
-
-void VulkanRenderer::createImageViews() {
-    swapChainImageViews.resize(swapChainImages.size());
-    for (size_t i = 0; i < swapChainImages.size(); i++) {
-        VkImageViewCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.image = swapChainImages[i];
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = swapChainImageFormat;
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(deviceRef, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create image views!");
-        }
-    }
-}
+// createSwapChain, createImageViews, createFramebuffers, cleanupSwapChain, recreateSwapChain
+// chooseSwapSurfaceFormat, chooseSwapPresentMode, chooseSwapExtent are now handled by VulkanSwapChain
 
 void VulkanRenderer::createRenderPass() {
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapChainImageFormat;
+    colorAttachment.format = swapChainManager->getFormat(); // Get format from swap chain manager
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -232,26 +165,6 @@ void VulkanRenderer::createRenderPass() {
 
     if (vkCreateRenderPass(deviceRef, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create render pass!");
-    }
-}
-
-void VulkanRenderer::createFramebuffers() {
-    swapChainFramebuffers.resize(swapChainImageViews.size());
-    for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-        VkImageView attachments[] = { swapChainImageViews[i] };
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = swapChainExtent.width;
-        framebufferInfo.height = swapChainExtent.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(deviceRef, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create framebuffer!");
-        }
     }
 }
 
@@ -696,7 +609,7 @@ void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
                            glm::vec3(0.0f, 1.0f, 0.0f)); // Up vector (Y is up)
 
     // Projection: 45 degree field of view, perspective
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f);
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainManager->getExtent().width / (float) swapChainManager->getExtent().height, 0.1f, 10.0f);
     ubo.proj[1][1] *= -1; // Invert Y axis for Vulkan clip space (GLM default is OpenGL style)
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
@@ -712,10 +625,10 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = renderPass;
-    renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+    renderPassInfo.renderPass = renderPass; // Use the class member renderPass
+    renderPassInfo.framebuffer = swapChainManager->getFramebuffer(imageIndex); // Get framebuffer from manager
     renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent = swapChainExtent;
+    renderPassInfo.renderArea.extent = swapChainManager->getExtent(); // Get extent from manager
 
     VkClearValue clearColor = {{{0.39f, 0.58f, 0.93f, 1.0f}}};
     renderPassInfo.clearValueCount = 1;
@@ -727,8 +640,8 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapChainExtent.width);
-    viewport.height = static_cast<float>(swapChainExtent.height);
+    viewport.width = static_cast<float>(swapChainManager->getExtent().width);
+    viewport.height = static_cast<float>(swapChainManager->getExtent().height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -736,7 +649,7 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     // Set dynamic scissor
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = swapChainExtent;
+    scissor.extent = swapChainManager->getExtent();
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Bind the pipeline
@@ -770,10 +683,10 @@ void VulkanRenderer::drawFrame() {
     vkWaitForFences(deviceRef, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(deviceRef, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreateSwapChain();
+        recreateSwapChainResources(); // Call the renamed function
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("Failed to acquire swap chain image!");
@@ -808,7 +721,7 @@ void VulkanRenderer::drawFrame() {
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
-    VkSwapchainKHR swapChains[] = {swapChain};
+    VkSwapchainKHR swapChains[] = {swapChainManager->getSwapChainHandle()}; // Get handle from manager
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
@@ -817,7 +730,7 @@ void VulkanRenderer::drawFrame() {
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
-        recreateSwapChain();
+        recreateSwapChainResources(); // Call the renamed function
     } else if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to present swap chain image!");
     }
@@ -825,123 +738,35 @@ void VulkanRenderer::drawFrame() {
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-void VulkanRenderer::cleanupSwapChain() {
-    std::cout << "Cleaning up swap chain..." << std::endl;
-    for (auto framebuffer : swapChainFramebuffers) {
-        vkDestroyFramebuffer(deviceRef, framebuffer, nullptr);
-    }
-    swapChainFramebuffers.clear();
+void VulkanRenderer::recreateSwapChainResources() {
+    std::cout << "Recreating swap chain dependent resources..." << std::endl;
 
-    // Pipeline depends on render pass/extent, destroy it before recreating
+    // Wait for the device to be idle before cleanup/recreation
+    vkDeviceWaitIdle(deviceRef);
+
+    // 1. Cleanup old swap chain resources (swap chain, image views, framebuffers)
+    swapChainManager->cleanupForRecreation();
+
+    // 2. Cleanup renderer resources dependent on the swap chain/render pass
     if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(deviceRef, graphicsPipeline, nullptr);
     if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(deviceRef, pipelineLayout, nullptr);
+    if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(deviceRef, renderPass, nullptr);
 
-    // Render pass depends on image format
-    if (renderPass != VK_NULL_HANDLE) { // Check handle before destroying
-        vkDestroyRenderPass(deviceRef, renderPass, nullptr); // Destroy render pass
-        renderPass = VK_NULL_HANDLE;
-    }
+    // 3. Recreate swap chain and image views
+    swapChainManager->createSwapChainInternal(); // Creates swap chain, gets new format/extent
+    swapChainManager->createImageViews();
 
-    for (auto imageView : swapChainImageViews) {
-        vkDestroyImageView(deviceRef, imageView, nullptr);
-    }
-    swapChainImageViews.clear();
-
-    if (swapChain != VK_NULL_HANDLE) {
-        vkDestroySwapchainKHR(deviceRef, swapChain, nullptr);
-        swapChain = VK_NULL_HANDLE;
-    }
-
-    // Note: Uniform buffers, descriptor pool/layout/sets are NOT swap chain dependent
-    // in this setup, so they are not cleaned up here. They persist until ~VulkanRenderer.
-
-    std::cout << "Swap chain cleanup finished." << std::endl;
-}
-
-void VulkanRenderer::recreateSwapChain() {
-    std::cout << "Recreating swap chain..." << std::endl;
-    int width = 0, height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
-    while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(window, &width, &height);
-        glfwWaitEvents();
-    }
-
-    vkDeviceWaitIdle(deviceRef);
-    cleanupSwapChain();
-
-    // Recreate swap chain and dependent resources
-    createSwapChain();
-    createImageViews();
+    // 4. Recreate render pass (depends on new format)
     createRenderPass();
-    // DescriptorSetLayout is needed by pipeline, but doesn't need recreation
-    createGraphicsPipeline(); // Recreate pipeline (depends on render pass/extent)
-    createFramebuffers();
+
+    // 5. Recreate graphics pipeline (depends on new render pass)
+    createGraphicsPipeline();
+
+    // 6. Recreate framebuffers (depends on new image views and render pass)
+    swapChainManager->createFramebuffers(renderPass);
+
     // Command buffers need to be re-recorded because they reference the old framebuffers.
     // We don't explicitly recreate them here because the drawFrame loop resets and
     // re-records the command buffer for the current frame anyway.
-    // If you weren't resetting command buffers each frame, you'd need to recreate them.
     std::cout << "Swap chain recreated." << std::endl;
-}
-
-// --- Helper Implementations ---
-
-// Static function implementation
-std::unique_ptr<SwapChainSupportDetails> VulkanRenderer::querySwapChainSupport(VkPhysicalDevice targetDevice, VkSurfaceKHR surface) {
-    SwapChainSupportDetails details;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(targetDevice, surface, &details.capabilities);
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(targetDevice, surface, &formatCount, nullptr);
-    if (formatCount != 0) {
-        details.formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(targetDevice, surface, &formatCount, details.formats.data());
-    }
-
-    uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(targetDevice, surface, &presentModeCount, nullptr);
-    if (presentModeCount != 0) {
-        details.presentModes.resize(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(targetDevice, surface, &presentModeCount, details.presentModes.data());
-    }
-    return std::make_unique<SwapChainSupportDetails>(details);
-}
-
-VkSurfaceFormatKHR VulkanRenderer::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-    for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            return availableFormat;
-        }
-    }
-    return availableFormats[0];
-}
-
-VkPresentModeKHR VulkanRenderer::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-    for (const auto& availablePresentMode : availablePresentModes) {
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-            std::cout << "Using Present Mode: Mailbox" << std::endl;
-            return availablePresentMode;
-        }
-    }
-    std::cout << "Using Present Mode: FIFO" << std::endl;
-    return VK_PRESENT_MODE_FIFO_KHR;
-}
-
-VkExtent2D VulkanRenderer::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-        return capabilities.currentExtent;
-    } else {
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-
-        VkExtent2D actualExtent = {
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
-        };
-
-        actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-        actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-
-        return actualExtent;
-    }
 }

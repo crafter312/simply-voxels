@@ -158,6 +158,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/vec4.hpp
  /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.hpp
  /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.hpp
+ /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.hpp
  /usr/include/GL/gl.h
  /usr/include/GL/glext.h
  /usr/include/GLFW/glfw3.h
@@ -608,6 +609,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/vec4.hpp
  /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.hpp
  /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.hpp
+ /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.hpp
  /usr/include/GL/gl.h
  /usr/include/GL/glext.h
  /usr/include/GLFW/glfw3.h

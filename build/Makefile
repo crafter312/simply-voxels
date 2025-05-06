@@ -203,6 +203,30 @@ src/VulkanRenderer.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.s
 .PHONY : src/VulkanRenderer.cpp.s
 
+src/VulkanSwapChain.o: src/VulkanSwapChain.cpp.o
+.PHONY : src/VulkanSwapChain.o
+
+# target to build an object file
+src/VulkanSwapChain.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o
+.PHONY : src/VulkanSwapChain.cpp.o
+
+src/VulkanSwapChain.i: src/VulkanSwapChain.cpp.i
+.PHONY : src/VulkanSwapChain.i
+
+# target to preprocess a source file
+src/VulkanSwapChain.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.i
+.PHONY : src/VulkanSwapChain.cpp.i
+
+src/VulkanSwapChain.s: src/VulkanSwapChain.cpp.s
+.PHONY : src/VulkanSwapChain.s
+
+# target to generate assembly for a file
+src/VulkanSwapChain.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.s
+.PHONY : src/VulkanSwapChain.cpp.s
+
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
 
@@ -244,6 +268,9 @@ help:
 	@echo "... src/VulkanRenderer.o"
 	@echo "... src/VulkanRenderer.i"
 	@echo "... src/VulkanRenderer.s"
+	@echo "... src/VulkanSwapChain.o"
+	@echo "... src/VulkanSwapChain.i"
+	@echo "... src/VulkanSwapChain.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"

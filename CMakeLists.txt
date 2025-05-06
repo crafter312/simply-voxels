@@ -44,7 +44,8 @@ endif()
 add_executable(SimpleVulkanWindow
     src/main.cpp
     src/HelloVulkanApp.cpp
-    src/VulkanRenderer.cpp) # Add the new renderer source file
+    src/VulkanRenderer.cpp
+    src/VulkanSwapChain.cpp) # Add the new swap chain source file
 
 # Define shader files
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders)

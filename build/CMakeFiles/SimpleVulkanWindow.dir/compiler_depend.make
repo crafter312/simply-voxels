@@ -157,6 +157,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o: /home/hswebb/Desktop
   _deps/glm-src/glm/vec4.hpp \
   /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.hpp \
   /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.hpp \
+  /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.hpp \
   /usr/include/GL/gl.h \
   /usr/include/GL/glext.h \
   /usr/include/GLFW/glfw3.h \
@@ -606,6 +607,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o: /home/hswebb/Desktop
   _deps/glm-src/glm/vec4.hpp \
   /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.hpp \
   /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.hpp \
+  /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.hpp \
   /usr/include/GL/gl.h \
   /usr/include/GL/glext.h \
   /usr/include/GLFW/glfw3.h \
@@ -1485,6 +1487,8 @@ _deps/glm-src/glm/detail/type_mat4x3.hpp:
 
 _deps/glm-src/glm/ext/matrix_float4x3_precision.hpp:
 
+/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.hpp:
+
 _deps/glm-src/glm/ext/vector_uint2_sized.hpp:
 
 _deps/glm-src/glm/mat3x3.hpp:
@@ -1787,6 +1791,12 @@ _deps/glm-src/glm/ext/vector_double2_precision.hpp:
 
 /usr/include/c++/11/bits/shared_ptr_base.h:
 
+/usr/lib/gcc/x86_64-linux-gnu/11/include/stdarg.h:
+
+/usr/include/c++/11/debug/assertions.h:
+
+_deps/glm-src/glm/ext/scalar_constants.inl:
+
 /usr/include/x86_64-linux-gnu/bits/types/__mbstate_t.h:
 
 /usr/include/c++/11/typeinfo:
@@ -2006,9 +2016,3 @@ _deps/glm-src/glm/detail/type_half.inl:
 /usr/include/x86_64-linux-gnu/bits/waitstatus.h:
 
 /usr/include/c++/11/cstdint:
-
-/usr/lib/gcc/x86_64-linux-gnu/11/include/stdarg.h:
-
-_deps/glm-src/glm/ext/scalar_constants.inl:
-
-/usr/include/c++/11/debug/assertions.h:

@@ -1,5 +1,6 @@
 #include "HelloVulkanApp.hpp"
 #include "VulkanRenderer.hpp" // Include the new renderer header
+#include "VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
 
 #include <iostream>
 #include <vector>
@@ -128,10 +129,8 @@ void HelloVulkanApp::initVulkan() {
     std::cout << "Logical Device created." << std::endl;
 
     // --- Create and Initialize Renderer ---
-    // Query swap chain support details *after* picking the physical device
-    swapChainSupportDetails = VulkanRenderer::querySwapChainSupport(physicalDevice, surface);
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice); // Get indices again
-    renderer = std::make_unique<VulkanRenderer>(window, instance, surface, physicalDevice, device, indices, graphicsQueue, presentQueue, std::move(swapChainSupportDetails));
+    renderer = std::make_unique<VulkanRenderer>(window, instance, surface, physicalDevice, device, indices, graphicsQueue, presentQueue);
     renderer->init(); // Initialize renderer resources
     // --- End Renderer Init ---
 
@@ -359,8 +358,8 @@ bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice targetDevice) {
     bool swapChainAdequate = false;
     if (extensionsSupported) {
         // Check if the swap chain support has at least one format and one present mode
-        auto tempSupport = VulkanRenderer::querySwapChainSupport(targetDevice, surface); // Query directly
-        swapChainAdequate = tempSupport && !tempSupport->formats.empty() && !tempSupport->presentModes.empty();
+        SwapChainSupportDetails support = VulkanSwapChain::querySupport(targetDevice, surface); // Use static method from VulkanSwapChain
+        swapChainAdequate = !support.formats.empty() && !support.presentModes.empty();
     }
 
     // Could also check VkPhysicalDeviceFeatures here if needed
