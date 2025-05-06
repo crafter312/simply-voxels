@@ -324,6 +324,19 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o: \
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/detail/type_half.inl \
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/integer.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/detail/func_integer.inl \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/matrix_transform.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/matrix_projection.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/../gtc/constants.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/../gtc/../ext/scalar_constants.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/../gtc/../ext/../detail/setup.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/../gtc/../ext/scalar_constants.inl \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/../gtc/constants.inl \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/matrix_projection.inl \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/matrix_clip_space.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/matrix_clip_space.inl \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/matrix_transform.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/../ext/matrix_transform.inl \
+ /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/gtc/matrix_transform.inl \
  /usr/include/c++/11/stdexcept /usr/include/c++/11/string \
  /usr/include/c++/11/bits/char_traits.h \
  /usr/include/c++/11/bits/localefwd.h \
@@ -347,8 +360,8 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o: \
  /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/11/bits/charconv.h \
- /usr/include/c++/11/bits/basic_string.tcc /usr/include/c++/11/iostream \
- /usr/include/c++/11/ostream /usr/include/c++/11/ios \
+ /usr/include/c++/11/bits/basic_string.tcc /usr/include/c++/11/fstream \
+ /usr/include/c++/11/istream /usr/include/c++/11/ios \
  /usr/include/c++/11/bits/ios_base.h \
  /usr/include/c++/11/bits/locale_classes.h \
  /usr/include/c++/11/bits/locale_classes.tcc \
@@ -362,10 +375,13 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o: \
  /usr/include/c++/11/bits/streambuf_iterator.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/ctype_inline.h \
  /usr/include/c++/11/bits/locale_facets.tcc \
- /usr/include/c++/11/bits/basic_ios.tcc \
- /usr/include/c++/11/bits/ostream.tcc /usr/include/c++/11/istream \
- /usr/include/c++/11/bits/istream.tcc /usr/include/c++/11/set \
- /usr/include/c++/11/bits/stl_tree.h \
+ /usr/include/c++/11/bits/basic_ios.tcc /usr/include/c++/11/ostream \
+ /usr/include/c++/11/bits/ostream.tcc \
+ /usr/include/c++/11/bits/istream.tcc /usr/include/c++/11/bits/codecvt.h \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/basic_file.h \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/c++io.h \
+ /usr/include/c++/11/bits/fstream.tcc /usr/include/c++/11/iostream \
+ /usr/include/c++/11/set /usr/include/c++/11/bits/stl_tree.h \
  /usr/include/c++/11/bits/node_handle.h \
  /usr/include/c++/11/bits/stl_set.h \
  /usr/include/c++/11/bits/stl_multiset.h \

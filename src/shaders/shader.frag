@@ -1,11 +1,11 @@
-#version 450 // Specify GLSL version compatible with Vulkan
+#version 450
 
-// We don't need input from the vertex shader for a solid color
+// Input color from the vertex shader
+layout(location = 0) in vec3 fragColor;
 
-// Output color for the current pixel
+// Output color for the framebuffer attachment
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    // Output a solid color (e.g., a nice orange)
-    outColor = vec4(1.0, 0.5, 0.2, 1.0);
+    outColor = vec4(fragColor, 1.0); // Use the interpolated color from the vertex shader
 }

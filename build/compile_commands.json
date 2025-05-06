@@ -1,0 +1,26 @@
+[
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/main.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/main.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o"
+},
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o"
+},
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o"
+},
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-build/glm",
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=c++17 -o CMakeFiles/glm.dir/detail/glm.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/detail/glm.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/detail/glm.cpp",
+  "output": "_deps/glm-build/glm/CMakeFiles/glm.dir/detail/glm.cpp.o"
+}
+]
