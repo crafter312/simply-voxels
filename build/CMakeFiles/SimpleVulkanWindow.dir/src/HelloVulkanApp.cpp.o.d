@@ -383,13 +383,16 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o: \
  /usr/include/c++/11/bits/fstream.tcc \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/Vertex.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/src/InputManager.hpp \
+ /usr/include/c++/11/map /usr/include/c++/11/bits/stl_tree.h \
+ /usr/include/c++/11/bits/node_handle.h \
+ /usr/include/c++/11/bits/stl_map.h \
+ /usr/include/c++/11/bits/stl_multimap.h \
+ /usr/include/c++/11/bits/erase_if.h \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.hpp \
  /usr/include/c++/11/iostream /usr/include/c++/11/set \
- /usr/include/c++/11/bits/stl_tree.h \
- /usr/include/c++/11/bits/node_handle.h \
  /usr/include/c++/11/bits/stl_set.h \
- /usr/include/c++/11/bits/stl_multiset.h \
- /usr/include/c++/11/bits/erase_if.h /usr/include/c++/11/algorithm \
+ /usr/include/c++/11/bits/stl_multiset.h /usr/include/c++/11/algorithm \
  /usr/include/c++/11/bits/stl_algo.h \
  /usr/include/c++/11/bits/algorithmfwd.h \
  /usr/include/c++/11/bits/stl_heap.h \

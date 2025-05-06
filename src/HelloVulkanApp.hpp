@@ -17,6 +17,9 @@ struct SwapChainSupportDetails;
 // Forward declare VulkanRenderer
 class VulkanRenderer;
 
+// Forward declare InputManager
+class InputManager;
+
 class HelloVulkanApp {
 public:
     HelloVulkanApp();
@@ -46,6 +49,9 @@ private:
 
     // --- Renderer ---
     std::unique_ptr<VulkanRenderer> renderer;
+
+    // --- Input ---
+    std::unique_ptr<InputManager> inputManager;
 
     void initWindow();
     void initVulkan();

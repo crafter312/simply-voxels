@@ -179,6 +179,30 @@ src/HelloVulkanApp.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.s
 .PHONY : src/HelloVulkanApp.cpp.s
 
+src/InputManager.o: src/InputManager.cpp.o
+.PHONY : src/InputManager.o
+
+# target to build an object file
+src/InputManager.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/InputManager.cpp.o
+.PHONY : src/InputManager.cpp.o
+
+src/InputManager.i: src/InputManager.cpp.i
+.PHONY : src/InputManager.i
+
+# target to preprocess a source file
+src/InputManager.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/InputManager.cpp.i
+.PHONY : src/InputManager.cpp.i
+
+src/InputManager.s: src/InputManager.cpp.s
+.PHONY : src/InputManager.s
+
+# target to generate assembly for a file
+src/InputManager.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/InputManager.cpp.s
+.PHONY : src/InputManager.cpp.s
+
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
 
@@ -361,6 +385,9 @@ help:
 	@echo "... src/HelloVulkanApp.o"
 	@echo "... src/HelloVulkanApp.i"
 	@echo "... src/HelloVulkanApp.s"
+	@echo "... src/InputManager.o"
+	@echo "... src/InputManager.i"
+	@echo "... src/InputManager.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"

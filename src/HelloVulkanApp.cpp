@@ -1,5 +1,6 @@
 #include "HelloVulkanApp.hpp"
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
+#include "InputManager.hpp"          // Include the InputManager header
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
 
 #include <iostream>
@@ -114,6 +115,10 @@ void HelloVulkanApp::initWindow() {
     // Store pointer to this instance for use in callbacks
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+    // --- Initialize Input Manager ---
+    inputManager = std::make_unique<InputManager>(window);
+    std::cout << "InputManager initialized." << std::endl;
 }
 
 void HelloVulkanApp::initVulkan() {
@@ -370,6 +375,15 @@ bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice targetDevice) {
 void HelloVulkanApp::mainLoop() {
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        if (inputManager) {
+            inputManager->update();
+            if (inputManager->isKeyPressed(KeyCode::Space)) {
+                std::cout << "Space key pressed!" << std::endl;
+            }
+            if (inputManager->isKeyReleased(KeyCode::Space)) {
+                std::cout << "Space key released!" << std::endl;
+            }
+        }
         if (renderer) {
             renderer->drawFrame(); // Call renderer's drawFrame
         }
@@ -385,6 +399,9 @@ void HelloVulkanApp::cleanup() {
     // Renderer holds Vulkan objects that depend on the device, so destroy it first.
     // The renderer's destructor handles its internal cleanup.
     renderer.reset(); // Calls VulkanRenderer destructor
+
+    // InputManager is managed by unique_ptr, will be cleaned up automatically
+    inputManager.reset();
 
     // Destroy logical device
     if (device != VK_NULL_HANDLE) { // Check handle before destroying

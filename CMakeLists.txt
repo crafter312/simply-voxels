@@ -49,7 +49,8 @@ add_executable(SimpleVulkanWindow
     src/render/VulkanDevice.cpp
     src/render/VulkanBufferManager.cpp
     src/render/VulkanDescriptorSetManager.cpp
-    src/render/VulkanPipelineFactory.cpp) # Add the new pipeline factory source file
+    src/render/VulkanPipelineFactory.cpp
+    src/InputManager.cpp) # Add the new InputManager source file
 
 # Define shader files
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders)
