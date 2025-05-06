@@ -1,5 +1,6 @@
 #include "VulkanRenderer.hpp"
 #include "VulkanSwapChain.hpp" // Include the new swap chain class
+#include "VulkanPipelineFactory.hpp" // Include the new pipeline factory class
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
 #include "HelloVulkanApp.hpp" // Include for QueueFamilyIndices definition
 
@@ -106,10 +107,15 @@ void VulkanRenderer::init() {
     std::cout << "Render Pass created." << std::endl;
     // Create descriptor layout before pipeline layout
     createDescriptorSetLayout();
-    createGraphicsPipeline(); // Create pipeline after render pass
-    std::cout << "Graphics Pipeline created." << std::endl;
+
+    // Create and use the pipeline factory
+    pipelineFactory = std::make_unique<VulkanPipelineFactory>(deviceRef);
+    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetLayout, renderPass, pipelineLayout, graphicsPipeline)) {
+        throw std::runtime_error("Failed to create graphics pipeline using factory!");
+    }
+    std::cout << "Graphics Pipeline and Layout created." << std::endl;
+
     swapChainManager->createFramebuffers(renderPass); // Create framebuffers (needs render pass and image views)
-    std::cout << "Framebuffers created." << std::endl;
     createCommandPool();
     std::cout << "Command Pool created." << std::endl;
 
@@ -226,168 +232,6 @@ void VulkanRenderer::createSyncObjects() {
 }
 
 // --- Graphics Pipeline Creation ---
-
-// Static helper function to read shader files
-std::vector<char> VulkanRenderer::readFile(const std::string& filename) {
-    // Start reading from the end of the file (ate) in binary mode (binary)
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file: " + filename);
-    }
-
-    // Get the file size from the read position (which is at the end)
-    size_t fileSize = (size_t) file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    // Seek back to the beginning of the file
-    file.seekg(0);
-    // Read the entire file into the buffer
-    file.read(buffer.data(), fileSize);
-
-    file.close();
-    return buffer;
-}
-
-VkShaderModule VulkanRenderer::createShaderModule(const std::vector<char>& code) {
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = code.size();
-    // Note: The pointer needs to be uint32_t*, so we cast
-    createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-    VkShaderModule shaderModule;
-    if (vkCreateShaderModule(deviceRef, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create shader module!");
-    }
-    return shaderModule;
-}
-
-void VulkanRenderer::createGraphicsPipeline() {
-    // --- Load Shader Code ---
-    // Assuming shaders are in a 'shaders' directory relative to execution
-    auto vertShaderCode = readFile("shaders/vert.spv");
-    auto fragShaderCode = readFile("shaders/frag.spv");
-
-    // --- Create Shader Modules ---
-    VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-    VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
-    // --- Shader Stage Creation ---
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main"; // Entry point function name in shader
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
-    // --- Vertex Input ---
-    auto bindingDescription = Vertex::getBindingDescription();
-    auto attributeDescriptions = Vertex::getAttributeDescription(); // Get the array
-
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()); // Use the size of the array
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data(); // Pass pointer to the array data
-
-    // --- Input Assembly --- (Triangles from vertices)
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-    // --- Viewport and Scissor --- (Dynamic state, but need placeholder here)
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
-    // --- Rasterizer --- (Turns primitives into fragments)
-    VkPipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.depthClampEnable = VK_FALSE;
-    rasterizer.rasterizerDiscardEnable = VK_FALSE; // Keep fragments
-    rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // Fill the triangles
-    rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; // Cull back faces
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE; // Define front face (adjust if needed based on vertex order/winding)
-    rasterizer.depthBiasEnable = VK_FALSE;
-
-    // --- Multisampling --- (Disabled for now)
-    VkPipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    // --- Color Blending --- (Basic pass-through)
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE; // No blending for solid color
-
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
-
-    // --- Dynamic States --- (Viewport and Scissor can be changed without recreating pipeline)
-    std::vector<VkDynamicState> dynamicStates = {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR
-    };
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
-
-    // --- Pipeline Layout --- (Defines uniforms/push constants)
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1; // We have one descriptor set layout
-    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // Point to the layout we created
-    pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
-    pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
-
-    if (vkCreatePipelineLayout(deviceRef, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout!");
-    }
-
-    // --- Graphics Pipeline Creation ---
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pDepthStencilState = nullptr; // No depth testing (yet)
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipelineLayout;
-    pipelineInfo.renderPass = renderPass; // The render pass this pipeline is compatible with
-    pipelineInfo.subpass = 0; // Index of the subpass where this pipeline will be used
-    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional: For deriving from another pipeline
-    pipelineInfo.basePipelineIndex = -1; // Optional
-
-    if (vkCreateGraphicsPipelines(deviceRef, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create graphics pipeline!");
-    }
-
-    // --- Cleanup Shader Modules --- (No longer needed after pipeline creation)
-    vkDestroyShaderModule(deviceRef, fragShaderModule, nullptr);
-    vkDestroyShaderModule(deviceRef, vertShaderModule, nullptr);
-}
 
 // --- Descriptor Set Layout, Pool, Sets, and Uniform Buffers ---
 
@@ -620,12 +464,17 @@ void VulkanRenderer::recreateSwapChainResources() {
     // 3. Recreate swap chain and image views
     swapChainManager->createSwapChainInternal(); // Creates swap chain, gets new format/extent
     swapChainManager->createImageViews();
+    std::cout << "Swap chain and image views recreated by manager." << std::endl;
 
     // 4. Recreate render pass (depends on new format)
     createRenderPass();
+    std::cout << "Render pass recreated." << std::endl;
 
     // 5. Recreate graphics pipeline (depends on new render pass)
-    createGraphicsPipeline();
+    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetLayout, renderPass, pipelineLayout, graphicsPipeline)) {
+        throw std::runtime_error("Failed to recreate graphics pipeline using factory!");
+    }
+    std::cout << "Graphics pipeline recreated." << std::endl;
 
     // 6. Recreate framebuffers (depends on new image views and render pass)
     swapChainManager->createFramebuffers(renderPass);
@@ -633,5 +482,5 @@ void VulkanRenderer::recreateSwapChainResources() {
     // Command buffers need to be re-recorded because they reference the old framebuffers.
     // We don't explicitly recreate them here because the drawFrame loop resets and
     // re-records the command buffer for the current frame anyway.
-    std::cout << "Swap chain recreated." << std::endl;
+    std::cout << "Swap chain dependent resources fully recreated." << std::endl;
 }

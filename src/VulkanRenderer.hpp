@@ -22,6 +22,7 @@
 // Forward declare HelloVulkanApp types needed here
 struct QueueFamilyIndices;
 class VulkanBufferManager; // Forward declaration
+class VulkanPipelineFactory; // Forward declaration
 
 // --- Uniform Buffer Object ---
 
@@ -67,6 +68,7 @@ private:
 
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
+    std::unique_ptr<VulkanPipelineFactory> pipelineFactory;
 
     // --- Rendering ---
     VkRenderPass renderPass = VK_NULL_HANDLE;
@@ -102,17 +104,13 @@ private:
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
-    void createGraphicsPipeline();
     void createDescriptorSetLayout();
     void createDescriptorPool();
     void createDescriptorSets();
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
-    // Renamed from recreateSwapChain to reflect it recreates more now
     void recreateSwapChainResources();
     void updateUniformBuffer(uint32_t currentImage);
-    VkShaderModule createShaderModule(const std::vector<char>& code);
-    static std::vector<char> readFile(const std::string& filename); // Static helper
 };
 
 #endif // VULKAN_RENDERER_HPP

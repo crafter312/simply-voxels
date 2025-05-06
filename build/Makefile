@@ -203,6 +203,30 @@ src/VulkanBufferManager.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.s
 .PHONY : src/VulkanBufferManager.cpp.s
 
+src/VulkanPipelineFactory.o: src/VulkanPipelineFactory.cpp.o
+.PHONY : src/VulkanPipelineFactory.o
+
+# target to build an object file
+src/VulkanPipelineFactory.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o
+.PHONY : src/VulkanPipelineFactory.cpp.o
+
+src/VulkanPipelineFactory.i: src/VulkanPipelineFactory.cpp.i
+.PHONY : src/VulkanPipelineFactory.i
+
+# target to preprocess a source file
+src/VulkanPipelineFactory.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.i
+.PHONY : src/VulkanPipelineFactory.cpp.i
+
+src/VulkanPipelineFactory.s: src/VulkanPipelineFactory.cpp.s
+.PHONY : src/VulkanPipelineFactory.s
+
+# target to generate assembly for a file
+src/VulkanPipelineFactory.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.s
+.PHONY : src/VulkanPipelineFactory.cpp.s
+
 src/VulkanRenderer.o: src/VulkanRenderer.cpp.o
 .PHONY : src/VulkanRenderer.o
 
@@ -292,6 +316,9 @@ help:
 	@echo "... src/VulkanBufferManager.o"
 	@echo "... src/VulkanBufferManager.i"
 	@echo "... src/VulkanBufferManager.s"
+	@echo "... src/VulkanPipelineFactory.o"
+	@echo "... src/VulkanPipelineFactory.i"
+	@echo "... src/VulkanPipelineFactory.s"
 	@echo "... src/VulkanRenderer.o"
 	@echo "... src/VulkanRenderer.i"
 	@echo "... src/VulkanRenderer.s"
