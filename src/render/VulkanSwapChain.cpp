@@ -1,5 +1,4 @@
 #include "VulkanSwapChain.hpp"
-#include "HelloVulkanApp.hpp" // For QueueFamilyIndices definition
 
 #include <limits>
 #include <algorithm>

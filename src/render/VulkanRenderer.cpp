@@ -3,7 +3,6 @@
 #include "VulkanPipelineFactory.hpp" // Include the new pipeline factory class
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
 #include "VulkanDevice.hpp"      // Include the VulkanDevice wrapper class definition
-#include "HelloVulkanApp.hpp" // Include for QueueFamilyIndices definition
 
 #include <iostream>
 #include <set>

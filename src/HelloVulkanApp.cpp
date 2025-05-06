@@ -1,6 +1,6 @@
 #include "HelloVulkanApp.hpp"
-#include "VulkanRenderer.hpp" // Include the new renderer header
-#include "VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
+#include "render/VulkanRenderer.hpp" // Include the new renderer header
+#include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
 
 #include <iostream>
 #include <vector>

@@ -10,8 +10,15 @@
 #include <stdexcept>
 #include <string>
 
-// Forward declare QueueFamilyIndices if it's defined elsewhere
-struct QueueFamilyIndices;
+// Structure to hold queue family indices
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> presentFamily;
+
+    bool isComplete() {
+        return graphicsFamily.has_value() && presentFamily.has_value();
+    }
+};
 
 // Structure to hold swap chain support details
 struct SwapChainSupportDetails {

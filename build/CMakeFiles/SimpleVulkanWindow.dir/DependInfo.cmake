@@ -9,13 +9,13 @@ set(CMAKE_DEPENDS_LANGUAGES
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o.d"
-  "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o.d"
-  "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o.d"
-  "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o.d"
-  "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o.d"
-  "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o.d"
-  "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/main.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

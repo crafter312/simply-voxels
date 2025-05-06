@@ -160,37 +160,37 @@
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/VulkanRenderer.cpp",
+			"path" : "src/render/VulkanRenderer.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/VulkanSwapChain.cpp",
+			"path" : "src/render/VulkanSwapChain.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/VulkanDevice.cpp",
+			"path" : "src/render/VulkanDevice.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/VulkanBufferManager.cpp",
+			"path" : "src/render/VulkanBufferManager.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/VulkanDescriptorSetManager.cpp",
+			"path" : "src/render/VulkanDescriptorSetManager.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/VulkanPipelineFactory.cpp",
+			"path" : "src/render/VulkanPipelineFactory.cpp",
 			"sourceGroupIndex" : 0
 		}
 	],

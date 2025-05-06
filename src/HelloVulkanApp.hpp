@@ -8,15 +8,8 @@
 #include <optional> // For queue family indices
 #include <memory>   // For std::unique_ptr
 
-// Structure to hold queue family indices
-struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
-    std::optional<uint32_t> presentFamily;
-
-    bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value();
-    }
-};
+// Forward declare QueueFamilyIndices
+struct QueueFamilyIndices;
 
 // Forward declare SwapChainSupportDetails (defined in VulkanRenderer.hpp)
 struct SwapChainSupportDetails;

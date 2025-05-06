@@ -100,112 +100,112 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.s
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.i
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.i
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.s
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.s
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.i
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.i
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.s
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.s
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.cpp
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.i
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.i
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.s
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.s
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.cpp
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.i
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.i
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.s
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.s
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.cpp
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.i
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.i
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.s
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.s
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.cpp
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/flags.make
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o: /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o: CMakeFiles/SimpleVulkanWindow.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o -MF CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o.d -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.i
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp > CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.i
 
-CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.s
+CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.s
 
 # Object files for target SimpleVulkanWindow
 SimpleVulkanWindow_OBJECTS = \
 "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o" \
 "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o" \
-"CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o" \
-"CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o" \
-"CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o" \
-"CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o" \
-"CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o" \
-"CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o"
+"CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o" \
+"CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o" \
+"CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o" \
+"CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o" \
+"CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o" \
+"CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o"
 
 # External object files for target SimpleVulkanWindow
 SimpleVulkanWindow_EXTERNAL_OBJECTS =
 
 SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o
 SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o
-SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o
-SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o
-SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o
-SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o
-SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o
-SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o
+SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o
+SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o
+SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o
+SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o
+SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o
+SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o
 SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/build.make
 SimpleVulkanWindow: /usr/lib/x86_64-linux-gnu/libvulkan.so
 SimpleVulkanWindow: /usr/lib/x86_64-linux-gnu/libglfw.so.3.3

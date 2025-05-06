@@ -13,39 +13,39 @@
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
-  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp",
-  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp",
-  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o"
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o"
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
-  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp",
-  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp",
-  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o"
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o"
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
-  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp",
-  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp",
-  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o"
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDevice.cpp.o"
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
-  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp",
-  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp",
-  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o"
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o"
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
-  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp",
-  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp",
-  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o"
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDescriptorSetManager.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o"
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
-  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.cpp",
-  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.cpp",
-  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanPipelineFactory.cpp.o"
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o"
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-build/glm",
