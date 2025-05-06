@@ -47,6 +47,9 @@ VulkanRenderer::~VulkanRenderer() {
     if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(deviceRef, graphicsPipeline, nullptr);
     if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(deviceRef, pipelineLayout, nullptr);
 
+    // Destroy render pass
+    if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(deviceRef, renderPass, nullptr);
+
     // Destroy uniform buffers
     for (size_t i = 0; i < uniformBuffers.size(); ++i) {
         if (uniformBuffers[i] != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, uniformBuffers[i], nullptr);
