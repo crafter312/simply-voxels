@@ -25,9 +25,21 @@
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o"
+},
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
   "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp",
   "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp",
   "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o"
+},
+{
+  "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",
+  "command": "/usr/bin/c++  -I/home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src -g -std=gnu++17 -o CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o -c /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp",
+  "file": "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.cpp",
+  "output": "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o"
 },
 {
   "directory": "/home/hswebb/Desktop/Programming/vulkan-test/build",

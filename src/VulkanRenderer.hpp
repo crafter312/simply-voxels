@@ -17,9 +17,11 @@
 #include <array>    // For Vertex attributes
 #include <cstdint>  // Required for uint32_t
 
-#include "Vertex.hpp" // Include the new Vertex header
+#include "Vertex.hpp" // Include the Vertex header
+#include "VulkanDescriptorSetManager.hpp" // Include the new manager
 
 // Forward declare HelloVulkanApp types needed here
+class VulkanDevice; // Forward declaration for our wrapper
 struct QueueFamilyIndices;
 class VulkanBufferManager; // Forward declaration
 class VulkanPipelineFactory; // Forward declaration
@@ -69,6 +71,8 @@ private:
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
     std::unique_ptr<VulkanPipelineFactory> pipelineFactory;
+    std::unique_ptr<VulkanDevice> m_vulkanDeviceWrapper; // Wrapper for VkDevice/VkPhysicalDevice
+    std::unique_ptr<VulkanDescriptorSetManager> descriptorSetManager;
 
     // --- Rendering ---
     VkRenderPass renderPass = VK_NULL_HANDLE;
@@ -92,9 +96,10 @@ private:
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 
     // --- Descriptors for Uniforms ---
-    VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-    std::vector<VkDescriptorSet> descriptorSets;
+    // These are now managed by VulkanDescriptorSetManager
+    // VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+    // VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    // std::vector<VkDescriptorSet> descriptorSets;
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped; // For persistent mapping
@@ -104,9 +109,10 @@ private:
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
-    void createDescriptorSetLayout();
-    void createDescriptorPool();
-    void createDescriptorSets();
+    // These methods are effectively replaced by calls to VulkanDescriptorSetManager
+    // void createDescriptorSetLayout();
+    // void createDescriptorPool();
+    // void createDescriptorSets(); // Logic for vkUpdateDescriptorSets will remain in init()
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
     void recreateSwapChainResources();

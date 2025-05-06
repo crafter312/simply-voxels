@@ -46,7 +46,9 @@ add_executable(SimpleVulkanWindow
     src/HelloVulkanApp.cpp
     src/VulkanRenderer.cpp
     src/VulkanSwapChain.cpp
+    src/VulkanDevice.cpp
     src/VulkanBufferManager.cpp
+    src/VulkanDescriptorSetManager.cpp
     src/VulkanPipelineFactory.cpp) # Add the new pipeline factory source file
 
 # Define shader files

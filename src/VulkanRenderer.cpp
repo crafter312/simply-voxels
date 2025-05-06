@@ -2,6 +2,7 @@
 #include "VulkanSwapChain.hpp" // Include the new swap chain class
 #include "VulkanPipelineFactory.hpp" // Include the new pipeline factory class
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
+#include "VulkanDevice.hpp"      // Include the VulkanDevice wrapper class definition
 #include "HelloVulkanApp.hpp" // Include for QueueFamilyIndices definition
 
 #include <iostream>
@@ -35,6 +36,11 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSu
     // Create the swap chain manager
     // Pass the shared pointer to the swap chain manager
     swapChainManager = std::make_unique<VulkanSwapChain>(instanceRef, physicalDeviceRef, deviceRef, surfaceRef, window, queueIndicesRef);
+
+    // Create the VulkanDevice wrapper instance (assuming a constructor like this exists)
+    m_vulkanDeviceWrapper = std::make_unique<VulkanDevice>(physicalDeviceRef, deviceRef);
+    // Create the descriptor set manager
+    descriptorSetManager = std::make_unique<VulkanDescriptorSetManager>();
     std::cout << "VulkanRenderer constructed." << std::endl;
 }
 
@@ -43,6 +49,9 @@ VulkanRenderer::~VulkanRenderer() {
     // Note: vkDeviceWaitIdle should be called before this destructor is invoked (e.g., in HelloVulkanApp::cleanup)
 
     // Swap chain resources are cleaned up by swapChainManager's destructor
+    // Descriptor set manager resources are cleaned up by its destructor
+    descriptorSetManager.reset();
+    m_vulkanDeviceWrapper.reset(); // Clean up device wrapper
     swapChainManager.reset(); // Explicitly reset before other resources if needed, though RAII handles it
 
     // Destroy graphics pipeline and layout
@@ -62,9 +71,9 @@ VulkanRenderer::~VulkanRenderer() {
         if (uniformBuffersMemory[i] != VK_NULL_HANDLE) vkFreeMemory(deviceRef, uniformBuffersMemory[i], nullptr);
     }
 
-    // Destroy descriptor pool (frees descriptor sets automatically)
-    if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(deviceRef, descriptorPool, nullptr);
-    if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(deviceRef, descriptorSetLayout, nullptr);
+    // Descriptor pool and layout are now cleaned up by VulkanDescriptorSetManager's destructor
+    // if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(deviceRef, descriptorPool, nullptr);
+    // if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(deviceRef, descriptorSetLayout, nullptr);
 
     // Destroy vertex buffer
     if (vertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, vertexBuffer, nullptr);
@@ -105,12 +114,25 @@ void VulkanRenderer::init() {
     // Create render pass (needs swap chain format)
     createRenderPass();
     std::cout << "Render Pass created." << std::endl;
-    // Create descriptor layout before pipeline layout
-    createDescriptorSetLayout();
+
+    // Initialize and use the DescriptorSetManager
+    descriptorSetManager->initialize(m_vulkanDeviceWrapper.get(), swapChainManager.get());
+
+    // Define descriptor set layout bindings (previously in createDescriptorSetLayout)
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0; // Corresponds to "binding = 0" in the shader
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1; // We have one UBO
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // UBO is used in the vertex shader
+    uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {uboLayoutBinding};
+    descriptorSetManager->createDescriptorSetLayout(bindings);
+    std::cout << "Descriptor Set Layout created by manager." << std::endl;
 
     // Create and use the pipeline factory
     pipelineFactory = std::make_unique<VulkanPipelineFactory>(deviceRef);
-    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetLayout, renderPass, pipelineLayout, graphicsPipeline)) {
+    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline)) {
         throw std::runtime_error("Failed to create graphics pipeline using factory!");
     }
     std::cout << "Graphics Pipeline and Layout created." << std::endl;
@@ -125,10 +147,44 @@ void VulkanRenderer::init() {
     // Create UBO resources
     bufferManager->createUniformBuffers(MAX_FRAMES_IN_FLIGHT, sizeof(UniformBufferObject), uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
     std::cout << "Uniform Buffers created." << std::endl;
-    createDescriptorPool();
-    std::cout << "Descriptor Pool created." << std::endl;
-    createDescriptorSets();
-    std::cout << "Descriptor Sets created." << std::endl;
+
+    // Define descriptor pool sizes (previously in createDescriptorPool)
+    // The manager's createDescriptorSets allocates swapChain->getImageCount() sets.
+    // So the pool must be large enough for this.
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = static_cast<uint32_t>(swapChainManager->getImageCount());
+
+    std::vector<VkDescriptorPoolSize> poolSizes = {poolSize};
+    uint32_t maxSetsForPool = static_cast<uint32_t>(swapChainManager->getImageCount());
+
+    descriptorSetManager->createDescriptorPool(poolSizes, maxSetsForPool);
+    std::cout << "Descriptor Pool created by manager." << std::endl;
+
+    // Allocate descriptor sets (previously in createDescriptorSets)
+    descriptorSetManager->createDescriptorSets(); // Allocates swapChainManager->getImageCount() sets
+    std::cout << "Descriptor Sets allocated by manager." << std::endl;
+
+    // Update descriptor sets (this logic remains in VulkanRenderer as it's application-specific)
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = uniformBuffers[i]; // We update MAX_FRAMES_IN_FLIGHT UBOs
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = descriptorSetManager->getDescriptorSets()[i]; // Use sets from manager
+        descriptorWrite.dstBinding = 0; // Matches the layout binding
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+
+        vkUpdateDescriptorSets(deviceRef, 1, &descriptorWrite, 0, nullptr);
+    }
+    std::cout << "Descriptor Sets updated." << std::endl;
+
     // Create buffers *after* command pool (needed for transfer commands)
     bufferManager->createVertexBuffer(cubeVertices, vertexBuffer, vertexBufferMemory);
     std::cout << "Vertex Buffer created." << std::endl;
@@ -233,75 +289,6 @@ void VulkanRenderer::createSyncObjects() {
 
 // --- Graphics Pipeline Creation ---
 
-// --- Descriptor Set Layout, Pool, Sets, and Uniform Buffers ---
-
-void VulkanRenderer::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding.binding = 0; // Corresponds to "binding = 0" in the shader
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.descriptorCount = 1; // We have one UBO
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // UBO is used in the vertex shader
-    uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
-
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &uboLayoutBinding;
-
-    if (vkCreateDescriptorSetLayout(deviceRef, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor set layout!");
-    }
-}
-
-void VulkanRenderer::createDescriptorPool() {
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT); // Enough descriptors for our UBOs
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT); // Max number of sets we can allocate
-
-    if (vkCreateDescriptorPool(deviceRef, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor pool!");
-    }
-}
-
-void VulkanRenderer::createDescriptorSets() {
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-    allocInfo.pSetLayouts = layouts.data();
-
-    descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-    if (vkAllocateDescriptorSets(deviceRef, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate descriptor sets!");
-    }
-
-    // Configure the descriptor sets to point to our buffers
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        VkDescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = uniformBuffers[i];
-        bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBufferObject);
-
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = descriptorSets[i];
-        descriptorWrite.dstBinding = 0; // Matches the layout binding
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo = &bufferInfo;
-
-        vkUpdateDescriptorSets(deviceRef, 1, &descriptorWrite, 0, nullptr);
-    }
-}
-
 // --- Buffer Creation ---
 
 // --- Update Uniform Buffer ---
@@ -363,11 +350,12 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Bind the pipeline
 
-    // Bind the descriptor set for the current frame
+    // Bind the descriptor set for the current frame using the manager
+    const auto& allDescriptorSets = descriptorSetManager->getDescriptorSets();
     vkCmdBindDescriptorSets(commandBuffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         pipelineLayout, // The layout the descriptors are based on
-        0, 1, &descriptorSets[currentFrame], // Set index 0, 1 set, pointer to the set
+        0, 1, &allDescriptorSets[currentFrame], // Set index 0, 1 set, pointer to the set
         0, nullptr); // Dynamic offsets (none)
 
     // Bind the vertex buffer
@@ -471,7 +459,7 @@ void VulkanRenderer::recreateSwapChainResources() {
     std::cout << "Render pass recreated." << std::endl;
 
     // 5. Recreate graphics pipeline (depends on new render pass)
-    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetLayout, renderPass, pipelineLayout, graphicsPipeline)) {
+    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline)) {
         throw std::runtime_error("Failed to recreate graphics pipeline using factory!");
     }
     std::cout << "Graphics pipeline recreated." << std::endl;

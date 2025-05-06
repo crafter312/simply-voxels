@@ -203,6 +203,54 @@ src/VulkanBufferManager.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.s
 .PHONY : src/VulkanBufferManager.cpp.s
 
+src/VulkanDescriptorSetManager.o: src/VulkanDescriptorSetManager.cpp.o
+.PHONY : src/VulkanDescriptorSetManager.o
+
+# target to build an object file
+src/VulkanDescriptorSetManager.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.o
+.PHONY : src/VulkanDescriptorSetManager.cpp.o
+
+src/VulkanDescriptorSetManager.i: src/VulkanDescriptorSetManager.cpp.i
+.PHONY : src/VulkanDescriptorSetManager.i
+
+# target to preprocess a source file
+src/VulkanDescriptorSetManager.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.i
+.PHONY : src/VulkanDescriptorSetManager.cpp.i
+
+src/VulkanDescriptorSetManager.s: src/VulkanDescriptorSetManager.cpp.s
+.PHONY : src/VulkanDescriptorSetManager.s
+
+# target to generate assembly for a file
+src/VulkanDescriptorSetManager.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDescriptorSetManager.cpp.s
+.PHONY : src/VulkanDescriptorSetManager.cpp.s
+
+src/VulkanDevice.o: src/VulkanDevice.cpp.o
+.PHONY : src/VulkanDevice.o
+
+# target to build an object file
+src/VulkanDevice.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.o
+.PHONY : src/VulkanDevice.cpp.o
+
+src/VulkanDevice.i: src/VulkanDevice.cpp.i
+.PHONY : src/VulkanDevice.i
+
+# target to preprocess a source file
+src/VulkanDevice.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.i
+.PHONY : src/VulkanDevice.cpp.i
+
+src/VulkanDevice.s: src/VulkanDevice.cpp.s
+.PHONY : src/VulkanDevice.s
+
+# target to generate assembly for a file
+src/VulkanDevice.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanDevice.cpp.s
+.PHONY : src/VulkanDevice.cpp.s
+
 src/VulkanPipelineFactory.o: src/VulkanPipelineFactory.cpp.o
 .PHONY : src/VulkanPipelineFactory.o
 
@@ -316,6 +364,12 @@ help:
 	@echo "... src/VulkanBufferManager.o"
 	@echo "... src/VulkanBufferManager.i"
 	@echo "... src/VulkanBufferManager.s"
+	@echo "... src/VulkanDescriptorSetManager.o"
+	@echo "... src/VulkanDescriptorSetManager.i"
+	@echo "... src/VulkanDescriptorSetManager.s"
+	@echo "... src/VulkanDevice.o"
+	@echo "... src/VulkanDevice.i"
+	@echo "... src/VulkanDevice.s"
 	@echo "... src/VulkanPipelineFactory.o"
 	@echo "... src/VulkanPipelineFactory.i"
 	@echo "... src/VulkanPipelineFactory.s"

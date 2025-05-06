@@ -381,9 +381,11 @@ CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o: \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++io.h \
  /usr/include/c++/11/bits/fstream.tcc \
  /home/hswebb/Desktop/Programming/vulkan-test/src/Vertex.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDescriptorSetManager.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanPipelineFactory.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/src/VulkanDevice.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.hpp \
  /usr/include/c++/11/iostream /usr/include/c++/11/set \
  /usr/include/c++/11/bits/stl_tree.h \
