@@ -1,6 +1,8 @@
 file(REMOVE_RECURSE
   "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o"
   "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o.d"
+  "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o"
+  "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o"
   "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o"

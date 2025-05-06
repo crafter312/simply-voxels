@@ -9,6 +9,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanBufferManager.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanRenderer.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanRenderer.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/VulkanSwapChain.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/VulkanSwapChain.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/main.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o.d"

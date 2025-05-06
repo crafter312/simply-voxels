@@ -179,6 +179,30 @@ src/HelloVulkanApp.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.s
 .PHONY : src/HelloVulkanApp.cpp.s
 
+src/VulkanBufferManager.o: src/VulkanBufferManager.cpp.o
+.PHONY : src/VulkanBufferManager.o
+
+# target to build an object file
+src/VulkanBufferManager.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.o
+.PHONY : src/VulkanBufferManager.cpp.o
+
+src/VulkanBufferManager.i: src/VulkanBufferManager.cpp.i
+.PHONY : src/VulkanBufferManager.i
+
+# target to preprocess a source file
+src/VulkanBufferManager.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.i
+.PHONY : src/VulkanBufferManager.cpp.i
+
+src/VulkanBufferManager.s: src/VulkanBufferManager.cpp.s
+.PHONY : src/VulkanBufferManager.s
+
+# target to generate assembly for a file
+src/VulkanBufferManager.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/VulkanBufferManager.cpp.s
+.PHONY : src/VulkanBufferManager.cpp.s
+
 src/VulkanRenderer.o: src/VulkanRenderer.cpp.o
 .PHONY : src/VulkanRenderer.o
 
@@ -265,6 +289,9 @@ help:
 	@echo "... src/HelloVulkanApp.o"
 	@echo "... src/HelloVulkanApp.i"
 	@echo "... src/HelloVulkanApp.s"
+	@echo "... src/VulkanBufferManager.o"
+	@echo "... src/VulkanBufferManager.i"
+	@echo "... src/VulkanBufferManager.s"
 	@echo "... src/VulkanRenderer.o"
 	@echo "... src/VulkanRenderer.i"
 	@echo "... src/VulkanRenderer.s"

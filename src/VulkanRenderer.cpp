@@ -1,5 +1,6 @@
 #include "VulkanRenderer.hpp"
 #include "VulkanSwapChain.hpp" // Include the new swap chain class
+#include "VulkanBufferManager.hpp" // Include the new buffer manager class
 #include "HelloVulkanApp.hpp" // Include for QueueFamilyIndices definition
 
 #include <iostream>
@@ -52,6 +53,10 @@ VulkanRenderer::~VulkanRenderer() {
 
     // Destroy uniform buffers
     for (size_t i = 0; i < uniformBuffers.size(); ++i) {
+        if (uniformBuffersMapped[i] != nullptr) { // Check if mapped
+            vkUnmapMemory(deviceRef, uniformBuffersMemory[i]); // Unmap before freeing memory
+            // uniformBuffersMapped[i] = nullptr; // Optional: vector will be cleared or resized
+        }
         if (uniformBuffers[i] != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, uniformBuffers[i], nullptr);
         if (uniformBuffersMemory[i] != VK_NULL_HANDLE) vkFreeMemory(deviceRef, uniformBuffersMemory[i], nullptr);
     }
@@ -107,17 +112,21 @@ void VulkanRenderer::init() {
     std::cout << "Framebuffers created." << std::endl;
     createCommandPool();
     std::cout << "Command Pool created." << std::endl;
+
+    // Create buffer manager now that command pool and graphics queue exist
+    bufferManager = std::make_unique<VulkanBufferManager>(deviceRef, physicalDeviceRef, commandPool, graphicsQueueRef);
+
     // Create UBO resources
-    createUniformBuffers();
+    bufferManager->createUniformBuffers(MAX_FRAMES_IN_FLIGHT, sizeof(UniformBufferObject), uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
     std::cout << "Uniform Buffers created." << std::endl;
     createDescriptorPool();
     std::cout << "Descriptor Pool created." << std::endl;
     createDescriptorSets();
     std::cout << "Descriptor Sets created." << std::endl;
     // Create buffers *after* command pool (needed for transfer commands)
-    createVertexBuffer();
+    bufferManager->createVertexBuffer(cubeVertices, vertexBuffer, vertexBufferMemory);
     std::cout << "Vertex Buffer created." << std::endl;
-    createIndexBuffer();
+    bufferManager->createIndexBuffer(cubeIndices, indexBuffer, indexBufferMemory);
     std::cout << "Index Buffer created." << std::endl;
     createCommandBuffers();
     std::cout << "Command Buffers created." << std::endl;
@@ -400,25 +409,6 @@ void VulkanRenderer::createDescriptorSetLayout() {
     }
 }
 
-void VulkanRenderer::createUniformBuffers() {
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-
-    uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT); // Resize mapped pointers vector
-
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        createBuffer(bufferSize,
-                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     uniformBuffers[i],
-                     uniformBuffersMemory[i]);
-
-        // Persistently map the buffer
-        vkMapMemory(deviceRef, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
-    }
-}
-
 void VulkanRenderer::createDescriptorPool() {
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -469,134 +459,6 @@ void VulkanRenderer::createDescriptorSets() {
 }
 
 // --- Buffer Creation ---
-
-uint32_t VulkanRenderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDeviceRef, &memProperties);
-
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
-        // Check if the memory type index 'i' is suitable (matches typeFilter bit)
-        // AND if it has all the required property flags
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
-
-    throw std::runtime_error("Failed to find suitable memory type!");
-}
-
-void VulkanRenderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
-    VkBufferCreateInfo bufferInfo{};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // Only used by graphics queue
-
-    if (vkCreateBuffer(deviceRef, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create buffer!");
-    }
-
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(deviceRef, buffer, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-    if (vkAllocateMemory(deviceRef, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate buffer memory!");
-    }
-
-    // Associate the memory with the buffer
-    vkBindBufferMemory(deviceRef, buffer, bufferMemory, 0); // 0 is the offset
-}
-
-VkCommandBuffer VulkanRenderer::beginSingleTimeCommands() {
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = commandPool; // Use the class's command pool
-    allocInfo.commandBufferCount = 1;
-
-    VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(deviceRef, &allocInfo, &commandBuffer);
-
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; // We're only using it once
-
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    return commandBuffer;
-}
-
-void VulkanRenderer::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    // Submit to the graphics queue and wait for it to finish
-    vkQueueSubmit(graphicsQueueRef, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(graphicsQueueRef); // Wait for the transfer to complete
-
-    // Clean up the temporary command buffer
-    vkFreeCommandBuffers(deviceRef, commandPool, 1, &commandBuffer);
-}
-
-void VulkanRenderer::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
-
-    VkBufferCopy copyRegion{};
-    copyRegion.srcOffset = 0; // Optional
-    copyRegion.dstOffset = 0; // Optional
-    copyRegion.size = size;
-    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    endSingleTimeCommands(commandBuffer);
-}
-
-void VulkanRenderer::createVertexBuffer() {
-    VkDeviceSize bufferSize = sizeof(cubeVertices[0]) * cubeVertices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-    void* data;
-    vkMapMemory(deviceRef, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, cubeVertices.data(), (size_t)bufferSize);
-    vkUnmapMemory(deviceRef, stagingBufferMemory);
-
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
-
-    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-    vkDestroyBuffer(deviceRef, stagingBuffer, nullptr);
-    vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
-}
-
-void VulkanRenderer::createIndexBuffer() {
-    VkDeviceSize bufferSize = sizeof(cubeIndices[0]) * cubeIndices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-    void* data;
-    vkMapMemory(deviceRef, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, cubeIndices.data(), (size_t)bufferSize);
-    vkUnmapMemory(deviceRef, stagingBufferMemory);
-
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
-
-    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-    vkDestroyBuffer(deviceRef, stagingBuffer, nullptr);
-    vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
-}
 
 // --- Update Uniform Buffer ---
 
