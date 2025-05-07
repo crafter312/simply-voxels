@@ -85,12 +85,24 @@ const std::vector<Vertex> cubeVertices = {
 // Using uint16_t is fine for simple models like a cube (< 65536 vertices)
 // Now indices reference the duplicated vertices above. 6 faces * 2 triangles/face * 3 vertices/triangle = 36 indices
 const std::vector<uint16_t> cubeIndices = {
-     0,  1,  2,   2,  3,  0, // Front
-     4,  5,  6,   6,  7,  4, // Back
-     8,  9, 10,  10, 11,  8, // Left
-    12, 13, 14,  14, 15, 12, // Right
-    16, 17, 18,  18, 19, 16, // Top
-    20, 21, 22,  22, 23, 20  // Bottom
+    // Triangles are now defined with a Clockwise (CW) winding order
+    // when viewed from the outside of the cube. This is because the
+    // projection matrix flips the Y-coordinate (proj[1][1] *= -1),
+    // which inverts the winding order. So, CW in model space becomes
+    // CCW in screen space, which is what Vulkan's default front_face expects.
+
+    // Front face (Z+) Red - Original CCW: 0,1,2,  2,3,0
+     0,  2,  1,   2,  0,  3,
+    // Back face (Z-) Cyan - Original CCW: 4,5,6,  6,7,4
+     4,  5,  6,   6,  7,  4, // Changed to CCW
+    // Left face (X-) Green - Original CCW: 8,9,10, 10,11,8
+     8, 10,  9,  10,  8, 11,
+    // Right face (X+) Magenta - Original CCW: 12,13,14, 14,15,12
+    12, 14, 13,  14, 12, 15,
+    // Top face (Y+) Blue - Original CCW: 16,17,18, 18,19,16
+    16, 18, 17,  18, 16, 19,
+    // Bottom face (Y-) Yellow - Original CCW: 20,21,22, 22,23,20
+    20, 22, 21,  22, 20, 23
 };
 
 #endif // VERTEX_HPP
