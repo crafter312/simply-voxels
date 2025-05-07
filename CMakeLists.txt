@@ -50,7 +50,8 @@ add_executable(SimpleVulkanWindow
     src/render/VulkanBufferManager.cpp
     src/render/VulkanDescriptorSetManager.cpp
     src/render/VulkanPipelineFactory.cpp
-    src/InputManager.cpp) # Add the new InputManager source file
+    src/InputManager.cpp
+    src/Camera.cpp) # Add the new Camera source file
 
 # Define shader files
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders)

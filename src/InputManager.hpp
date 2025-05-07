@@ -10,7 +10,7 @@ struct GLFWwindow;
 // You'll need to define this properly based on your framework/needs.
 enum class KeyCode {
     Unknown, // Default
-    W, A, S, D, Space, LeftArrow, RightArrow, UpArrow, DownArrow
+    W, A, S, D, Space, LeftShift, LeftArrow, RightArrow, UpArrow, DownArrow
     // ... add other keys you need
 };
 
@@ -31,12 +31,24 @@ public:
     // Check if a key was released THIS frame
     bool isKeyReleased(KeyCode key) const;
 
-    // You might also add methods for mouse position, mouse buttons, etc.
+    // Mouse position getters
+    double getMouseX() const;
+    double getMouseY() const;
+
+    // Mouse delta (change since last frame) getters
+    double getMouseDeltaX() const;
+    double getMouseDeltaY() const;
 
 private:
     GLFWwindow* m_window; // Store the window pointer
     std::map<KeyCode, bool> currentKeyStates;
     std::map<KeyCode, bool> previousKeyStates;
+
+    double m_mouseX = 0.0;
+    double m_mouseY = 0.0;
+    double m_lastMouseX = 0.0;
+    double m_lastMouseY = 0.0;
+    bool m_firstMouse = true; // To handle initial mouse delta jump
 
     // Helper to map our KeyCode enum to GLFW's key codes
     int getGlfwKeyCode(KeyCode key) const;

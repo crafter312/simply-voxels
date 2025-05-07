@@ -20,6 +20,9 @@ class VulkanRenderer;
 // Forward declare InputManager
 class InputManager;
 
+// Forward declare Camera
+class Camera;
+
 class HelloVulkanApp {
 public:
     HelloVulkanApp();
@@ -52,6 +55,12 @@ private:
 
     // --- Input ---
     std::shared_ptr<InputManager> inputManager;
+
+    // --- Camera ---
+    std::shared_ptr<Camera> camera;
+
+    // --- Timing ---
+    float lastFrameTime = 0.0f;
 
     void initWindow();
     void initVulkan();

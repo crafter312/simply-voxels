@@ -25,6 +25,7 @@ class VulkanDevice; // Forward declaration for our wrapper
 struct QueueFamilyIndices;
 class VulkanBufferManager; // Forward declaration
 class VulkanPipelineFactory; // Forward declaration
+class Camera; // Forward declaration
 
 // --- Uniform Buffer Object ---
 
@@ -41,7 +42,7 @@ class VulkanSwapChain;
 class VulkanRenderer {
 public:
     // Constructor takes necessary handles and pre-queried support details
-    VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle);
+    VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle, std::shared_ptr<Camera> cameraPtr);
     ~VulkanRenderer(); // Use destructor for cleanup
 
     // Call this after constructor to create pipeline resources
@@ -73,6 +74,7 @@ private:
     std::unique_ptr<VulkanPipelineFactory> pipelineFactory;
     std::unique_ptr<VulkanDevice> m_vulkanDeviceWrapper; // Wrapper for VkDevice/VkPhysicalDevice
     std::unique_ptr<VulkanDescriptorSetManager> descriptorSetManager;
+    std::shared_ptr<Camera> m_camera; // Store the camera
 
     // --- Rendering ---
     VkRenderPass renderPass = VK_NULL_HANDLE;

@@ -1,4 +1,6 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/SimpleVulkanWindow.dir/src/Camera.cpp.o"
+  "CMakeFiles/SimpleVulkanWindow.dir/src/Camera.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o"
   "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/InputManager.cpp.o"

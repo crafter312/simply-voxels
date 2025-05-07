@@ -3,6 +3,7 @@
 #include "VulkanPipelineFactory.hpp" // Include the new pipeline factory class
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
 #include "VulkanDevice.hpp"      // Include the VulkanDevice wrapper class definition
+#include "../Camera.hpp"            // Include the Camera class definition
 
 #include <iostream>
 #include <set>
@@ -15,20 +16,22 @@
 #include <fstream>  // For shader file loading
 #include <cstring> // For memcpy
 
-VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle)
+VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle, std::shared_ptr<Camera> cameraPtr)
     : window(glfwWindow),
       instanceRef(instance),
       surfaceRef(surface),
       physicalDeviceRef(physicalDevice),
       deviceRef(logicalDevice),
       graphicsQueueRef(graphicsQueueHandle),
-      presentQueueRef(presentQueueHandle)
+      presentQueueRef(presentQueueHandle),
+      m_camera(cameraPtr) // Store the camera pointer
 {
     // Create a shared instance of QueueFamilyIndices
     queueIndicesRef = std::make_shared<QueueFamilyIndices>(queueIndices);
     if (!window || instanceRef == VK_NULL_HANDLE || surfaceRef == VK_NULL_HANDLE ||
         physicalDeviceRef == VK_NULL_HANDLE || deviceRef == VK_NULL_HANDLE ||
-        !queueIndicesRef->isComplete() || graphicsQueueRef == VK_NULL_HANDLE || presentQueueRef == VK_NULL_HANDLE)
+        !queueIndicesRef->isComplete() || graphicsQueueRef == VK_NULL_HANDLE || presentQueueRef == VK_NULL_HANDLE ||
+        !m_camera) // Check if camera pointer is valid
     {
         throw std::runtime_error("VulkanRenderer received null or invalid handles during construction!");
     }
@@ -295,17 +298,12 @@ void VulkanRenderer::createSyncObjects() {
 void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
     UniformBufferObject ubo{};
 
-    // Model: Place the cube at the origin (identity matrix)
+    // Get view and projection matrices from the camera
+    ubo.view = m_camera->getViewMatrix();
+    float aspectRatio = swapChainManager->getExtent().width / (float)swapChainManager->getExtent().height;
+    ubo.proj = m_camera->getProjectionMatrix(aspectRatio);
+    // Model matrix can remain identity or be set for specific objects
     ubo.model = glm::mat4(1.0f); // Could add rotation here later if desired
-
-    // View: Look at the cube from +3 on the Z axis
-    ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), // Camera position
-                           glm::vec3(0.0f, 0.0f, 0.0f), // Target position (center of cube)
-                           glm::vec3(0.0f, 1.0f, 0.0f)); // Up vector (Y is up)
-
-    // Projection: 45 degree field of view, perspective
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainManager->getExtent().width / (float) swapChainManager->getExtent().height, 0.1f, 10.0f);
-    ubo.proj[1][1] *= -1; // Invert Y axis for Vulkan clip space (GLM default is OpenGL style)
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }

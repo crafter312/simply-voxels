@@ -390,6 +390,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o: \
  /usr/include/c++/11/bits/stl_multimap.h \
  /usr/include/c++/11/bits/erase_if.h \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/src/Camera.hpp \
  /usr/include/c++/11/iostream /usr/include/c++/11/set \
  /usr/include/c++/11/bits/stl_set.h \
  /usr/include/c++/11/bits/stl_multiset.h /usr/include/c++/11/algorithm \

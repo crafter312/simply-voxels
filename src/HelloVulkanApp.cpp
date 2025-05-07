@@ -2,6 +2,7 @@
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
 #include "InputManager.hpp"          // Include the InputManager header
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
+#include "Camera.hpp"                // Include the Camera header
 
 #include <iostream>
 #include <vector>
@@ -116,6 +117,9 @@ void HelloVulkanApp::initWindow() {
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
+    // Capture and hide the cursor
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
     // --- Initialize Input Manager ---
     inputManager = std::make_shared<InputManager>(window);
     std::cout << "InputManager initialized." << std::endl;
@@ -133,9 +137,15 @@ void HelloVulkanApp::initVulkan() {
     createLogicalDevice();
     std::cout << "Logical Device created." << std::endl;
 
+    // --- Create Camera ---
+    camera = std::make_shared<Camera>(inputManager); // Pass the inputManager to the Camera constructor
+    // Example: Set initial camera position or orientation if not done in constructor
+    // camera->position = glm::vec3(0.0f, 0.0f, 5.0f);
+    std::cout << "Camera created and initialized." << std::endl;
+
     // --- Create and Initialize Renderer ---
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice); // Get indices again
-    renderer = std::make_unique<VulkanRenderer>(window, instance, surface, physicalDevice, device, indices, graphicsQueue, presentQueue);
+    renderer = std::make_unique<VulkanRenderer>(window, instance, surface, physicalDevice, device, indices, graphicsQueue, presentQueue, camera);
     renderer->init(); // Initialize renderer resources
     // --- End Renderer Init ---
 
@@ -373,17 +383,24 @@ bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice targetDevice) {
 }
 
 void HelloVulkanApp::mainLoop() {
+    lastFrameTime = static_cast<float>(glfwGetTime()); // Initialize lastFrameTime before loop
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+
+        // Calculate delta time
+        float currentTime = static_cast<float>(glfwGetTime());
+        float deltaTime = currentTime - lastFrameTime;
+        lastFrameTime = currentTime;
+
         if (inputManager) {
-            inputManager->update();
-            if (inputManager->isKeyPressed(KeyCode::Space)) {
-                std::cout << "Space key pressed!" << std::endl;
-            }
-            if (inputManager->isKeyReleased(KeyCode::Space)) {
-                std::cout << "Space key released!" << std::endl;
-            }
+            inputManager->update(); // Call input manager update
         }
+
+        if (camera) {
+            camera->update(deltaTime); // Call camera update (e.g., for smoothing, animations, or if it polls input itself)
+        }
+
         if (renderer) {
             renderer->drawFrame(); // Call renderer's drawFrame
         }

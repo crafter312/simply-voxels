@@ -130,12 +130,12 @@ CMakeFiles/SimpleVulkanWindow.dir/all: CMakeFiles/Shaders.dir/all
 CMakeFiles/SimpleVulkanWindow.dir/all: _deps/glm-build/glm/CMakeFiles/glm.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=3,4,5,6,7,8,9,10,11,12 "Built target SimpleVulkanWindow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=3,4,5,6,7,8,9,10,11,12,13 "Built target SimpleVulkanWindow"
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/SimpleVulkanWindow.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 14
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 15
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/SimpleVulkanWindow.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles 0
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/rule
@@ -147,7 +147,7 @@ SimpleVulkanWindow: CMakeFiles/SimpleVulkanWindow.dir/rule
 # codegen rule for target.
 CMakeFiles/SimpleVulkanWindow.dir/codegen: CMakeFiles/Shaders.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=3,4,5,6,7,8,9,10,11,12 "Finished codegen for target SimpleVulkanWindow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=3,4,5,6,7,8,9,10,11,12,13 "Finished codegen for target SimpleVulkanWindow"
 .PHONY : CMakeFiles/SimpleVulkanWindow.dir/codegen
 
 # clean rule for target.
@@ -194,7 +194,7 @@ CMakeFiles/Shaders.dir/clean:
 _deps/glm-build/glm/CMakeFiles/glm.dir/all:
 	$(MAKE) $(MAKESILENT) -f _deps/glm-build/glm/CMakeFiles/glm.dir/build.make _deps/glm-build/glm/CMakeFiles/glm.dir/depend
 	$(MAKE) $(MAKESILENT) -f _deps/glm-build/glm/CMakeFiles/glm.dir/build.make _deps/glm-build/glm/CMakeFiles/glm.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=13,14 "Built target glm"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=14,15 "Built target glm"
 .PHONY : _deps/glm-build/glm/CMakeFiles/glm.dir/all
 
 # Build rule for subdir invocation for target.
@@ -211,7 +211,7 @@ glm: _deps/glm-build/glm/CMakeFiles/glm.dir/rule
 # codegen rule for target.
 _deps/glm-build/glm/CMakeFiles/glm.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f _deps/glm-build/glm/CMakeFiles/glm.dir/build.make _deps/glm-build/glm/CMakeFiles/glm.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=13,14 "Finished codegen for target glm"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hswebb/Desktop/Programming/vulkan-test/build/CMakeFiles --progress-num=14,15 "Finished codegen for target glm"
 .PHONY : _deps/glm-build/glm/CMakeFiles/glm.dir/codegen
 
 # clean rule for target.

@@ -8,6 +8,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/Camera.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/Camera.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/Camera.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/HelloVulkanApp.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/HelloVulkanApp.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/InputManager.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/InputManager.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/InputManager.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/main.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o.d"
