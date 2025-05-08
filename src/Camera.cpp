@@ -12,7 +12,7 @@ Camera::Camera(std::shared_ptr<InputManager> inputManager)
       yaw(-90.0f), // Pointing down negative Z-axis
       pitch(0.0f),
       fov(45.0f),
-      mouseSensitivity(0.1f), // Added mouse sensitivity
+      mouseSensitivity(0.05f), // Added mouse sensitivity
       horizontalVelocity(0.0f), // Initialize horizontal velocity
       verticalVelocity(0.0f) {   // Initialize vertical velocity
     if (!m_inputManager) {
@@ -45,11 +45,20 @@ void Camera::update(float deltaTime) {
 
     // --- Horizontal keyboard movement (WASD) ---
     glm::vec3 targetHorizontalVelocity(0.0f);
+
+    // Define the forward direction in the horizontal plane based purely on yaw
+    // This ensures W/S movement is always horizontal, regardless of pitch.
+    glm::vec3 horizontalForward(cos(glm::radians(yaw)), 0.0f, sin(glm::radians(yaw)));
+    // The 'right' vector (calculated in updateCameraVectors as cross(front, worldUp))
+    // is already constrained to the horizontal plane, effectively:
+    // glm::vec3 horizontalRight(-sin(glm::radians(yaw)), 0.0f, cos(glm::radians(yaw)));
+    // So, 'right' can be used directly for A/D strafing.
+
     if (m_inputManager->isKeyDown(KeyCode::W)) {
-        targetHorizontalVelocity += front * moveSpeed;
+        targetHorizontalVelocity += horizontalForward * moveSpeed;
     }
     if (m_inputManager->isKeyDown(KeyCode::S)) {
-        targetHorizontalVelocity -= front * moveSpeed;
+        targetHorizontalVelocity -= horizontalForward * moveSpeed;
     }
     if (m_inputManager->isKeyDown(KeyCode::A)) {
         targetHorizontalVelocity -= right * moveSpeed;
