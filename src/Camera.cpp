@@ -2,6 +2,8 @@
 #include <iostream> // For constructor/destructor messages
 #include "InputManager.hpp" // Include InputManager header
 #include <stdexcept> // For std::runtime_error
+#define GLM_ENABLE_EXPERIMENTAL // Enable experimental GLM features
+#include <glm/gtx/compatibility.hpp> // For glm::lerp
 
 Camera::Camera(std::shared_ptr<InputManager> inputManager)
     : m_inputManager(inputManager),
@@ -10,7 +12,9 @@ Camera::Camera(std::shared_ptr<InputManager> inputManager)
       yaw(-90.0f), // Pointing down negative Z-axis
       pitch(0.0f),
       fov(45.0f),
-      mouseSensitivity(0.1f) { // Added mouse sensitivity
+      mouseSensitivity(0.1f), // Added mouse sensitivity
+      horizontalVelocity(0.0f), // Initialize horizontal velocity
+      verticalVelocity(0.0f) {   // Initialize vertical velocity
     if (!m_inputManager) {
         throw std::runtime_error("Camera: InputManager shared_ptr cannot be null!");
     }
@@ -37,29 +41,53 @@ void Camera::updateCameraVectors() {
 void Camera::update(float deltaTime) {
     if (!m_inputManager) return;
 
-    // Keyboard movement
-    float cameraSpeed = 5.0f * deltaTime; // Adjusted speed
+    float moveSpeed = 5.0f; // Base speed for all keyboard movement
 
+    // --- Horizontal keyboard movement (WASD) ---
+    glm::vec3 targetHorizontalVelocity(0.0f);
     if (m_inputManager->isKeyDown(KeyCode::W)) {
-        position += front * cameraSpeed;
+        targetHorizontalVelocity += front * moveSpeed;
     }
     if (m_inputManager->isKeyDown(KeyCode::S)) {
-        position -= front * cameraSpeed;
+        targetHorizontalVelocity -= front * moveSpeed;
     }
     if (m_inputManager->isKeyDown(KeyCode::A)) {
-        position -= right * cameraSpeed;
+        targetHorizontalVelocity -= right * moveSpeed;
     }
     if (m_inputManager->isKeyDown(KeyCode::D)) {
-        position += right * cameraSpeed;
-    }
-    if (m_inputManager->isKeyDown(KeyCode::Space)) {
-        position += worldUp * cameraSpeed; // Use worldUp for consistent up/down
-    }
-    if (m_inputManager->isKeyDown(KeyCode::LeftShift)) {
-        position -= worldUp * cameraSpeed; // Use worldUp for consistent up/down
+        targetHorizontalVelocity += right * moveSpeed;
     }
 
-    // Mouse look
+    // --- Vertical keyboard movement (Space/Shift) ---
+    float targetVerticalVelocity = 0.0f;
+    if (m_inputManager->isKeyDown(KeyCode::Space)) {
+        targetVerticalVelocity += moveSpeed;
+    }
+    if (m_inputManager->isKeyDown(KeyCode::LeftShift)) {
+        targetVerticalVelocity -= moveSpeed;
+    }
+
+    // --- Apply Momentum ---
+    // Smoothly interpolate current horizontal velocity towards target
+    float horizontalSmoothingFactor = 5.0f; // Current smoothing for W,A,S,D
+    horizontalVelocity = glm::lerp(horizontalVelocity, targetHorizontalVelocity, horizontalSmoothingFactor * deltaTime);
+
+    // Smoothly interpolate current vertical velocity towards target (snappier)
+    float verticalSmoothingFactor = 15.0f; // Higher value for snappier vertical movement
+    verticalVelocity = glm::lerp(verticalVelocity, targetVerticalVelocity, verticalSmoothingFactor * deltaTime);
+
+    // --- Update Position ---
+    position += horizontalVelocity * deltaTime;
+    position += worldUp * verticalVelocity * deltaTime; // Apply vertical velocity along worldUp
+
+    // --- Apply Drag ---
+    // Optional: Apply drag to slow down when no keys are pressed
+    float dragFactor = 2.0f; // Adjust drag strength as needed
+    float drag = 1.0f - glm::clamp(dragFactor * deltaTime, 0.0f, 1.0f);
+    horizontalVelocity *= drag;
+    verticalVelocity *= drag;
+
+    // --- Mouse look (direct, no momentum) ---
     double deltaX = m_inputManager->getMouseDeltaX();
     double deltaY = m_inputManager->getMouseDeltaY();
 

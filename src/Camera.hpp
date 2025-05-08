@@ -26,6 +26,10 @@ public:
     float pitch; // In degrees
     float fov;   // In degrees
 
+    // Momentum variables
+    glm::vec3 horizontalVelocity; // For W, A, S, D momentum
+    float verticalVelocity;     // For Space, Left Shift momentum
+
 private:
     std::shared_ptr<InputManager> m_inputManager; // Store the InputManager
     float mouseSensitivity;
