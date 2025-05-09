@@ -4,6 +4,7 @@
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
 #include "VulkanDevice.hpp"      // Include the VulkanDevice wrapper class definition
 #include "VulkanTextureLoader.hpp" // Include the texture loader
+#include "ModelLoader.hpp"         // For ModelLoader::loadGltfModel and ModelData
 #include "../Camera.hpp"            // Include the Camera class definition
 
 #include <iostream>
@@ -158,7 +159,7 @@ void VulkanRenderer::init() {
 
     // Create Texture Loader
     // Make sure you have a texture file at this path or change it
-    textureLoader = std::make_unique<VulkanTextureLoader>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef, "../resources/dirt.png");
+    textureLoader = std::make_unique<VulkanTextureLoader>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef, "../resources/textures/dirt.png");
     std::cout << "Texture Loader created." << std::endl;
 
     // Create UBO resources
@@ -221,10 +222,17 @@ void VulkanRenderer::init() {
     }
     std::cout << "Descriptor Sets updated." << std::endl;
 
+    // Load the model
+    // Ensure "cube.glb" is in a path accessible from your executable, e.g., "../resources/cube.glb"
+    // Adjust the path as necessary.
+    if (!ModelLoader::loadGltfModel("../resources/models/cube.glb", m_cubeModelData)) {
+        throw std::runtime_error("Failed to load cube model!");
+    }
+
     // Create buffers *after* command pool (needed for transfer commands)
-    bufferManager->createVertexBuffer(cubeVertices, vertexBuffer, vertexBufferMemory);
+    bufferManager->createVertexBuffer(m_cubeModelData.vertices, vertexBuffer, vertexBufferMemory);
     std::cout << "Vertex Buffer created." << std::endl;
-    bufferManager->createIndexBuffer(cubeIndices, indexBuffer, indexBufferMemory);
+    bufferManager->createIndexBuffer(m_cubeModelData.indices, indexBuffer, indexBufferMemory);
     std::cout << "Index Buffer created." << std::endl;
     createCommandBuffers();
     std::cout << "Command Buffers created." << std::endl;
@@ -394,11 +402,11 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets); // Binding 0, 1 buffer, starting at offset 0
 
-    // Bind the index buffer (using uint16_t indices)
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    // Bind the index buffer (using uint32_t indices from GLTF model)
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
     // Draw indexed command
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(cubeIndices.size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_cubeModelData.indices.size()), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 

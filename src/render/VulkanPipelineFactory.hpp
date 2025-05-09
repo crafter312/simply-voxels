@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <string>
 #include <vector>
-#include "Vertex.hpp" // For Vertex::getBindingDescription and Vertex::getAttributeDescription
+#include "ModelLoader.hpp" // For Vertex::getBindingDescription and Vertex::getAttributeDescription (Vertex is now in ModelLoader.hpp)
 
 class VulkanPipelineFactory {
 public:

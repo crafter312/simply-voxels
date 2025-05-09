@@ -17,7 +17,7 @@
 #include <array>    // For Vertex attributes
 #include <cstdint>  // Required for uint32_t
 
-#include "Vertex.hpp" // Include the Vertex header
+#include "ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
 #include "VulkanDescriptorSetManager.hpp" // Include the new manager
 
 
@@ -96,6 +96,7 @@ private:
     VkBuffer indexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
 
+    ModelData m_cubeModelData; // To store loaded model vertices and indices
     // --- Graphics Pipeline ---
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;

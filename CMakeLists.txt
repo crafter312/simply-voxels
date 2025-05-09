@@ -60,6 +60,44 @@ endif()
 add_library(stb_image INTERFACE)
 target_include_directories(stb_image INTERFACE ${STB_IMAGE_DIR})
 
+# --- Manage tinygltf.h ---
+# Define where tinygltf.h will be stored locally
+set(TINYGLTF_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tinygltf)
+set(TINYGLTF_HEADER ${TINYGLTF_DIR}/tinygltf.h)
+set(NLOHMANN_JSON_HEADER ${TINYGLTF_DIR}/json.hpp) # nlohmann/json header will go here
+
+# Ensure the local directory exists
+file(MAKE_DIRECTORY ${TINYGLTF_DIR})
+
+# Download tinygltf.h if it doesn't exist
+if(NOT EXISTS ${TINYGLTF_HEADER})
+    message(STATUS "Downloading tinygltf.h")
+    file(DOWNLOAD https://raw.githubusercontent.com/syoyo/tinygltf/release/tiny_gltf.h # Use the header from the release branch
+         ${TINYGLTF_HEADER}
+         SHOW_PROGRESS
+         STATUS tinygltf_download_status)
+    list(GET tinygltf_download_status 0 tinygltf_error_code)
+    if(NOT tinygltf_error_code EQUAL 0)
+        message(FATAL_ERROR "Failed to download tinygltf.h. Error code: ${tinygltf_error_code}")
+    endif()
+endif()
+
+# Download nlohmann/json.hpp into the same directory as tiny_gltf.h
+# This allows tiny_gltf.h to find it with #include "json.hpp"
+if(NOT EXISTS ${NLOHMANN_JSON_HEADER})
+    message(STATUS "Downloading nlohmann/json.hpp to ${NLOHMANN_JSON_HEADER}")
+    file(DOWNLOAD https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp # Use the same version tag
+         ${NLOHMANN_JSON_HEADER}
+         SHOW_PROGRESS
+         STATUS nlohmann_json_download_status)
+    list(GET nlohmann_json_download_status 0 nlohmann_json_error_code)
+    if(NOT nlohmann_json_error_code EQUAL 0)
+        message(FATAL_ERROR "Failed to download nlohmann/json.hpp. Error code: ${nlohmann_json_error_code}")
+    endif()
+endif()
+
+add_library(tinygltf INTERFACE)
+target_include_directories(tinygltf INTERFACE ${TINYGLTF_DIR})
 # Find glslc (SPIR-V compiler) - Keep this as is
 find_program(GLSLANG_VALIDATOR_EXECUTABLE glslangValidator HINTS ENV VULKAN_SDK PATHS ENV PATH)
 if(NOT GLSLANG_VALIDATOR_EXECUTABLE)
@@ -77,8 +115,16 @@ add_executable(SimpleVulkanWindow
     src/render/VulkanDescriptorSetManager.cpp
     src/render/VulkanPipelineFactory.cpp
     src/render/VulkanTextureLoader.cpp # Add the new texture loader
+    src/render/ModelLoader.cpp         # Add the new model loader
     src/InputManager.cpp 
     src/Camera.cpp) # Add the new Camera source file
+
+# Add compile definitions for tinygltf configuration to the target
+# TINYGLTF_IMPLEMENTATION must remain defined in only one .cpp file (ModelLoader.cpp)
+target_compile_definitions(SimpleVulkanWindow PRIVATE
+    TINYGLTF_NO_STB_IMAGE
+    TINYGLTF_NO_STB_IMAGE_WRITE
+    TINYGLTF_NO_EXTERNAL_IMAGE)
 
 # Define shader files
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders)
@@ -113,8 +159,8 @@ add_dependencies(SimpleVulkanWindow Shaders)
 # Link libraries
 # Link Vulkan, GLFW, and the fetched GLM target.
 # The target name provided by FetchContent for GLM is typically 'glm'.
-# Note: GLM is often header-only, but FetchContent sets up an INTERFACE library target.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image)
+# Note: GLM, stb_image, and tinygltf are header-only, but we set up INTERFACE library targets for include management.
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf)
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")

@@ -146,7 +146,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o: \
  /usr/include/c++/11/bits/stl_vector.h \
  /usr/include/c++/11/bits/stl_bvector.h \
  /usr/include/c++/11/bits/vector.tcc \
- /home/hswebb/Desktop/Programming/vulkan-test/src/render/Vertex.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/src/render/ModelLoader.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/glm.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/detail/_fixes.hpp \
  /usr/include/c++/11/cmath /usr/include/math.h \

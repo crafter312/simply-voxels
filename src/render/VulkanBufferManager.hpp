@@ -2,8 +2,8 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
-#include <string>
-#include "Vertex.hpp" // For Vertex struct
+#include <string> // Though not directly used in this header, often included with vector
+#include "ModelLoader.hpp" // For Vertex struct (moved from Vertex.hpp)
 
 class VulkanBufferManager {
 public:
@@ -18,7 +18,7 @@ public:
     void createVertexBuffer(const std::vector<Vertex>& vertices,
                             VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory);
 
-    void createIndexBuffer(const std::vector<uint16_t>& indices,
+    void createIndexBuffer(const std::vector<uint32_t>& indices, // Changed from uint16_t to uint32_t
                            VkBuffer& outIndexBuffer, VkDeviceMemory& outIndexBufferMemory);
 
     void createUniformBuffers(uint32_t numBuffers, VkDeviceSize bufferSize,

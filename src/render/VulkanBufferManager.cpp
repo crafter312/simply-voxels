@@ -112,7 +112,10 @@ void VulkanBufferManager::createVertexBuffer(const std::vector<Vertex>& vertices
     vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
 }
 
-void VulkanBufferManager::createIndexBuffer(const std::vector<uint16_t>& indices, VkBuffer& outIndexBuffer, VkDeviceMemory& outIndexBufferMemory) {
+void VulkanBufferManager::createIndexBuffer(const std::vector<uint32_t>& indices, VkBuffer& outIndexBuffer, VkDeviceMemory& outIndexBufferMemory) {
+    if (indices.empty()) {
+        throw std::runtime_error("Cannot create index buffer from empty indices vector.");
+    }
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
     VkBuffer stagingBuffer;

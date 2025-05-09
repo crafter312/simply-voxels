@@ -7,6 +7,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/SimpleVulkanWindow.dir/src/InputManager.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o"
   "CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.o.d"
+  "CMakeFiles/SimpleVulkanWindow.dir/src/render/ModelLoader.cpp.o"
+  "CMakeFiles/SimpleVulkanWindow.dir/src/render/ModelLoader.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o"
   "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanDescriptorSetManager.cpp.o"

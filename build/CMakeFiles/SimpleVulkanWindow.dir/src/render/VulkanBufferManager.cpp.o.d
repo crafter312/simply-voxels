@@ -145,7 +145,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanBufferManager.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/11/bits/charconv.h \
  /usr/include/c++/11/bits/basic_string.tcc \
- /home/hswebb/Desktop/Programming/vulkan-test/src/render/Vertex.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/src/render/ModelLoader.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/glm.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/build/_deps/glm-src/glm/detail/_fixes.hpp \
  /usr/include/c++/11/cmath /usr/include/math.h \

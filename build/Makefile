@@ -251,6 +251,30 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/render/ModelLoader.o: src/render/ModelLoader.cpp.o
+.PHONY : src/render/ModelLoader.o
+
+# target to build an object file
+src/render/ModelLoader.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/render/ModelLoader.cpp.o
+.PHONY : src/render/ModelLoader.cpp.o
+
+src/render/ModelLoader.i: src/render/ModelLoader.cpp.i
+.PHONY : src/render/ModelLoader.i
+
+# target to preprocess a source file
+src/render/ModelLoader.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/render/ModelLoader.cpp.i
+.PHONY : src/render/ModelLoader.cpp.i
+
+src/render/ModelLoader.s: src/render/ModelLoader.cpp.s
+.PHONY : src/render/ModelLoader.s
+
+# target to generate assembly for a file
+src/render/ModelLoader.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/render/ModelLoader.cpp.s
+.PHONY : src/render/ModelLoader.cpp.s
+
 src/render/VulkanBufferManager.o: src/render/VulkanBufferManager.cpp.o
 .PHONY : src/render/VulkanBufferManager.o
 
@@ -442,6 +466,9 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/render/ModelLoader.o"
+	@echo "... src/render/ModelLoader.i"
+	@echo "... src/render/ModelLoader.s"
 	@echo "... src/render/VulkanBufferManager.o"
 	@echo "... src/render/VulkanBufferManager.i"
 	@echo "... src/render/VulkanBufferManager.s"
