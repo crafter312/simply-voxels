@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR) # Explicitly set policies to 3.10
+cmake_minimum_required(VERSION 3.11 FATAL_ERROR) # FetchContent requires at least 3.11
 
 # Project name and language
 project(SimpleVulkanWindow LANGUAGES CXX)
@@ -34,6 +34,32 @@ set(glm_DIR "" CACHE INTERNAL "Prevent find_package for system GLM")
 # Make it available (downloads/configures if needed)
 FetchContent_MakeAvailable(glm)
 
+# --- Manage stb_image.h ---
+# Define where stb_image.h will be stored locally
+set(STB_IMAGE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
+set(STB_IMAGE_HEADER ${STB_IMAGE_DIR}/stb_image.h)
+
+# Ensure the local directory exists
+file(MAKE_DIRECTORY ${STB_IMAGE_DIR})
+
+# Download stb_image.h if it doesn't exist
+if(NOT EXISTS ${STB_IMAGE_HEADER})
+    message(STATUS "Downloading stb_image.h")
+    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
+         ${STB_IMAGE_HEADER}
+         SHOW_PROGRESS
+         STATUS stb_download_status)
+    list(GET stb_download_status 0 stb_error_code)
+    if(NOT stb_error_code EQUAL 0)
+        message(FATAL_ERROR "Failed to download stb_image.h. Error code: ${stb_error_code}")
+    endif()
+endif()
+
+# Create an interface library for stb_image.h
+# This makes it easy to link against and provides the necessary include directory.
+add_library(stb_image INTERFACE)
+target_include_directories(stb_image INTERFACE ${STB_IMAGE_DIR})
+
 # Find glslc (SPIR-V compiler) - Keep this as is
 find_program(GLSLANG_VALIDATOR_EXECUTABLE glslangValidator HINTS ENV VULKAN_SDK PATHS ENV PATH)
 if(NOT GLSLANG_VALIDATOR_EXECUTABLE)
@@ -50,7 +76,8 @@ add_executable(SimpleVulkanWindow
     src/render/VulkanBufferManager.cpp
     src/render/VulkanDescriptorSetManager.cpp
     src/render/VulkanPipelineFactory.cpp
-    src/InputManager.cpp
+    src/render/VulkanTextureLoader.cpp # Add the new texture loader
+    src/InputManager.cpp 
     src/Camera.cpp) # Add the new Camera source file
 
 # Define shader files
@@ -87,7 +114,7 @@ add_dependencies(SimpleVulkanWindow Shaders)
 # Link Vulkan, GLFW, and the fetched GLM target.
 # The target name provided by FetchContent for GLM is typically 'glm'.
 # Note: GLM is often header-only, but FetchContent sets up an INTERFACE library target.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm)
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image)
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")

@@ -395,6 +395,30 @@ src/render/VulkanSwapChain.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.s
 .PHONY : src/render/VulkanSwapChain.cpp.s
 
+src/render/VulkanTextureLoader.o: src/render/VulkanTextureLoader.cpp.o
+.PHONY : src/render/VulkanTextureLoader.o
+
+# target to build an object file
+src/render/VulkanTextureLoader.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanTextureLoader.cpp.o
+.PHONY : src/render/VulkanTextureLoader.cpp.o
+
+src/render/VulkanTextureLoader.i: src/render/VulkanTextureLoader.cpp.i
+.PHONY : src/render/VulkanTextureLoader.i
+
+# target to preprocess a source file
+src/render/VulkanTextureLoader.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanTextureLoader.cpp.i
+.PHONY : src/render/VulkanTextureLoader.cpp.i
+
+src/render/VulkanTextureLoader.s: src/render/VulkanTextureLoader.cpp.s
+.PHONY : src/render/VulkanTextureLoader.s
+
+# target to generate assembly for a file
+src/render/VulkanTextureLoader.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/SimpleVulkanWindow.dir/build.make CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanTextureLoader.cpp.s
+.PHONY : src/render/VulkanTextureLoader.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -436,6 +460,9 @@ help:
 	@echo "... src/render/VulkanSwapChain.o"
 	@echo "... src/render/VulkanSwapChain.i"
 	@echo "... src/render/VulkanSwapChain.s"
+	@echo "... src/render/VulkanTextureLoader.o"
+	@echo "... src/render/VulkanTextureLoader.i"
+	@echo "... src/render/VulkanTextureLoader.s"
 .PHONY : help
 
 

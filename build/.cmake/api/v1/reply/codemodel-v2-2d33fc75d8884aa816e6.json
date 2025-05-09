@@ -13,7 +13,7 @@
 					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
 					"minimumCMakeVersion" : 
 					{
-						"string" : "3.10"
+						"string" : "3.11"
 					},
 					"projectIndex" : 0,
 					"source" : ".",
@@ -92,14 +92,14 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "Shaders::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-Shaders-Debug-9454c777192bb730e33f.json",
+					"jsonFile" : "target-Shaders-Debug-e14ab6283c78e77e5c3a.json",
 					"name" : "Shaders",
 					"projectIndex" : 0
 				},
 				{
 					"directoryIndex" : 0,
 					"id" : "SimpleVulkanWindow::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-SimpleVulkanWindow-Debug-7408a059ebcbc51b03e2.json",
+					"jsonFile" : "target-SimpleVulkanWindow-Debug-0f33a48a05300020df77.json",
 					"name" : "SimpleVulkanWindow",
 					"projectIndex" : 0
 				},

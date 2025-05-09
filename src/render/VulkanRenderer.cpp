@@ -3,6 +3,7 @@
 #include "VulkanPipelineFactory.hpp" // Include the new pipeline factory class
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
 #include "VulkanDevice.hpp"      // Include the VulkanDevice wrapper class definition
+#include "VulkanTextureLoader.hpp" // Include the texture loader
 #include "../Camera.hpp"            // Include the Camera class definition
 
 #include <iostream>
@@ -53,6 +54,7 @@ VulkanRenderer::~VulkanRenderer() {
     // Swap chain resources are cleaned up by swapChainManager's destructor
     // Descriptor set manager resources are cleaned up by its destructor
     descriptorSetManager.reset();
+    textureLoader.reset(); // Clean up texture loader
     m_vulkanDeviceWrapper.reset(); // Clean up device wrapper
     swapChainManager.reset(); // Explicitly reset before other resources if needed, though RAII handles it
 
@@ -128,11 +130,19 @@ void VulkanRenderer::init() {
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // UBO is used in the vertex shader
     uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
-    std::vector<VkDescriptorSetLayoutBinding> bindings = {uboLayoutBinding};
+    VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+    samplerLayoutBinding.binding = 1; // Next binding after UBO
+    samplerLayoutBinding.descriptorCount = 1;
+    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBinding.pImmutableSamplers = nullptr;
+    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT; // Sampler is used in the fragment shader
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {uboLayoutBinding, samplerLayoutBinding};
     descriptorSetManager->createDescriptorSetLayout(bindings);
     std::cout << "Descriptor Set Layout created by manager." << std::endl;
 
     // Create and use the pipeline factory
+    // The pipeline layout is created inside createGraphicsPipeline if pipelineLayout is VK_NULL_HANDLE
     pipelineFactory = std::make_unique<VulkanPipelineFactory>(deviceRef);
     if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline)) {
         throw std::runtime_error("Failed to create graphics pipeline using factory!");
@@ -146,6 +156,11 @@ void VulkanRenderer::init() {
     // Create buffer manager now that command pool and graphics queue exist
     bufferManager = std::make_unique<VulkanBufferManager>(deviceRef, physicalDeviceRef, commandPool, graphicsQueueRef);
 
+    // Create Texture Loader
+    // Make sure you have a texture file at this path or change it
+    textureLoader = std::make_unique<VulkanTextureLoader>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef, "../resources/dirt.png");
+    std::cout << "Texture Loader created." << std::endl;
+
     // Create UBO resources
     bufferManager->createUniformBuffers(MAX_FRAMES_IN_FLIGHT, sizeof(UniformBufferObject), uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
     std::cout << "Uniform Buffers created." << std::endl;
@@ -153,14 +168,19 @@ void VulkanRenderer::init() {
     // Define descriptor pool sizes (previously in createDescriptorPool)
     // The manager's createDescriptorSets allocates swapChain->getImageCount() sets.
     // So the pool must be large enough for this.
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = static_cast<uint32_t>(swapChainManager->getImageCount());
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainManager->getImageCount());
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainManager->getImageCount());
 
-    std::vector<VkDescriptorPoolSize> poolSizes = {poolSize};
+
+    // Convert std::array to std::vector for the function call if necessary,
+    // or modify createDescriptorPool to accept an array or iterators.
+    // For now, let's assume createDescriptorPool can take a vector.
+    std::vector<VkDescriptorPoolSize> poolSizesVec(poolSizes.begin(), poolSizes.end());
     uint32_t maxSetsForPool = static_cast<uint32_t>(swapChainManager->getImageCount());
-
-    descriptorSetManager->createDescriptorPool(poolSizes, maxSetsForPool);
+    descriptorSetManager->createDescriptorPool(poolSizesVec, maxSetsForPool);
     std::cout << "Descriptor Pool created by manager." << std::endl;
 
     // Allocate descriptor sets (previously in createDescriptorSets)
@@ -169,21 +189,35 @@ void VulkanRenderer::init() {
 
     // Update descriptor sets (this logic remains in VulkanRenderer as it's application-specific)
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffers[i]; // We update MAX_FRAMES_IN_FLIGHT UBOs
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = descriptorSetManager->getDescriptorSets()[i]; // Use sets from manager
-        descriptorWrite.dstBinding = 0; // Matches the layout binding
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo = &bufferInfo;
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSetManager->getDescriptorSets()[i]; // Use sets from manager
+        descriptorWrites[0].dstBinding = 0; // UBO binding
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &bufferInfo;
 
-        vkUpdateDescriptorSets(deviceRef, 1, &descriptorWrite, 0, nullptr);
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = textureLoader->getImageView();
+        imageInfo.sampler = textureLoader->getSampler();
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSetManager->getDescriptorSets()[i];
+        descriptorWrites[1].dstBinding = 1; // Texture sampler binding
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(deviceRef, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
     std::cout << "Descriptor Sets updated." << std::endl;
 

@@ -19,6 +19,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o.d"
   "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o"
   "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o.d"
+  "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanTextureLoader.cpp.o"
+  "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanTextureLoader.cpp.o.d"
   "SimpleVulkanWindow"
   "SimpleVulkanWindow.pdb"
 )

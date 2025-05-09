@@ -18,6 +18,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanPipelineFactory.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanRenderer.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o.d"
   "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanSwapChain.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanSwapChain.cpp.o.d"
+  "/home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanTextureLoader.cpp" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanTextureLoader.cpp.o" "gcc" "CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanTextureLoader.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

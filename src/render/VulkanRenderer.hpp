@@ -20,6 +20,7 @@
 #include "Vertex.hpp" // Include the Vertex header
 #include "VulkanDescriptorSetManager.hpp" // Include the new manager
 
+
 // Forward declare HelloVulkanApp types needed here
 class VulkanDevice; // Forward declaration for our wrapper
 struct QueueFamilyIndices;
@@ -27,6 +28,7 @@ class VulkanBufferManager; // Forward declaration
 class VulkanPipelineFactory; // Forward declaration
 class Camera; // Forward declaration
 
+class VulkanTextureLoader; // Forward declaration for texture loader
 // --- Uniform Buffer Object ---
 
 struct UniformBufferObject {
@@ -74,6 +76,7 @@ private:
     std::unique_ptr<VulkanPipelineFactory> pipelineFactory;
     std::unique_ptr<VulkanDevice> m_vulkanDeviceWrapper; // Wrapper for VkDevice/VkPhysicalDevice
     std::unique_ptr<VulkanDescriptorSetManager> descriptorSetManager;
+    std::unique_ptr<VulkanTextureLoader> textureLoader; // Add the texture loader
     std::shared_ptr<Camera> m_camera; // Store the camera
 
     // --- Rendering ---

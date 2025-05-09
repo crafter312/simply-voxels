@@ -386,6 +386,7 @@ CMakeFiles/SimpleVulkanWindow.dir/src/render/VulkanRenderer.cpp.o: \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanPipelineFactory.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanBufferManager.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanDevice.hpp \
+ /home/hswebb/Desktop/Programming/vulkan-test/src/render/VulkanTextureLoader.hpp \
  /home/hswebb/Desktop/Programming/vulkan-test/src/render/../Camera.hpp \
  /usr/include/c++/11/iostream /usr/include/c++/11/set \
  /usr/include/c++/11/bits/stl_tree.h \
