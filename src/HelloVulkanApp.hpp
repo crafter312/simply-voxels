@@ -23,6 +23,12 @@ class InputManager;
 // Forward declare Camera
 class Camera;
 
+// Forward declare BlockRegistry
+class BlockRegistry;
+
+// Forward declare World
+class World;
+
 class HelloVulkanApp {
 public:
     HelloVulkanApp();
@@ -42,6 +48,7 @@ private:
     VkSurfaceKHR surface = VK_NULL_HANDLE; // Window surface for Vulkan
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // Physical device (GPU)
     VkDevice device = VK_NULL_HANDLE; // Logical device
+    VkPhysicalDeviceFeatures enabledFeatures{}; // Store features to be enabled
 
     // --- Queues (Needed by Renderer) ---
     VkQueue graphicsQueue = VK_NULL_HANDLE;
@@ -58,6 +65,12 @@ private:
 
     // --- Camera ---
     std::shared_ptr<Camera> camera;
+
+    // --- Block Definitions ---
+    std::unique_ptr<BlockRegistry> blockRegistry;
+
+    // --- World Data ---
+    std::unique_ptr<World> world;
 
     // --- Timing ---
     float lastFrameTime = 0.0f;

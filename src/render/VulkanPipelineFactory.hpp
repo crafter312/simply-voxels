@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <string>
 #include <vector>
-#include "ModelLoader.hpp" // For Vertex::getBindingDescription and Vertex::getAttributeDescription (Vertex is now in ModelLoader.hpp)
+#include "../resource/ModelLoader.hpp" // For Vertex::getBindingDescription and Vertex::getAttributeDescription (Vertex is now in ModelLoader.hpp)
 
 class VulkanPipelineFactory {
 public:
@@ -18,7 +18,8 @@ public:
         VkDescriptorSetLayout descriptorSetLayout, // Input: layout for UBOs, etc.
         VkRenderPass renderPass,                   // Input: compatible render pass
         VkPipelineLayout& outPipelineLayout,       // Output: created pipeline layout
-        VkPipeline& outGraphicsPipeline            // Output: created graphics pipeline
+        VkPipeline& outGraphicsPipeline,           // Output: created graphics pipeline
+        const VkPushConstantRange* pushConstantRange = nullptr // Optional: For push constants
     );
 
 private:

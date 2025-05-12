@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <stdexcept> // For exceptions
+#include <optional>  // For std::optional
 
 // Forward declarations
 class VulkanDevice;
@@ -32,6 +33,9 @@ public:
     // Allocate descriptor sets from the pool using the layout
     // Uses the stored layout, pool, and swap chain image count
     void createDescriptorSets();
+
+    // Allocate a specific number of descriptor sets
+    std::optional<std::vector<VkDescriptorSet>> allocateDescriptorSets(uint32_t setCount);
 
     // Getters
     VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }

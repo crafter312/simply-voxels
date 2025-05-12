@@ -3,8 +3,10 @@
 #include "VulkanPipelineFactory.hpp" // Include the new pipeline factory class
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
 #include "VulkanDevice.hpp"      // Include the VulkanDevice wrapper class definition
-#include "VulkanTextureLoader.hpp" // Include the texture loader
-#include "ModelLoader.hpp"         // For ModelLoader::loadGltfModel and ModelData
+// #include "../resource/VulkanTextureLoader.hpp" // ResourceManager handles this
+#include "../resource/ModelLoader.hpp"         // For ModelLoader::loadGltfModel and ModelData
+#include "../resource/ResourceManager.hpp"     // Include the ResourceManager
+#include "../World.hpp"                        // Include the World class definition
 #include "../Camera.hpp"            // Include the Camera class definition
 
 #include <iostream>
@@ -26,7 +28,7 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSu
       deviceRef(logicalDevice),
       graphicsQueueRef(graphicsQueueHandle),
       presentQueueRef(presentQueueHandle),
-      m_camera(cameraPtr) // Store the camera pointer
+      m_camera(cameraPtr) // m_blockRegistryRef initialization removed
 {
     // Create a shared instance of QueueFamilyIndices
     queueIndicesRef = std::make_shared<QueueFamilyIndices>(queueIndices);
@@ -45,6 +47,7 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSu
     m_vulkanDeviceWrapper = std::make_unique<VulkanDevice>(physicalDeviceRef, deviceRef);
     // Create the descriptor set manager
     descriptorSetManager = std::make_unique<VulkanDescriptorSetManager>();
+
     std::cout << "VulkanRenderer constructed." << std::endl;
 }
 
@@ -55,7 +58,8 @@ VulkanRenderer::~VulkanRenderer() {
     // Swap chain resources are cleaned up by swapChainManager's destructor
     // Descriptor set manager resources are cleaned up by its destructor
     descriptorSetManager.reset();
-    textureLoader.reset(); // Clean up texture loader
+    // textureLoader.reset(); // ResourceManager handles this
+    resourceManager.reset(); // Clean up resource manager
     m_vulkanDeviceWrapper.reset(); // Clean up device wrapper
     swapChainManager.reset(); // Explicitly reset before other resources if needed, though RAII handles it
 
@@ -111,12 +115,22 @@ VulkanRenderer::~VulkanRenderer() {
     std::cout << "VulkanRenderer cleanup complete." << std::endl;
 }
 
-void VulkanRenderer::init() {
+void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& worldRef) {
+    m_worldRef = &worldRef; // Store the reference to the world
     std::cout << "Initializing VulkanRenderer..." << std::endl;
     // Initialize swap chain (creates chain and image views)
     swapChainManager->init();
     std::cout << "Swap Chain initialized." << std::endl;
-    // Create render pass (needs swap chain format)
+    
+    createCommandPool(); // Create command pool early as ResourceManager might need it
+    std::cout << "Command Pool created." << std::endl;
+
+    // --- Initialize ResourceManager ---
+    resourceManager = std::make_unique<ResourceManager>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef);
+    resourceManager->setDefaultModelPath("../resources/models/cube.glb"); // Default cube
+    resourceManager->setDefaultTexturePath("../resources/textures/default_error.png"); // Default error texture    
+    resourceManager->loadAssetsFromRegistry(blockRegistryRef, true); // Load assets using the passed BlockRegistry reference
+
     createRenderPass();
     std::cout << "Render Pass created." << std::endl;
 
@@ -144,23 +158,32 @@ void VulkanRenderer::init() {
 
     // Create and use the pipeline factory
     // The pipeline layout is created inside createGraphicsPipeline if pipelineLayout is VK_NULL_HANDLE
+       VkPushConstantRange pushConstantRange{};
+       pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // Model matrix used in vertex shader
+       pushConstantRange.offset = 0;
+       pushConstantRange.size = sizeof(glm::mat4); // Size of our model matrix
+   
     pipelineFactory = std::make_unique<VulkanPipelineFactory>(deviceRef);
-    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline)) {
+       if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", 
+                                                   "shaders/frag.spv", 
+                                                   descriptorSetManager->getDescriptorSetLayout(), 
+                                                   renderPass, pipelineLayout, graphicsPipeline,
+                                                   &pushConstantRange)) { // Pass push constant range
         throw std::runtime_error("Failed to create graphics pipeline using factory!");
     }
     std::cout << "Graphics Pipeline and Layout created." << std::endl;
 
     swapChainManager->createFramebuffers(renderPass); // Create framebuffers (needs render pass and image views)
-    createCommandPool();
-    std::cout << "Command Pool created." << std::endl;
+    // createCommandPool(); // Moved earlier
 
     // Create buffer manager now that command pool and graphics queue exist
     bufferManager = std::make_unique<VulkanBufferManager>(deviceRef, physicalDeviceRef, commandPool, graphicsQueueRef);
 
     // Create Texture Loader
     // Make sure you have a texture file at this path or change it
-    textureLoader = std::make_unique<VulkanTextureLoader>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef, "../resources/textures/dirt.png");
-    std::cout << "Texture Loader created." << std::endl;
+    // textureLoader = std::make_unique<VulkanTextureLoader>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef, "../resources/textures/dirt.png");
+    // std::cout << "Texture Loader created." << std::endl;
+    // This is now handled by ResourceManager. We'll get the "dirt" texture for the initial cube.
 
     // Create UBO resources
     bufferManager->createUniformBuffers(MAX_FRAMES_IN_FLIGHT, sizeof(UniformBufferObject), uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
@@ -168,19 +191,23 @@ void VulkanRenderer::init() {
 
     // Define descriptor pool sizes (previously in createDescriptorPool)
     // The manager's createDescriptorSets allocates swapChain->getImageCount() sets.
-    // So the pool must be large enough for this.
+    // The pool must also be large enough for all per-block descriptor sets.
+    const uint32_t MAX_EXPECTED_BLOCKS_FOR_POOL = 32; // Estimate max blocks for pool sizing
+    uint32_t num_swap_chain_images = static_cast<uint32_t>(swapChainManager->getImageCount()); // Effectively MAX_FRAMES_IN_FLIGHT
+
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainManager->getImageCount());
+    // Total UBO descriptors: (initial sets + per-block sets)
+    poolSizes[0].descriptorCount = num_swap_chain_images * (1 + MAX_EXPECTED_BLOCKS_FOR_POOL);
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainManager->getImageCount());
+    // Total Sampler descriptors: (initial sets + per-block sets)
+    poolSizes[1].descriptorCount = num_swap_chain_images * (1 + MAX_EXPECTED_BLOCKS_FOR_POOL);
 
 
     // Convert std::array to std::vector for the function call if necessary,
     // or modify createDescriptorPool to accept an array or iterators.
-    // For now, let's assume createDescriptorPool can take a vector.
     std::vector<VkDescriptorPoolSize> poolSizesVec(poolSizes.begin(), poolSizes.end());
-    uint32_t maxSetsForPool = static_cast<uint32_t>(swapChainManager->getImageCount());
+    uint32_t maxSetsForPool = num_swap_chain_images * (1 + MAX_EXPECTED_BLOCKS_FOR_POOL);
     descriptorSetManager->createDescriptorPool(poolSizesVec, maxSetsForPool);
     std::cout << "Descriptor Pool created by manager." << std::endl;
 
@@ -189,6 +216,12 @@ void VulkanRenderer::init() {
     std::cout << "Descriptor Sets allocated by manager." << std::endl;
 
     // Update descriptor sets (this logic remains in VulkanRenderer as it's application-specific)
+    // For now, we'll fetch the "dirt" texture for the single cube.
+    // In a multi-block scenario, this would be more dynamic or per-material.
+    VulkanTextureLoader* dirtTexture = resourceManager->getTextureForBlockType("dirt");
+    if (!dirtTexture) {
+        throw std::runtime_error("Failed to get 'dirt' texture from ResourceManager for initial setup!");
+    }
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
@@ -207,8 +240,8 @@ void VulkanRenderer::init() {
 
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = textureLoader->getImageView();
-        imageInfo.sampler = textureLoader->getSampler();
+        imageInfo.imageView = dirtTexture->getImageView(); // Use texture from ResourceManager
+        imageInfo.sampler = dirtTexture->getSampler();   // Use sampler from ResourceManager
 
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSetManager->getDescriptorSets()[i];
@@ -225,9 +258,11 @@ void VulkanRenderer::init() {
     // Load the model
     // Ensure "cube.glb" is in a path accessible from your executable, e.g., "../resources/cube.glb"
     // Adjust the path as necessary.
-    if (!ModelLoader::loadGltfModel("../resources/models/cube.glb", m_cubeModelData)) {
-        throw std::runtime_error("Failed to load cube model!");
-    }
+    // if (!ModelLoader::loadGltfModel("../resources/models/cube.glb", m_cubeModelData)) {
+    //     throw std::runtime_error("Failed to load cube model!");
+    // }
+    // Get the model data for "dirt" block (which should be a cube)
+    m_cubeModelData = resourceManager->getModelForBlockType("dirt"); // This returns a const ref, so copy if needed or store ref.
 
     // Create buffers *after* command pool (needed for transfer commands)
     bufferManager->createVertexBuffer(m_cubeModelData.vertices, vertexBuffer, vertexBufferMemory);
@@ -240,6 +275,87 @@ void VulkanRenderer::init() {
     std::cout << "Synchronization Objects created." << std::endl;
     std::cout << "VulkanRenderer initialization complete." << std::endl;
 }
+void VulkanRenderer::prepareBlockTextures(uint32_t currentImage) {
+    if (!m_worldRef) return;
+
+    const auto& blocks = m_worldRef->getBlocks();
+    if (blocks.size() > numBlocksLastFrame) {
+        numBlocksLastFrame = static_cast<uint32_t>(blocks.size());
+        descriptorSetsPerBlock.resize(MAX_FRAMES_IN_FLIGHT);
+        for (auto &frameDescriptors : descriptorSetsPerBlock) {
+            frameDescriptors.resize(blocks.size());
+        }
+    }
+    uint32_t blockIndex = 0;
+    // Ensure we have enough descriptor sets in our array (per frame, per block)
+    for (const auto& worldBlock : blocks) {
+        // Get the texture for the current block
+        VulkanTextureLoader* blockTexture = resourceManager->getTextureForBlockType(worldBlock.type);
+        if (!blockTexture) {
+            // Fallback to a default texture if specific one not found
+            std::cerr << "Warning: Texture for type '" << worldBlock.type << "' not found. Using default." << std::endl;
+            blockTexture = resourceManager->getTextureForBlockType("default");
+            if (!blockTexture) { // If even the default fails (should not happen if default is properly set)
+                 throw std::runtime_error("Critical: Default texture failed to load for block type: " + worldBlock.type);
+            }
+        }
+
+        // Prepare the descriptor set for the texture of this block (for current frame)
+        // First allocate a descriptor set (and check if there is one already)
+        // TODO: Consider using a pool here.
+        if (descriptorSetsPerBlock[currentImage][blockIndex] == VK_NULL_HANDLE) {
+            // Allocate a new descriptor set for each frame.
+            auto result = descriptorSetManager->allocateDescriptorSets(1);
+            if (!result.has_value() || result->empty()) {
+                throw std::runtime_error("Failed to allocate texture descriptor set for block: " + worldBlock.type);
+            }
+            descriptorSetsPerBlock[currentImage][blockIndex] = result->front();
+
+            // IMPORTANT: Update the UBO binding for this newly allocated per-block descriptor set
+            // It should point to the uniform buffer for the current frame.
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = uniformBuffers[currentImage];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(UniformBufferObject);
+
+            VkWriteDescriptorSet uboWrite{};
+            uboWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            uboWrite.dstSet = descriptorSetsPerBlock[currentImage][blockIndex];
+            uboWrite.dstBinding = 0; // UBO binding in the shader
+            uboWrite.dstArrayElement = 0;
+            uboWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            uboWrite.descriptorCount = 1;
+            uboWrite.pBufferInfo = &bufferInfo;
+            vkUpdateDescriptorSets(deviceRef, 1, &uboWrite, 0, nullptr);
+        }
+        // Now we update the texture descriptor information
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = blockTexture->getImageView();
+        imageInfo.sampler = blockTexture->getSampler();
+
+        VkWriteDescriptorSet textureWrite{};
+        textureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        textureWrite.dstSet = descriptorSetsPerBlock[currentImage][blockIndex]; // New per-block descriptor set
+        textureWrite.dstBinding = 1; // Texture sampler binding in the shader
+        textureWrite.dstArrayElement = 0;
+        textureWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        textureWrite.descriptorCount = 1;
+        textureWrite.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(deviceRef, 1, &textureWrite, 0, nullptr);
+        blockIndex++;
+    }
+}
+
+
+
+
+
+
+
+
+
 
 // createSwapChain, createImageViews, createFramebuffers, cleanupSwapChain, recreateSwapChain
 // chooseSwapSurfaceFormat, chooseSwapPresentMode, chooseSwapExtent are now handled by VulkanSwapChain
@@ -339,13 +455,11 @@ void VulkanRenderer::createSyncObjects() {
 
 void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
     UniformBufferObject ubo{};
-
     // Get view and projection matrices from the camera
     ubo.view = m_camera->getViewMatrix();
     float aspectRatio = swapChainManager->getExtent().width / (float)swapChainManager->getExtent().height;
-    ubo.proj = m_camera->getProjectionMatrix(aspectRatio);
-    // Model matrix can remain identity or be set for specific objects
-    ubo.model = glm::mat4(1.0f); // Could add rotation here later if desired
+       ubo.proj = m_camera->getProjectionMatrix(aspectRatio);    
+       // ubo.model = glm::mat4(1.0f); // Removed, model matrix handled by push constants
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
@@ -388,31 +502,50 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Bind the pipeline
-
-    // Bind the descriptor set for the current frame using the manager
     const auto& allDescriptorSets = descriptorSetManager->getDescriptorSets();
-    vkCmdBindDescriptorSets(commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipelineLayout, // The layout the descriptors are based on
-        0, 1, &allDescriptorSets[currentFrame], // Set index 0, 1 set, pointer to the set
-        0, nullptr); // Dynamic offsets (none)
 
-    // Bind the vertex buffer
+    // Bind the common vertex and index buffers once (assuming all blocks use the same model for now)
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets); // Binding 0, 1 buffer, starting at offset 0
-
-    // Bind the index buffer (using uint32_t indices from GLTF model)
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-    // Draw indexed command
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_cubeModelData.indices.size()), 1, 0, 0, 0);
+    uint32_t blockIndex = 0; // This is the block index (for descriptor set)
+    // Loop through all blocks in the world
+    if (m_worldRef) {
+        // UniformBufferObject uboData; // No longer needed here for model matrix
+        // View and projection are the same for all blocks in this frame
+        // and are set in updateUniformBuffer once per frame.
+
+        for (const auto& worldBlock : m_worldRef->getBlocks()) {
+            // 1. Set the model matrix for the current block via Push Constants
+            glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), worldBlock.position);
+            vkCmdPushConstants(
+                commandBuffer,
+                pipelineLayout,
+                VK_SHADER_STAGE_VERTEX_BIT,
+                0, // offset
+                sizeof(glm::mat4), // size
+                &modelMatrix);
+
+            // 2. Bind the descriptor set (which now has the correct UBO model matrix and texture)
+            // Use our new array with per-block texture descriptor sets
+            // This set now has its UBO binding pointing to uniformBuffers[currentFrame]
+            // and its Sampler binding pointing to the block's specific texture.
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSetsPerBlock[currentFrame][blockIndex], 0, nullptr);
+            // 3. Draw the block
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_cubeModelData.indices.size()), 1, 0, 0, 0);
+            blockIndex++; // Increment blockIndex for the next block
+        }
+    }
 
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         throw std::runtime_error("Failed to record command buffer!");
     }
+
+
 }
 
 void VulkanRenderer::drawFrame() {
@@ -430,6 +563,10 @@ void VulkanRenderer::drawFrame() {
 
     // Update uniform buffer for the current frame *before* recording command buffer
     updateUniformBuffer(currentFrame);
+
+    // --- Update texture descriptors *before* recording command buffer: new part ---
+    // This ensures the descriptors for each block are correct for the current frame.
+    prepareBlockTextures(currentFrame);
 
     vkResetFences(deviceRef, 1, &inFlightFences[currentFrame]);
 
@@ -498,7 +635,13 @@ void VulkanRenderer::recreateSwapChainResources() {
     std::cout << "Render pass recreated." << std::endl;
 
     // 5. Recreate graphics pipeline (depends on new render pass)
-    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline)) {
+    // Define the push constant range again, as it's needed for pipeline recreation
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(glm::mat4);
+
+    if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline, &pushConstantRange)) {
         throw std::runtime_error("Failed to recreate graphics pipeline using factory!");
     }
     std::cout << "Graphics pipeline recreated." << std::endl;

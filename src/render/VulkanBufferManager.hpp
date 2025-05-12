@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string> // Though not directly used in this header, often included with vector
-#include "ModelLoader.hpp" // For Vertex struct (moved from Vertex.hpp)
+#include "../resource/ModelLoader.hpp" // For Vertex struct (moved from Vertex.hpp)
 
 class VulkanBufferManager {
 public:

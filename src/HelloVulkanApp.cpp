@@ -2,7 +2,9 @@
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
 #include "InputManager.hpp"          // Include the InputManager header
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
+#include "BlockRegistry.hpp"         // Include the BlockRegistry header
 #include "Camera.hpp"                // Include the Camera header
+#include "World.hpp"                 // Include the World header
 
 #include <iostream>
 #include <vector>
@@ -143,10 +145,22 @@ void HelloVulkanApp::initVulkan() {
     // camera->position = glm::vec3(0.0f, 0.0f, 5.0f);
     std::cout << "Camera created and initialized." << std::endl;
 
+    // --- Create and Populate Block Registry ---
+    blockRegistry = std::make_unique<BlockRegistry>();
+    blockRegistry->registerBlockType("dirt", "../resources/models/cube.glb", "../resources/textures/dirt.png");
+    blockRegistry->registerBlockType("stone", "../resources/models/cube.glb", "../resources/textures/stone.png"); // Assuming you'll have a stone.png
+    // Add more block types here as needed
+    // blockRegistry->registerBlockType("grass", "../resources/models/cube.glb", "../resources/textures/grass.png");
+    std::cout << "BlockRegistry created and populated." << std::endl;
+
+    // --- Create World ---
+    world = std::make_unique<World>();
+    std::cout << "World created with initial blocks." << std::endl;
+
     // --- Create and Initialize Renderer ---
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice); // Get indices again
-    renderer = std::make_unique<VulkanRenderer>(window, instance, surface, physicalDevice, device, indices, graphicsQueue, presentQueue, camera);
-    renderer->init(); // Initialize renderer resources
+    renderer = std::make_unique<VulkanRenderer>(window, instance, surface, physicalDevice, device, indices, graphicsQueue, presentQueue, camera); // BlockRegistry removed from constructor
+    renderer->init(*blockRegistry, *world); // Pass BlockRegistry and World to init()
     // --- End Renderer Init ---
 
     std::cout << "Vulkan initialization complete." << std::endl;
@@ -228,6 +242,17 @@ void HelloVulkanApp::pickPhysicalDevice() {
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physicalDevice, &properties);
     std::cout << "Selected Physical Device: " << properties.deviceName << std::endl;
+
+    // After selecting the physical device, query its features and decide which ones to enable.
+    VkPhysicalDeviceFeatures deviceSupportedFeatures;
+    vkGetPhysicalDeviceFeatures(physicalDevice, &deviceSupportedFeatures);
+    enabledFeatures = {}; // Clear any previous
+    if (deviceSupportedFeatures.samplerAnisotropy) {
+        enabledFeatures.samplerAnisotropy = VK_TRUE;
+        std::cout << "Sampler Anisotropy feature is supported and will be enabled." << std::endl;
+    } else {
+        std::cout << "Sampler Anisotropy feature is NOT supported." << std::endl;
+    }
 }
 
 void HelloVulkanApp::createLogicalDevice() {
@@ -246,13 +271,12 @@ void HelloVulkanApp::createLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{}; // No special features needed for now
-
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.pEnabledFeatures = &deviceFeatures;
+    // Use the features we decided to enable (e.g., samplerAnisotropy if supported)
+    createInfo.pEnabledFeatures = &enabledFeatures;
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
@@ -377,9 +401,10 @@ bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice targetDevice) {
         swapChainAdequate = !support.formats.empty() && !support.presentModes.empty();
     }
 
-    // Could also check VkPhysicalDeviceFeatures here if needed
+    VkPhysicalDeviceFeatures supportedFeatures; // Query features for this specific device
+    vkGetPhysicalDeviceFeatures(targetDevice, &supportedFeatures);
 
-    return indices.isComplete() && extensionsSupported && swapChainAdequate;
+    return indices.isComplete() && extensionsSupported && swapChainAdequate; // Sampler anisotropy is a "nice to have", not a strict requirement for suitability here. We enable it if available.
 }
 
 void HelloVulkanApp::mainLoop() {
@@ -419,6 +444,12 @@ void HelloVulkanApp::cleanup() {
 
     // InputManager is managed by unique_ptr, will be cleaned up automatically
     inputManager.reset();
+
+    // BlockRegistry is managed by unique_ptr, will be cleaned up automatically
+    blockRegistry.reset();
+
+    // World is managed by unique_ptr, will be cleaned up automatically
+    world.reset();
 
     // Destroy logical device
     if (device != VK_NULL_HANDLE) { // Check handle before destroying

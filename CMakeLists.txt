@@ -114,10 +114,15 @@ add_executable(SimpleVulkanWindow
     src/render/VulkanBufferManager.cpp
     src/render/VulkanDescriptorSetManager.cpp
     src/render/VulkanPipelineFactory.cpp
-    src/render/VulkanTextureLoader.cpp # Add the new texture loader
-    src/render/ModelLoader.cpp         # Add the new model loader
+    src/resource/VulkanTextureLoader.cpp # Add the new texture loader
+    src/resource/ModelLoader.cpp         # Add the new model loader
+    src/resource/ResourceManager.cpp     # Add ResourceManager
     src/InputManager.cpp 
-    src/Camera.cpp) # Add the new Camera source file
+    src/Camera.cpp                       # Add the new Camera source file
+    src/Block.cpp                        # Add Block class
+    src/BlockRegistry.cpp                # Add BlockRegistry class
+    src/World.cpp                        # Add World class
+)
 
 # Add compile definitions for tinygltf configuration to the target
 # TINYGLTF_IMPLEMENTATION must remain defined in only one .cpp file (ModelLoader.cpp)

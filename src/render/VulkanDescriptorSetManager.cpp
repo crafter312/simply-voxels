@@ -3,6 +3,8 @@
 #include "VulkanDevice.hpp" // Need definition for getLogicalDevice()
 #include "VulkanSwapChain.hpp" // Need definition for getImageCount()
 
+#include <iostream>
+
 VulkanDescriptorSetManager::VulkanDescriptorSetManager() {}
 
 VulkanDescriptorSetManager::~VulkanDescriptorSetManager() {
@@ -111,4 +113,34 @@ void VulkanDescriptorSetManager::createDescriptorSets() {
     // This part is NOT moved into the manager as it requires knowledge
     // of the specific resources being bound. The renderer (or a higher level)
     // will need to call vkUpdateDescriptorSets using the allocated sets.
+}
+
+std::optional<std::vector<VkDescriptorSet>> VulkanDescriptorSetManager::allocateDescriptorSets(uint32_t setCount) {
+    if (setCount == 0) {
+        return std::vector<VkDescriptorSet>(); // Return empty vector if 0 sets requested
+    }
+
+    VkDevice logicalDevice = getDevice(); // Throws if device is not valid
+    if (descriptorSetLayout == VK_NULL_HANDLE) {
+         std::cerr << "VulkanDescriptorSetManager Error: Cannot allocate descriptor sets: descriptor set layout is not created!" << std::endl;
+         return std::nullopt;
+    }
+    if (descriptorPool == VK_NULL_HANDLE) {
+         std::cerr << "VulkanDescriptorSetManager Error: Cannot allocate descriptor sets: descriptor pool is not created!" << std::endl;
+         return std::nullopt;
+    }
+
+    std::vector<VkDescriptorSetLayout> layouts(setCount, descriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = setCount;
+    allocInfo.pSetLayouts = layouts.data();
+
+    std::vector<VkDescriptorSet> allocatedSets(setCount);
+    if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, allocatedSets.data()) != VK_SUCCESS) {
+        std::cerr << "VulkanDescriptorSetManager Error: Failed to allocate " << setCount << " descriptor sets!" << std::endl;
+        return std::nullopt;
+    }
+    return allocatedSets;
 }

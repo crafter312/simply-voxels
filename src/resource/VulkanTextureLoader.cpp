@@ -270,11 +270,18 @@ void VulkanTextureLoader::createTextureSampler() {
     
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
-    samplerInfo.anisotropyEnable = VK_TRUE; // Enable if supported
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy; // Use max supported
-    // samplerInfo.anisotropyEnable = VK_FALSE; // Or disable if you don't want it or for simplicity
-    // samplerInfo.maxAnisotropy = 1.0f;
 
+    // Only enable anisotropy if the physical device supports it (maxAnisotropy > 1.0)
+    // AND if the feature was requested and enabled on the logical device (handled by HelloVulkanApp)
+    // The validation error occurs if the logical device feature is off.
+    // Here, we ensure we only *try* to use it if the physical device has any level of support.
+    if (properties.limits.maxSamplerAnisotropy > 1.0f) {
+        samplerInfo.anisotropyEnable = VK_TRUE; 
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    } else {
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+    }
     samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
     samplerInfo.compareEnable = VK_FALSE;

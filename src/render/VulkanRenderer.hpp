@@ -17,7 +17,7 @@
 #include <array>    // For Vertex attributes
 #include <cstdint>  // Required for uint32_t
 
-#include "ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
+#include "../resource/ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
 #include "VulkanDescriptorSetManager.hpp" // Include the new manager
 
 
@@ -27,12 +27,15 @@ struct QueueFamilyIndices;
 class VulkanBufferManager; // Forward declaration
 class VulkanPipelineFactory; // Forward declaration
 class Camera; // Forward declaration
+class BlockRegistry; // Forward declaration
+class ResourceManager; // Forward declaration
+class World; // Forward declaration
 
-class VulkanTextureLoader; // Forward declaration for texture loader
 // --- Uniform Buffer Object ---
+// class VulkanTextureLoader; // No longer directly managed here
 
 struct UniformBufferObject {
-    glm::mat4 model;
+       // glm::mat4 model; // Model matrix will be handled by push constants
     glm::mat4 view;
     glm::mat4 proj;
 };
@@ -43,12 +46,12 @@ class VulkanSwapChain;
 
 class VulkanRenderer {
 public:
-    // Constructor takes necessary handles and pre-queried support details
+    // Constructor no longer takes BlockRegistry
     VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle, std::shared_ptr<Camera> cameraPtr);
     ~VulkanRenderer(); // Use destructor for cleanup
 
-    // Call this after constructor to create pipeline resources
-    void init();
+    // Call this after constructor to create pipeline resources, now takes BlockRegistry and World
+    void init(const BlockRegistry& blockRegistryRef, const World& worldRef);
 
     // Main drawing function
     void drawFrame();
@@ -64,7 +67,7 @@ private:
     VkPhysicalDevice physicalDeviceRef;
     VkDevice deviceRef;
     // Use shared_ptr as both Renderer and SwapChain need these indices
-    std::shared_ptr<QueueFamilyIndices> queueIndicesRef;
+    std::shared_ptr<QueueFamilyIndices> queueIndicesRef; // m_blockRegistryRef removed
     VkQueue graphicsQueueRef;
     VkQueue presentQueueRef;
 
@@ -76,11 +79,14 @@ private:
     std::unique_ptr<VulkanPipelineFactory> pipelineFactory;
     std::unique_ptr<VulkanDevice> m_vulkanDeviceWrapper; // Wrapper for VkDevice/VkPhysicalDevice
     std::unique_ptr<VulkanDescriptorSetManager> descriptorSetManager;
-    std::unique_ptr<VulkanTextureLoader> textureLoader; // Add the texture loader
+    // std::unique_ptr<VulkanTextureLoader> textureLoader; // Replaced by ResourceManager
+    std::unique_ptr<ResourceManager> resourceManager; // Manages models and textures
     std::shared_ptr<Camera> m_camera; // Store the camera
+    const World* m_worldRef = nullptr; // Reference to the world data
 
     // --- Rendering ---
     VkRenderPass renderPass = VK_NULL_HANDLE;
+    void prepareBlockTextures(uint32_t currentImage); // helper function that will update the necessary texture information for the current block.
     VkCommandPool commandPool = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> commandBuffers;
 
@@ -98,6 +104,8 @@ private:
 
     ModelData m_cubeModelData; // To store loaded model vertices and indices
     // --- Graphics Pipeline ---
+    std::vector<std::vector<VkDescriptorSet>> descriptorSetsPerBlock; // Add descriptor sets per block
+    uint32_t numBlocksLastFrame = 0; // Keep the number of blocks so we can allocate enough descriptor sets.
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 
