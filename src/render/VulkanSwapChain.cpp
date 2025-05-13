@@ -76,11 +76,11 @@ void VulkanSwapChain::cleanupForRecreation() {
     }
 }
 
-void VulkanSwapChain::recreate(VkRenderPass renderPass) {
+void VulkanSwapChain::recreate(VkRenderPass renderPass, VkImageView depthImageView) {
     cleanupForRecreation();
     createSwapChainInternal();
     createImageViews();
-    createFramebuffers(renderPass); // Recreate framebuffers with the new views/extent
+    createFramebuffers(renderPass, depthImageView); // Recreate framebuffers with the new views/extent and depth view
 }
 
 void VulkanSwapChain::createSwapChainInternal() {
@@ -159,16 +159,17 @@ void VulkanSwapChain::createImageViews() {
     }
 }
 
-void VulkanSwapChain::createFramebuffers(VkRenderPass renderPass) {
+void VulkanSwapChain::createFramebuffers(VkRenderPass renderPass, VkImageView depthImageView) {
     swapChainFramebuffers.resize(swapChainImageViews.size());
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-        VkImageView attachments[] = { swapChainImageViews[i] };
+        std::array<VkImageView, 2> attachments = { swapChainImageViews[i], depthImageView }; // Include depth image view
 
+        // VkImageView attachments[] = { swapChainImageViews[i] };
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderPass; // Use the provided render pass
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size()); // Use the size of the attachments array
+        framebufferInfo.pAttachments = attachments.data(); // Get a pointer to the underlying data
         framebufferInfo.width = swapChainExtent.width;
         framebufferInfo.height = swapChainExtent.height;
         framebufferInfo.layers = 1;
@@ -219,7 +220,7 @@ SwapChainSupportDetails VulkanSwapChain::querySupport(VkPhysicalDevice device, V
     return details;
 }
 
-VkSurfaceFormatKHR VulkanSwapChain::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+VkSurfaceFormatKHR VulkanSwapChain::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) { // Removed const from parameter
     for (const auto& availableFormat : availableFormats) {
         if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return availableFormat;

@@ -61,6 +61,9 @@ VulkanRenderer::~VulkanRenderer() {
     // textureLoader.reset(); // ResourceManager handles this
     resourceManager.reset(); // Clean up resource manager
     m_vulkanDeviceWrapper.reset(); // Clean up device wrapper
+
+    cleanupDepthResources(); // Clean up depth buffer resources
+
     swapChainManager.reset(); // Explicitly reset before other resources if needed, though RAII handles it
 
     // Destroy graphics pipeline and layout
@@ -130,12 +133,22 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     resourceManager->setDefaultModelPath("../resources/models/cube.glb"); // Default cube
     resourceManager->setDefaultTexturePath("../resources/textures/default_error.png"); // Default error texture    
     resourceManager->loadAssetsFromRegistry(blockRegistryRef, true); // Load assets using the passed BlockRegistry reference
+    std::cout << "Assets loaded by ResourceManager." << std::endl;
+
+    // Create buffer manager now that command pool and graphics queue exist
+    // This needs to be created before depth resources and render pass if render pass depends on depth format
+    bufferManager = std::make_unique<VulkanBufferManager>(deviceRef, physicalDeviceRef, commandPool, graphicsQueueRef);
+
+    // Create depth buffer resources (needs swap chain extent, so after swapChainManager->init())
+    bufferManager->createDepthResources(swapChainManager->getExtent(), depthImage, depthImageMemory, depthImageView, depthFormat);
+    std::cout << "Depth Resources created." << std::endl;
 
     createRenderPass();
     std::cout << "Render Pass created." << std::endl;
 
-    // Initialize and use the DescriptorSetManager
+    // Initialize the DescriptorSetManager first, as subsequent calls will need the device.
     descriptorSetManager->initialize(m_vulkanDeviceWrapper.get(), swapChainManager.get());
+    std::cout << "DescriptorSetManager initialized." << std::endl;
 
     // Define descriptor set layout bindings (previously in createDescriptorSetLayout)
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
@@ -143,8 +156,7 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.descriptorCount = 1; // We have one UBO
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // UBO is used in the vertex shader
-    uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
-
+    uboLayoutBinding.pImmutableSamplers = nullptr; // Optional, but good to be explicit
     VkDescriptorSetLayoutBinding samplerLayoutBinding{};
     samplerLayoutBinding.binding = 1; // Next binding after UBO
     samplerLayoutBinding.descriptorCount = 1;
@@ -173,11 +185,8 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     }
     std::cout << "Graphics Pipeline and Layout created." << std::endl;
 
-    swapChainManager->createFramebuffers(renderPass); // Create framebuffers (needs render pass and image views)
+    swapChainManager->createFramebuffers(renderPass, depthImageView); // Create framebuffers (needs render pass, image views, and depth image view)
     // createCommandPool(); // Moved earlier
-
-    // Create buffer manager now that command pool and graphics queue exist
-    bufferManager = std::make_unique<VulkanBufferManager>(deviceRef, physicalDeviceRef, commandPool, graphicsQueueRef);
 
     // Create Texture Loader
     // Make sure you have a texture file at this path or change it
@@ -371,27 +380,43 @@ void VulkanRenderer::createRenderPass() {
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format = depthFormat; // Use the format found by BufferManager
+    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE; // We don't need to store depth after rendering
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
     VkAttachmentReference colorAttachmentRef{};
     colorAttachmentRef.attachment = 0;
     colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depthAttachmentRef{};
+    depthAttachmentRef.attachment = 1; // This is the second attachment
+    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef; // Add depth attachment reference
 
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
+    std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+    renderPassInfo.pAttachments = attachments.data();
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
     renderPassInfo.dependencyCount = 1;
@@ -479,9 +504,12 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = swapChainManager->getExtent(); // Get extent from manager
 
-    VkClearValue clearColor = {{{0.39f, 0.58f, 0.93f, 1.0f}}};
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearColor;
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = {{0.39f, 0.58f, 0.93f, 1.0f}}; // Clear color for attachment 0
+    clearValues[1].depthStencil = {1.0f, 0};             // Clear depth to 1.0 (farthest), stencil to 0 for attachment 1
+
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -611,6 +639,15 @@ void VulkanRenderer::drawFrame() {
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+void VulkanRenderer::cleanupDepthResources() {
+    if (depthImageView != VK_NULL_HANDLE) vkDestroyImageView(deviceRef, depthImageView, nullptr);
+    if (depthImage != VK_NULL_HANDLE) vkDestroyImage(deviceRef, depthImage, nullptr);
+    if (depthImageMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, depthImageMemory, nullptr);
+    depthImageView = VK_NULL_HANDLE;
+    depthImage = VK_NULL_HANDLE;
+    depthImageMemory = VK_NULL_HANDLE;
+}
+
 void VulkanRenderer::recreateSwapChainResources() {
     std::cout << "Recreating swap chain dependent resources..." << std::endl;
 
@@ -618,23 +655,34 @@ void VulkanRenderer::recreateSwapChainResources() {
     vkDeviceWaitIdle(deviceRef);
 
     // 1. Cleanup old swap chain resources (swap chain, image views, framebuffers)
+    // Framebuffers are cleaned by swapChainManager as they depend on swap chain image views
     swapChainManager->cleanupForRecreation();
 
-    // 2. Cleanup renderer resources dependent on the swap chain/render pass
+    // 2. Cleanup old depth buffer resources (as they depend on extent)
+    cleanupDepthResources();
+
+    // 3. Cleanup renderer resources dependent on the swap chain/render pass
     if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(deviceRef, graphicsPipeline, nullptr);
     if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(deviceRef, pipelineLayout, nullptr);
     if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(deviceRef, renderPass, nullptr);
+    graphicsPipeline = VK_NULL_HANDLE; // Nullify handles after destruction
+    pipelineLayout = VK_NULL_HANDLE;
+    renderPass = VK_NULL_HANDLE;
 
-    // 3. Recreate swap chain and image views
+    // 4. Recreate swap chain and image views
     swapChainManager->createSwapChainInternal(); // Creates swap chain, gets new format/extent
     swapChainManager->createImageViews();
     std::cout << "Swap chain and image views recreated by manager." << std::endl;
 
-    // 4. Recreate render pass (depends on new format)
+    // 5. Recreate depth buffer resources (depends on new swap chain extent)
+    bufferManager->createDepthResources(swapChainManager->getExtent(), depthImage, depthImageMemory, depthImageView, depthFormat);
+    std::cout << "Depth Resources recreated." << std::endl;
+
+    // 6. Recreate render pass (depends on new format and new depth format)
     createRenderPass();
     std::cout << "Render pass recreated." << std::endl;
 
-    // 5. Recreate graphics pipeline (depends on new render pass)
+    // 7. Recreate graphics pipeline (depends on new render pass)
     // Define the push constant range again, as it's needed for pipeline recreation
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -646,8 +694,8 @@ void VulkanRenderer::recreateSwapChainResources() {
     }
     std::cout << "Graphics pipeline recreated." << std::endl;
 
-    // 6. Recreate framebuffers (depends on new image views and render pass)
-    swapChainManager->createFramebuffers(renderPass);
+    // 8. Recreate framebuffers (depends on new image views, render pass, and new depth image view)
+    swapChainManager->createFramebuffers(renderPass, depthImageView);
 
     // Command buffers need to be re-recorded because they reference the old framebuffers.
     // We don't explicitly recreate them here because the drawFrame loop resets and

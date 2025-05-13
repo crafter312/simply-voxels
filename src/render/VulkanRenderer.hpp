@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS // Ensure GLM uses radians
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE // Ensure GLM uses depth range [0, 1]
 #include <glm/glm.hpp>    // For vec3, mat4
 #include <glm/gtc/matrix_transform.hpp> // For lookAt, perspective, etc.
 
@@ -84,6 +85,11 @@ private:
     std::shared_ptr<Camera> m_camera; // Store the camera
     const World* m_worldRef = nullptr; // Reference to the world data
 
+    // --- Depth Buffer Resources ---
+    VkImage depthImage = VK_NULL_HANDLE;
+    VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
+    VkImageView depthImageView = VK_NULL_HANDLE;
+    VkFormat depthFormat; // Store the chosen depth format
     // --- Rendering ---
     VkRenderPass renderPass = VK_NULL_HANDLE;
     void prepareBlockTextures(uint32_t currentImage); // helper function that will update the necessary texture information for the current block.
@@ -128,6 +134,7 @@ private:
     // void createDescriptorPool();
     // void createDescriptorSets(); // Logic for vkUpdateDescriptorSets will remain in init()
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void cleanupDepthResources(); // Helper to clean up depth buffer resources
 
     void recreateSwapChainResources();
     void updateUniformBuffer(uint32_t currentImage);

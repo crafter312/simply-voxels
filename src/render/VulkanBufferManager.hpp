@@ -26,6 +26,13 @@ public:
                               std::vector<VkDeviceMemory>& outUniformBuffersMemory,
                               std::vector<void*>& outUniformBuffersMapped);
 
+    // New method for creating depth buffer resources
+    void createDepthResources(VkExtent2D swapChainExtent,
+                              VkImage& outDepthImage,
+                              VkDeviceMemory& outDepthImageMemory,
+                              VkImageView& outDepthImageView,
+                              VkFormat& outDepthFormat); // Output: the chosen depth format
+
 private:
     VkDevice deviceRef;
     VkPhysicalDevice physicalDeviceRef;
@@ -35,4 +42,15 @@ private:
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+
+    // Helper methods for image creation
+    void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
+                     VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
+                     VkImage& image, VkDeviceMemory& imageMemory);
+
+    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+    VkFormat findDepthFormat(); // Helper to find a suitable depth format
+    static bool hasStencilComponent(VkFormat format); // Helper to check for stencil component
 };

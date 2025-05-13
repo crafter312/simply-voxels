@@ -35,13 +35,13 @@ public:
     // Initialize swap chain, image views. Call createFramebuffers separately after render pass exists.
     void init();
     // Create framebuffers (needs render pass)
-    void createFramebuffers(VkRenderPass renderPass);
+    void createFramebuffers(VkRenderPass renderPass, VkImageView depthImageView); // Added depthImageView parameter
     // Cleanup all resources
     void cleanup();
     // Cleanup resources needed for recreation
     void cleanupForRecreation();
     // Recreate swap chain (e.g., after window resize)
-    void recreate(VkRenderPass renderPass);
+    void recreate(VkRenderPass renderPass, VkImageView depthImageView); // Added depthImageView parameter
 
     // Acquire the next image index from the swap chain
     VkResult acquireNextImage(VkSemaphore imageAvailableSemaphore, uint32_t* imageIndex);
