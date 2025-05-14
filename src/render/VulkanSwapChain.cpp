@@ -5,15 +5,15 @@
 #include <stdexcept>
 #include <iostream> // For messages
 
-VulkanSwapChain::VulkanSwapChain(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window, std::shared_ptr<QueueFamilyIndices> queueIndices)
+VulkanSwapChain::VulkanSwapChain(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window, const QueueFamilyIndices& queueIndices)
     : instanceRef(instance),
       physicalDeviceRef(physicalDevice),
       deviceRef(device),
       surfaceRef(surface),
       windowRef(window),
-      queueIndicesRef(queueIndices) // Store the shared pointer
+      m_queueIndices(queueIndices) // Store a copy of the queue indices
 {
-    if (instanceRef == VK_NULL_HANDLE || physicalDeviceRef == VK_NULL_HANDLE || deviceRef == VK_NULL_HANDLE || surfaceRef == VK_NULL_HANDLE || windowRef == nullptr || !queueIndicesRef || !queueIndicesRef->isComplete()) {
+    if (instanceRef == VK_NULL_HANDLE || physicalDeviceRef == VK_NULL_HANDLE || deviceRef == VK_NULL_HANDLE || surfaceRef == VK_NULL_HANDLE || windowRef == nullptr || !m_queueIndices.isComplete()) {
         throw std::runtime_error("VulkanSwapChain received null or invalid handles during construction!");
     }
 }
@@ -105,9 +105,9 @@ void VulkanSwapChain::createSwapChainInternal() {
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    uint32_t queueFamilyIndicesArray[] = {queueIndicesRef->graphicsFamily.value(), queueIndicesRef->presentFamily.value()};
+    uint32_t queueFamilyIndicesArray[] = {m_queueIndices.graphicsFamily.value(), m_queueIndices.presentFamily.value()};
 
-    if (queueIndicesRef->graphicsFamily != queueIndicesRef->presentFamily) {
+    if (m_queueIndices.graphicsFamily != m_queueIndices.presentFamily) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndicesArray;

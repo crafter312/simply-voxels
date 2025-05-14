@@ -20,32 +20,26 @@
 #include <string>   // For shader file loading
 #include <fstream>  // For shader file loading
 #include <cstring> // For memcpy
-
-VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle, std::shared_ptr<Camera> cameraPtr)
+VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, std::shared_ptr<Camera> cameraPtr)
     : window(glfwWindow),
       instanceRef(instance),
       surfaceRef(surface),
-      physicalDeviceRef(physicalDevice),
-      deviceRef(logicalDevice),
-      graphicsQueueRef(graphicsQueueHandle),
-      presentQueueRef(presentQueueHandle),
+      m_vulkanDeviceRef(vulkanDevice), // Initialize the reference
       m_camera(cameraPtr) // m_blockRegistryRef initialization removed
 {
-    // Create a shared instance of QueueFamilyIndices
-    queueIndicesRef = std::make_shared<QueueFamilyIndices>(queueIndices);
     if (!window || instanceRef == VK_NULL_HANDLE || surfaceRef == VK_NULL_HANDLE ||
-        physicalDeviceRef == VK_NULL_HANDLE || deviceRef == VK_NULL_HANDLE ||
-        !queueIndicesRef->isComplete() || graphicsQueueRef == VK_NULL_HANDLE || presentQueueRef == VK_NULL_HANDLE ||
+        // Access device properties through m_vulkanDeviceRef
+        m_vulkanDeviceRef.getPhysicalDevice() == VK_NULL_HANDLE || m_vulkanDeviceRef.getLogicalDevice() == VK_NULL_HANDLE ||
+        !m_vulkanDeviceRef.getQueueFamilyIndices().isComplete() || m_vulkanDeviceRef.getGraphicsQueue() == VK_NULL_HANDLE || m_vulkanDeviceRef.getPresentQueue() == VK_NULL_HANDLE ||
         !m_camera) // Check if camera pointer is valid
     {
         throw std::runtime_error("VulkanRenderer received null or invalid handles during construction!");
     }
     // Create the swap chain manager
-    // Pass the shared pointer to the swap chain manager
-    swapChainManager = std::make_unique<VulkanSwapChain>(instanceRef, physicalDeviceRef, deviceRef, surfaceRef, window, queueIndicesRef);
+    swapChainManager = std::make_unique<VulkanSwapChain>(instanceRef, m_vulkanDeviceRef.getPhysicalDevice(), m_vulkanDeviceRef.getLogicalDevice(), surfaceRef, window, m_vulkanDeviceRef.getQueueFamilyIndices());
 
-    // Create the VulkanDevice wrapper instance (assuming a constructor like this exists)
-    m_vulkanDeviceWrapper = std::make_unique<VulkanDevice>(physicalDeviceRef, deviceRef);
+    // The line below caused the error and is no longer needed as we use m_vulkanDeviceRef
+    // m_vulkanDeviceWrapper = std::make_unique<VulkanDevice>(physicalDeviceRef, deviceRef); 
     // Create the descriptor set manager
     descriptorSetManager = std::make_unique<VulkanDescriptorSetManager>();
 
@@ -59,50 +53,49 @@ VulkanRenderer::~VulkanRenderer() {
     // Swap chain resources are cleaned up by swapChainManager's destructor
     // Descriptor set manager resources are cleaned up by its destructor
     descriptorSetManager.reset();
-    // textureLoader.reset(); // ResourceManager handles this
     resourceManager.reset(); // Clean up resource manager
-    m_vulkanDeviceWrapper.reset(); // Clean up device wrapper
-
+    // m_vulkanDeviceWrapper is removed
+    
     cleanupDepthResources(); // Clean up depth buffer resources
 
     swapChainManager.reset(); // Explicitly reset before other resources if needed, though RAII handles it
 
     // Destroy graphics pipeline and layout
-    if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(deviceRef, graphicsPipeline, nullptr);
-    if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(deviceRef, pipelineLayout, nullptr);
+    if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(m_vulkanDeviceRef.getLogicalDevice(), graphicsPipeline, nullptr);
+    if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), pipelineLayout, nullptr);
 
     // Destroy render pass
-    if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(deviceRef, renderPass, nullptr);
+    if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(m_vulkanDeviceRef.getLogicalDevice(), renderPass, nullptr);
 
     // Destroy uniform buffers
     for (size_t i = 0; i < uniformBuffers.size(); ++i) {
         if (uniformBuffersMapped[i] != nullptr) { // Check if mapped
-            vkUnmapMemory(deviceRef, uniformBuffersMemory[i]); // Unmap before freeing memory
+            vkUnmapMemory(m_vulkanDeviceRef.getLogicalDevice(), uniformBuffersMemory[i]); // Unmap before freeing memory
             // uniformBuffersMapped[i] = nullptr; // Optional: vector will be cleared or resized
         }
-        if (uniformBuffers[i] != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, uniformBuffers[i], nullptr);
-        if (uniformBuffersMemory[i] != VK_NULL_HANDLE) vkFreeMemory(deviceRef, uniformBuffersMemory[i], nullptr);
+        if (uniformBuffers[i] != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), uniformBuffers[i], nullptr);
+        if (uniformBuffersMemory[i] != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), uniformBuffersMemory[i], nullptr);
     }
 
     // Descriptor pool and layout are now cleaned up by VulkanDescriptorSetManager's destructor
-    // if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(deviceRef, descriptorPool, nullptr);
-    // if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(deviceRef, descriptorSetLayout, nullptr);
+    // if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(m_vulkanDeviceRef.getLogicalDevice(), descriptorPool, nullptr);
+    // if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_vulkanDeviceRef.getLogicalDevice(), descriptorSetLayout, nullptr);
 
     // Destroy aggregated chunk mesh buffers
-    if (aggregatedVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, aggregatedVertexBuffer, nullptr);
-    if (aggregatedVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, aggregatedVertexBufferMemory, nullptr);
-    if (aggregatedIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, aggregatedIndexBuffer, nullptr);
-    if (aggregatedIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, aggregatedIndexBufferMemory, nullptr);
+    if (aggregatedVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), aggregatedVertexBuffer, nullptr);
+    if (aggregatedVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), aggregatedVertexBufferMemory, nullptr);
+    if (aggregatedIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), aggregatedIndexBuffer, nullptr);
+    if (aggregatedIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), aggregatedIndexBufferMemory, nullptr);
 
 
     // Destroy synchronization objects
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         if (renderFinishedSemaphores.size() > i && renderFinishedSemaphores[i] != VK_NULL_HANDLE)
-            vkDestroySemaphore(deviceRef, renderFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(m_vulkanDeviceRef.getLogicalDevice(), renderFinishedSemaphores[i], nullptr);
         if (imageAvailableSemaphores.size() > i && imageAvailableSemaphores[i] != VK_NULL_HANDLE)
-            vkDestroySemaphore(deviceRef, imageAvailableSemaphores[i], nullptr);
+            vkDestroySemaphore(m_vulkanDeviceRef.getLogicalDevice(), imageAvailableSemaphores[i], nullptr);
         if (inFlightFences.size() > i && inFlightFences[i] != VK_NULL_HANDLE)
-            vkDestroyFence(deviceRef, inFlightFences[i], nullptr);
+            vkDestroyFence(m_vulkanDeviceRef.getLogicalDevice(), inFlightFences[i], nullptr);
     }
     renderFinishedSemaphores.clear();
     imageAvailableSemaphores.clear();
@@ -110,7 +103,7 @@ VulkanRenderer::~VulkanRenderer() {
 
     // Destroy command pool (also frees command buffers allocated from it)
     if (commandPool != VK_NULL_HANDLE) {
-        vkDestroyCommandPool(deviceRef, commandPool, nullptr);
+        vkDestroyCommandPool(m_vulkanDeviceRef.getLogicalDevice(), commandPool, nullptr);
         commandPool = VK_NULL_HANDLE;
     }
 
@@ -129,7 +122,7 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     std::cout << "Command Pool created." << std::endl;
 
     // --- Initialize ResourceManager ---
-    resourceManager = std::make_unique<ResourceManager>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef);
+    resourceManager = std::make_unique<ResourceManager>(m_vulkanDeviceRef.getPhysicalDevice(), m_vulkanDeviceRef.getLogicalDevice(), commandPool, m_vulkanDeviceRef.getGraphicsQueue());
     resourceManager->setDefaultModelPath("../resources/models/cube.glb"); // Default cube
     resourceManager->setDefaultTexturePath("../resources/textures/default_error.png"); // Default error texture    
     resourceManager->loadAssetsFromRegistry(blockRegistryRef, true); // Load assets using the passed BlockRegistry reference
@@ -137,10 +130,9 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     const uint32_t ATLAS_TILE_SIZE = 32; // Manual coder note: changed from 16 to 32 to match the texture size
     resourceManager->buildTextureAtlas(blockRegistryRef, ATLAS_TILE_SIZE);
     std::cout << "Assets loaded by ResourceManager." << std::endl;
-
     // Create buffer manager now that command pool and graphics queue exist
     // This needs to be created before depth resources and render pass if render pass depends on depth format
-    bufferManager = std::make_unique<VulkanBufferManager>(deviceRef, physicalDeviceRef, commandPool, graphicsQueueRef);
+    bufferManager = std::make_unique<VulkanBufferManager>(m_vulkanDeviceRef.getLogicalDevice(), m_vulkanDeviceRef.getPhysicalDevice(), commandPool, m_vulkanDeviceRef.getGraphicsQueue());
 
     // Create depth buffer resources (needs swap chain extent, so after swapChainManager->init())
     bufferManager->createDepthResources(swapChainManager->getExtent(), depthImage, depthImageMemory, depthImageView, depthFormat);
@@ -150,7 +142,7 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     std::cout << "Render Pass created." << std::endl;
 
     // Initialize the DescriptorSetManager first, as subsequent calls will need the device.
-    descriptorSetManager->initialize(m_vulkanDeviceWrapper.get(), swapChainManager.get());
+    descriptorSetManager->initialize(&m_vulkanDeviceRef, swapChainManager.get());
     std::cout << "DescriptorSetManager initialized." << std::endl;
 
     // Define descriptor set layout bindings (previously in createDescriptorSetLayout)
@@ -178,7 +170,7 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
        pushConstantRange.offset = 0;
        pushConstantRange.size = sizeof(glm::mat4); // Size of our model matrix
    
-    pipelineFactory = std::make_unique<VulkanPipelineFactory>(deviceRef);
+    pipelineFactory = std::make_unique<VulkanPipelineFactory>(m_vulkanDeviceRef.getLogicalDevice());
        if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", 
                                                    "shaders/frag.spv", 
                                                    descriptorSetManager->getDescriptorSetLayout(), 
@@ -192,7 +184,7 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     // createCommandPool(); // Moved earlier
 
     // Create Texture Loader
-    // Make sure you have a texture file at this path or change it
+    // Make sure you have a texture file at this path or change it // This is now handled by ResourceManager. We'll get the "dirt" texture for the initial cube.
     // textureLoader = std::make_unique<VulkanTextureLoader>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef, "../resources/textures/dirt.png");
     // std::cout << "Texture Loader created." << std::endl;
     // This is now handled by ResourceManager. We'll get the "dirt" texture for the initial cube.
@@ -262,7 +254,7 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
         descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pImageInfo = &imageInfo;
 
-        vkUpdateDescriptorSets(deviceRef, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        vkUpdateDescriptorSets(m_vulkanDeviceRef.getLogicalDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
     std::cout << "Descriptor Sets updated." << std::endl;
 
@@ -383,18 +375,17 @@ void VulkanRenderer::createRenderPass() {
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    if (vkCreateRenderPass(deviceRef, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+    if (vkCreateRenderPass(m_vulkanDeviceRef.getLogicalDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create render pass!");
     }
 }
-
 void VulkanRenderer::createCommandPool() {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = queueIndicesRef->graphicsFamily.value();
+    poolInfo.queueFamilyIndex = m_vulkanDeviceRef.getQueueFamilyIndices().graphicsFamily.value();
 
-    if (vkCreateCommandPool(deviceRef, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+    if (vkCreateCommandPool(m_vulkanDeviceRef.getLogicalDevice(), &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create command pool!");
     }
 }
@@ -407,7 +398,7 @@ void VulkanRenderer::createCommandBuffers() {
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
-    if (vkAllocateCommandBuffers(deviceRef, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
+    if (vkAllocateCommandBuffers(m_vulkanDeviceRef.getLogicalDevice(), &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate command buffers!");
     }
 }
@@ -425,9 +416,9 @@ void VulkanRenderer::createSyncObjects() {
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        if (vkCreateSemaphore(deviceRef, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(deviceRef, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(deviceRef, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+        if (vkCreateSemaphore(m_vulkanDeviceRef.getLogicalDevice(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+            vkCreateSemaphore(m_vulkanDeviceRef.getLogicalDevice(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(m_vulkanDeviceRef.getLogicalDevice(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create synchronization objects for a frame!");
         }
     }
@@ -532,7 +523,7 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 }
 
 void VulkanRenderer::drawFrame() {
-    vkWaitForFences(deviceRef, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
     uint32_t imageIndex;
     VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
@@ -549,7 +540,7 @@ void VulkanRenderer::drawFrame() {
 
     // prepareBlockTextures call removed as atlas is static and bound once per frame via descriptor set
 
-    vkResetFences(deviceRef, 1, &inFlightFences[currentFrame]);
+    vkResetFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame]);
 
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
@@ -566,12 +557,12 @@ void VulkanRenderer::drawFrame() {
     VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
-
-    if (vkQueueSubmit(graphicsQueueRef, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+    
+    if (vkQueueSubmit(m_vulkanDeviceRef.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
 
-    VkPresentInfoKHR presentInfo{};
+    VkPresentInfoKHR presentInfo{}; // Get handle from manager
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
@@ -580,7 +571,7 @@ void VulkanRenderer::drawFrame() {
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
 
-    result = vkQueuePresentKHR(presentQueueRef, &presentInfo);
+    result = vkQueuePresentKHR(m_vulkanDeviceRef.getPresentQueue(), &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
@@ -593,9 +584,9 @@ void VulkanRenderer::drawFrame() {
 }
 
 void VulkanRenderer::cleanupDepthResources() {
-    if (depthImageView != VK_NULL_HANDLE) vkDestroyImageView(deviceRef, depthImageView, nullptr);
-    if (depthImage != VK_NULL_HANDLE) vkDestroyImage(deviceRef, depthImage, nullptr);
-    if (depthImageMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, depthImageMemory, nullptr);
+    if (depthImageView != VK_NULL_HANDLE) vkDestroyImageView(m_vulkanDeviceRef.getLogicalDevice(), depthImageView, nullptr);
+    if (depthImage != VK_NULL_HANDLE) vkDestroyImage(m_vulkanDeviceRef.getLogicalDevice(), depthImage, nullptr);
+    if (depthImageMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), depthImageMemory, nullptr);
     depthImageView = VK_NULL_HANDLE;
     depthImage = VK_NULL_HANDLE;
     depthImageMemory = VK_NULL_HANDLE;
@@ -605,7 +596,7 @@ void VulkanRenderer::recreateSwapChainResources() {
     std::cout << "Recreating swap chain dependent resources..." << std::endl;
 
     // Wait for the device to be idle before cleanup/recreation
-    vkDeviceWaitIdle(deviceRef);
+    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
 
     // 1. Cleanup old swap chain resources (swap chain, image views, framebuffers)
     // Framebuffers are cleaned by swapChainManager as they depend on swap chain image views
@@ -615,9 +606,9 @@ void VulkanRenderer::recreateSwapChainResources() {
     cleanupDepthResources();
 
     // 3. Cleanup renderer resources dependent on the swap chain/render pass
-    if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(deviceRef, graphicsPipeline, nullptr);
-    if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(deviceRef, pipelineLayout, nullptr);
-    if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(deviceRef, renderPass, nullptr);
+    if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(m_vulkanDeviceRef.getLogicalDevice(), graphicsPipeline, nullptr); // Nullify handles after destruction
+    if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), pipelineLayout, nullptr);
+    if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(m_vulkanDeviceRef.getLogicalDevice(), renderPass, nullptr);
     graphicsPipeline = VK_NULL_HANDLE; // Nullify handles after destruction
     pipelineLayout = VK_NULL_HANDLE;
     renderPass = VK_NULL_HANDLE;

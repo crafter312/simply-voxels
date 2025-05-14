@@ -7,18 +7,10 @@
 #include <vector>
 #include <memory>
 #include <optional>
-#include <stdexcept>
 #include <string>
 
-// Structure to hold queue family indices
-struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
-    std::optional<uint32_t> presentFamily;
-
-    bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value();
-    }
-};
+// Include VulkanDevice.hpp for the definition of QueueFamilyIndices
+#include "VulkanDevice.hpp"
 
 // Structure to hold swap chain support details
 struct SwapChainSupportDetails {
@@ -29,7 +21,7 @@ struct SwapChainSupportDetails {
 
 class VulkanSwapChain {
 public:
-    VulkanSwapChain(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window, std::shared_ptr<QueueFamilyIndices> queueIndices);
+    VulkanSwapChain(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window, const QueueFamilyIndices& queueIndices);
     ~VulkanSwapChain();
 
     // Initialize swap chain, image views. Call createFramebuffers separately after render pass exists.
@@ -68,7 +60,7 @@ private:
     VkDevice deviceRef;
     VkSurfaceKHR surfaceRef;
     GLFWwindow* windowRef;
-    std::shared_ptr<QueueFamilyIndices> queueIndicesRef; // Changed to shared_ptr
+    QueueFamilyIndices m_queueIndices; // Store a copy of the queue indices
 
     // Swap Chain objects
     VkSwapchainKHR swapChain = VK_NULL_HANDLE;

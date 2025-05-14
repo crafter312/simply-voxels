@@ -47,8 +47,7 @@ class VulkanSwapChain;
 
 class VulkanRenderer {
 public:
-    // Constructor no longer takes BlockRegistry
-    VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, QueueFamilyIndices queueIndices, VkQueue graphicsQueueHandle, VkQueue presentQueueHandle, std::shared_ptr<Camera> cameraPtr);
+    VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, std::shared_ptr<Camera> cameraPtr);
     ~VulkanRenderer(); // Use destructor for cleanup
 
     // Call this after constructor to create pipeline resources, now takes BlockRegistry and World
@@ -65,12 +64,7 @@ private:
     GLFWwindow* window;
     VkInstance instanceRef; // Keep refs to objects managed by HelloVulkanApp
     VkSurfaceKHR surfaceRef;
-    VkPhysicalDevice physicalDeviceRef;
-    VkDevice deviceRef;
-    // Use shared_ptr as both Renderer and SwapChain need these indices
-    std::shared_ptr<QueueFamilyIndices> queueIndicesRef; // m_blockRegistryRef removed
-    VkQueue graphicsQueueRef;
-    VkQueue presentQueueRef;
+    VulkanDevice& m_vulkanDeviceRef; // Reference to the main VulkanDevice object
 
     // --- Constants ---
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -78,7 +72,6 @@ private:
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
     std::unique_ptr<VulkanPipelineFactory> pipelineFactory;
-    std::unique_ptr<VulkanDevice> m_vulkanDeviceWrapper; // Wrapper for VkDevice/VkPhysicalDevice
     std::unique_ptr<VulkanDescriptorSetManager> descriptorSetManager;
     // std::unique_ptr<VulkanTextureLoader> textureLoader; // Replaced by ResourceManager
     std::unique_ptr<ResourceManager> resourceManager; // Manages models and textures

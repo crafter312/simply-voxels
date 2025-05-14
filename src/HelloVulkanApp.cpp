@@ -1,5 +1,6 @@
 #include "HelloVulkanApp.hpp"
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
+#include "render/VulkanDevice.hpp"   // Include the new VulkanDevice header
 #include "InputManager.hpp"          // Include the InputManager header
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
 #include "block/BlockRegistry.hpp"         // Include the BlockRegistry header
@@ -27,10 +28,9 @@ const uint32_t HEIGHT = 600;
 
 // Note: enableValidationLayers and validationLayers are now part of VulkanDebug
 
-const std::vector<const char*> deviceExtensions = {
+const std::vector<const char*> REQUIRED_DEVICE_EXTENSIONS = { // Renamed for clarity
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
-
 // Note: Debug messenger functions (CreateDebugUtilsMessengerEXT, DestroyDebugUtilsMessengerEXT, debugCallback)
 // are now static private members of VulkanDebug.
 
@@ -98,11 +98,11 @@ void HelloVulkanApp::initVulkan() {
     // Setup debug messenger after instance creation
     vulkanDebug->setupMessenger(instance); // This will print its own success message
      createSurface();
-    std::cout << "Surface created." << std::endl;
-    pickPhysicalDevice();
-    std::cout << "Physical Device selected." << std::endl;
-    createLogicalDevice();
-    std::cout << "Logical Device created." << std::endl;
+    std::cout << "Vulkan Surface created." << std::endl;
+
+    // --- Create Vulkan Device (Physical & Logical) ---
+    vulkanDevice = std::make_unique<VulkanDevice>(instance, surface, REQUIRED_DEVICE_EXTENSIONS, *vulkanDebug);
+    // VulkanDevice constructor will print its own success messages for physical/logical device.
 
     // --- Create Camera ---
     camera = std::make_shared<Camera>(inputManager); // Pass the inputManager to the Camera constructor
@@ -122,8 +122,13 @@ void HelloVulkanApp::initVulkan() {
     std::cout << "World created with initial blocks." << std::endl;
 
     // --- Create and Initialize Renderer ---
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice); // Get indices again
-    renderer = std::make_unique<VulkanRenderer>(window, instance, surface, physicalDevice, device, indices, graphicsQueue, presentQueue, camera); // BlockRegistry removed from constructor
+    renderer = std::make_unique<VulkanRenderer>(
+        window,
+        instance,
+        surface,
+        *vulkanDevice, // Pass the VulkanDevice object by reference
+        camera
+    );
     renderer->init(*blockRegistry, *world); // Pass BlockRegistry and World to init()
     // --- End Renderer Init ---
 
@@ -180,152 +185,7 @@ void HelloVulkanApp::createSurface() {
     }
 }
 
-void HelloVulkanApp::pickPhysicalDevice() {
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-    if (deviceCount == 0) {
-        throw std::runtime_error("Failed to find GPUs with Vulkan support!");
-    }
-
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-    for (const auto& device : devices) {
-        if (isDeviceSuitable(device)) {
-            physicalDevice = device;
-            break;
-        }
-    }
-
-    if (physicalDevice == VK_NULL_HANDLE) {
-        throw std::runtime_error("Failed to find a suitable GPU!");
-    }
-
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-    std::cout << "Selected Physical Device: " << properties.deviceName << std::endl;
-
-    // After selecting the physical device, query its features and decide which ones to enable.
-    VkPhysicalDeviceFeatures deviceSupportedFeatures;
-    vkGetPhysicalDeviceFeatures(physicalDevice, &deviceSupportedFeatures);
-    enabledFeatures = {}; // Clear any previous
-    if (deviceSupportedFeatures.samplerAnisotropy) {
-        enabledFeatures.samplerAnisotropy = VK_TRUE;
-        std::cout << "Sampler Anisotropy feature is supported and will be enabled." << std::endl;
-    } else {
-        std::cout << "Sampler Anisotropy feature is NOT supported." << std::endl;
-    }
-}
-
-void HelloVulkanApp::createLogicalDevice() {
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
-
-    float queuePriority = 1.0f;
-    for (uint32_t queueFamily : uniqueQueueFamilies) {
-        VkDeviceQueueCreateInfo queueCreateInfo{};
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = queueFamily;
-        queueCreateInfo.queueCount = 1;
-        queueCreateInfo.pQueuePriorities = &queuePriority;
-        queueCreateInfos.push_back(queueCreateInfo);
-    }
-
-    VkDeviceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-    createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    // Use the features we decided to enable (e.g., samplerAnisotropy if supported)
-    createInfo.pEnabledFeatures = &enabledFeatures;
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-
-    // Device specific validation layers (deprecated but good for older implementations)
-    if (VulkanDebug::enableValidationLayers) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(VulkanDebug::validationLayers.size());
-        createInfo.ppEnabledLayerNames = VulkanDebug::validationLayers.data();
-    } else {
-        createInfo.enabledLayerCount = 0;
-    }
-
-    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create logical device!");
-    }
-
-    // Get queue handles
-    vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
-    vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
-}
-
 // --- Helper Implementations ---
-
-QueueFamilyIndices HelloVulkanApp::findQueueFamilies(VkPhysicalDevice targetDevice) {
-    QueueFamilyIndices indices;
-
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(targetDevice, &queueFamilyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(targetDevice, &queueFamilyCount, queueFamilies.data());
-
-    int i = 0;
-    for (const auto& queueFamily : queueFamilies) {
-        // Check for graphics support
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphicsFamily = i;
-        }
-
-        // Check for presentation support
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(targetDevice, i, surface, &presentSupport);
-        if (presentSupport) {
-            indices.presentFamily = i;
-        }
-
-        if (indices.isComplete()) {
-            break;
-        }
-        i++;
-    }
-
-    return indices;
-}
-
-bool HelloVulkanApp::checkDeviceExtensionSupport(VkPhysicalDevice targetDevice) {
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(targetDevice, nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(targetDevice, nullptr, &extensionCount, availableExtensions.data());
-
-    std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-
-    for (const auto& extension : availableExtensions) {
-        requiredExtensions.erase(extension.extensionName);
-    }
-
-    return requiredExtensions.empty();
-}
-
-bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice targetDevice) {
-    QueueFamilyIndices indices = findQueueFamilies(targetDevice);
-    bool extensionsSupported = checkDeviceExtensionSupport(targetDevice);
-
-    bool swapChainAdequate = false;
-    if (extensionsSupported) {
-        // Check if the swap chain support has at least one format and one present mode
-        SwapChainSupportDetails support = VulkanSwapChain::querySupport(targetDevice, surface); // Use static method from VulkanSwapChain
-        swapChainAdequate = !support.formats.empty() && !support.presentModes.empty();
-    }
-
-    VkPhysicalDeviceFeatures supportedFeatures; // Query features for this specific device
-    vkGetPhysicalDeviceFeatures(targetDevice, &supportedFeatures);
-
-    return indices.isComplete() && extensionsSupported && swapChainAdequate; // Sampler anisotropy is a "nice to have", not a strict requirement for suitability here. We enable it if available.
-}
 
 void HelloVulkanApp::mainLoop() {
     lastFrameTime = static_cast<float>(glfwGetTime()); // Initialize lastFrameTime before loop
@@ -352,7 +212,9 @@ void HelloVulkanApp::mainLoop() {
     }
 
     // Wait for the logical device to finish operations before cleanup
-    vkDeviceWaitIdle(device);
+    if (vulkanDevice && vulkanDevice->getLogicalDevice() != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(vulkanDevice->getLogicalDevice());
+    }
 }
 
 void HelloVulkanApp::cleanup() {
@@ -371,10 +233,8 @@ void HelloVulkanApp::cleanup() {
     // World is managed by unique_ptr, will be cleaned up automatically
     world.reset();
 
-    // Destroy logical device
-    if (device != VK_NULL_HANDLE) { // Check handle before destroying
-        vkDestroyDevice(device, nullptr);
-    }
+    // VulkanDevice's destructor will handle destroying the logical device.
+    vulkanDevice.reset();
 
     // vulkanDebug's destructor will handle destroying the debug messenger.
     vulkanDebug.reset();

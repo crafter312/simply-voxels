@@ -7,9 +7,10 @@
 #include <vector>
 #include <optional> // For queue family indices
 #include <memory>   // For std::unique_ptr
+#include <string>   // For std::string if used (e.g. error messages)
 
-// Forward declare QueueFamilyIndices
-struct QueueFamilyIndices;
+// Forward declare VulkanDevice (now handles physical/logical device and queues)
+class VulkanDevice;
 
 // Forward declare SwapChainSupportDetails (defined in VulkanRenderer.hpp)
 struct SwapChainSupportDetails;
@@ -47,20 +48,11 @@ private:
     // --- Core Components ---
     GLFWwindow* window = nullptr;
     VkInstance instance = VK_NULL_HANDLE;
+    std::unique_ptr<VulkanDebug> vulkanDebug; // Moved up for clarity with instance
     VkSurfaceKHR surface = VK_NULL_HANDLE; // Window surface for Vulkan
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // Physical device (GPU)
-    VkDevice device = VK_NULL_HANDLE; // Logical device
-    VkPhysicalDeviceFeatures enabledFeatures{}; // Store features to be enabled
 
-    // --- Queues (Needed by Renderer) ---
-    VkQueue graphicsQueue = VK_NULL_HANDLE;
-    VkQueue presentQueue = VK_NULL_HANDLE;
-
-    // --- Swap Chain Info ---
-    std::unique_ptr<SwapChainSupportDetails> swapChainSupportDetails; // Store details queried during device picking
-
-    // --- Renderer ---
-    std::unique_ptr<VulkanRenderer> renderer;
+    // --- Vulkan Device Management ---
+    std::unique_ptr<VulkanDevice> vulkanDevice;
 
     // --- Input ---
     std::shared_ptr<InputManager> inputManager;
@@ -74,11 +66,11 @@ private:
     // --- World Data ---
     std::unique_ptr<World> world;
 
+    // --- Renderer ---
+    std::unique_ptr<VulkanRenderer> renderer;
+
     // --- Timing ---
     float lastFrameTime = 0.0f;
-
-    // --- Debugging ---
-    std::unique_ptr<VulkanDebug> vulkanDebug;
 
     void initWindow();
     void initVulkan();
@@ -88,14 +80,7 @@ private:
     // --- Vulkan Setup Steps ---
     void createInstance();
     void createSurface();
-    void pickPhysicalDevice();
-    void createLogicalDevice();
-
-    // --- Helpers ---
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device);
-    bool isDeviceSuitable(VkPhysicalDevice device);
-
+    
     // Static callback function for GLFW
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 };
