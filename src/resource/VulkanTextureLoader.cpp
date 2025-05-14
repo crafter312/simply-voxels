@@ -15,10 +15,39 @@ VulkanTextureLoader::VulkanTextureLoader(VkPhysicalDevice physicalDevice,
     : physicalDevice_(physicalDevice), 
       device_(device), 
       commandPool_(commandPool), 
-      graphicsQueue_(graphicsQueue) {
-    createTextureImage(texturePath);
-    createTextureImageView();
+      graphicsQueue_(graphicsQueue),
+      texturePath_(texturePath), // Store path
+      imageFormat_(VK_FORMAT_R8G8B8A8_SRGB) { // Default format for loaded images
+    // texWidth_ and texHeight_ will be set by createTextureImage
+    createTextureImage(texturePath); // This will use imageFormat_
+    createTextureImageView();        // This will use imageFormat_
     createTextureSampler();
+}
+
+// Constructor for creating an empty texture (e.g., for a texture atlas)
+VulkanTextureLoader::VulkanTextureLoader(VkPhysicalDevice physicalDevice,
+                                         VkDevice device,
+                                         VkCommandPool commandPool,
+                                         VkQueue graphicsQueue,
+                                         uint32_t width, uint32_t height,
+                                         VkFormat format, VkImageUsageFlags usage,
+                                         VkImageTiling tiling, VkMemoryPropertyFlags properties,
+                                         bool createSampler)
+    : physicalDevice_(physicalDevice),
+      device_(device),
+      commandPool_(commandPool),
+      graphicsQueue_(graphicsQueue),
+      texWidth_(width),
+      texHeight_(height),
+      texturePath_(""), // No path for empty texture
+      imageFormat_(format) { // Use provided format
+    createEmptyTextureImage(width, height, /* format, */ usage, tiling, properties);
+    createTextureImageView(); // This will use imageFormat_
+    if (createSampler) {
+        createTextureSampler();
+    } else {
+        textureSampler_ = VK_NULL_HANDLE; // Explicitly null if not created
+    }
 }
 
 VulkanTextureLoader::~VulkanTextureLoader() {
@@ -42,12 +71,15 @@ void VulkanTextureLoader::loadImageFromFile(const std::string& path,
 }
 
 void VulkanTextureLoader::createTextureImage(const std::string& path) {
-    int texWidth, texHeight;
+    int localTexWidth, localTexHeight; // Use local vars to pass to loadImageFromFile
     VkDeviceSize imageSize;
     stbi_uc* pixels;
 
-    loadImageFromFile(path, texWidth, texHeight, imageSize, &pixels);
+    loadImageFromFile(path, localTexWidth, localTexHeight, imageSize, &pixels);
 
+    texWidth_ = static_cast<uint32_t>(localTexWidth);   // Store member variable
+    texHeight_ = static_cast<uint32_t>(localTexHeight); // Store member variable
+    
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     createBuffer(imageSize, 
@@ -67,12 +99,12 @@ void VulkanTextureLoader::createTextureImage(const std::string& path) {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = static_cast<uint32_t>(texWidth);
-    imageInfo.extent.height = static_cast<uint32_t>(texHeight);
+    imageInfo.extent.width = texWidth_; // Use member variable
+    imageInfo.extent.height = texHeight_; // Use member variable
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = mipLevels_;
     imageInfo.arrayLayers = 1;
-    imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB; // Common format for stb_image with STBI_rgb_alpha
+    imageInfo.format = imageFormat_; // Use member imageFormat_
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -99,13 +131,55 @@ void VulkanTextureLoader::createTextureImage(const std::string& path) {
     vkBindImageMemory(device_, textureImage_, textureImageMemory_, 0);
 
     // Transition layout and copy buffer
-    transitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(stagingBuffer, textureImage_, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    transitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    transitionImageLayout(textureImage_, imageFormat_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(stagingBuffer, textureImage_, texWidth_, texHeight_);
+    transitionImageLayout(textureImage_, imageFormat_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // Cleanup staging buffer
     vkDestroyBuffer(device_, stagingBuffer, nullptr);
     vkFreeMemory(device_, stagingBufferMemory, nullptr);
+}
+
+void VulkanTextureLoader::createEmptyTextureImage(uint32_t width, uint32_t height,
+                                                 /* VkFormat format, */ VkImageUsageFlags usage,
+                                                 VkImageTiling tiling, VkMemoryPropertyFlags properties) {
+    // texWidth_, texHeight_, and imageFormat_ are already set by the constructor.
+
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = texWidth_; // Use member texWidth_
+    imageInfo.extent.height = texHeight_; // Use member texHeight_
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = mipLevels_; // Typically 1 for an atlas
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = imageFormat_;    // Use member imageFormat_
+    imageInfo.tiling = tiling;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; // Atlas will be transitioned by ResourceManager
+    imageInfo.usage = usage; // e.g., VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.flags = 0;
+
+    if (vkCreateImage(device_, &imageInfo, nullptr, &textureImage_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create empty image!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(device_, textureImage_, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(device_, &allocInfo, nullptr, &textureImageMemory_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate empty image memory!");
+    }
+
+    vkBindImageMemory(device_, textureImage_, textureImageMemory_, 0);
+    // The image is created and memory bound. It's in VK_IMAGE_LAYOUT_UNDEFINED.
+    // ResourceManager will be responsible for transitioning layout and copying data into it.
 }
 
 uint32_t VulkanTextureLoader::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -146,40 +220,40 @@ void VulkanTextureLoader::createBuffer(VkDeviceSize size, VkBufferUsageFlags usa
     vkBindBufferMemory(device_, buffer, bufferMemory, 0);
 }
 
-VkCommandBuffer VulkanTextureLoader::beginSingleTimeCommands() {
+VkCommandBuffer VulkanTextureLoader::beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = commandPool_;
+    allocInfo.commandPool = commandPool; // Use parameter
     allocInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer);
+    vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer); // Use parameter
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    vkBeginCommandBuffer(commandBuffer, &beginInfo); // Use parameter
     return commandBuffer;
 }
 
-void VulkanTextureLoader::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
+void VulkanTextureLoader::endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkCommandBuffer commandBuffer) {
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
+    // Use parameters
+    vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue); // Wait for the transfer to complete
 
-    vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(graphicsQueue_); // Wait for the transfer to complete
-
-    vkFreeCommandBuffers(device_, commandPool_, 1, &commandBuffer);
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
 void VulkanTextureLoader::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = VulkanTextureLoader::beginSingleTimeCommands(device_, commandPool_);
 
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -220,11 +294,11 @@ void VulkanTextureLoader::transitionImageLayout(VkImage image, VkFormat format, 
         1, &barrier
     );
 
-    endSingleTimeCommands(commandBuffer);
+    VulkanTextureLoader::endSingleTimeCommands(device_, commandPool_, graphicsQueue_, commandBuffer);
 }
 
 void VulkanTextureLoader::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = VulkanTextureLoader::beginSingleTimeCommands(device_, commandPool_);
 
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -239,15 +313,15 @@ void VulkanTextureLoader::copyBufferToImage(VkBuffer buffer, VkImage image, uint
 
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-    endSingleTimeCommands(commandBuffer);
+    VulkanTextureLoader::endSingleTimeCommands(device_, commandPool_, graphicsQueue_, commandBuffer);
 }
 
 void VulkanTextureLoader::createTextureImageView() {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = textureImage_;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; // Assuming 2D textures
+    viewInfo.format = imageFormat_; // Use the stored format
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = mipLevels_;

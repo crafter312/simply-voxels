@@ -19,27 +19,43 @@ public:
     glm::mat4 getViewMatrix() const;
     glm::mat4 getProjectionMatrix(float aspectRatio) const;
 
-    // Public members for easier manipulation in this example
-    // In a more robust system, you'd use methods to modify these
-    glm::vec3 position;
-    float yaw;   // In degrees
-    float pitch; // In degrees
-    float fov;   // In degrees
+    // Getters
+    glm::vec3 getPosition() const;
+    float getYaw() const;
+    float getPitch() const;
+    float getFov() const;
+    glm::vec3 getFront() const; // Useful for external logic that might need camera direction
+    glm::vec3 getHorizontalVelocity() const;
+    float getVerticalVelocity() const;
 
-    // Momentum variables
-    glm::vec3 horizontalVelocity; // For W, A, S, D momentum
-    float verticalVelocity;     // For Space, Left Shift momentum
+    // Setters
+    void setPosition(const glm::vec3& position);
+    void setYaw(float yaw);
+    void setPitch(float pitch);
+    void setFov(float fov);
+    // Note: horizontalVelocity and verticalVelocity are typically managed internally by update()
 
 private:
     std::shared_ptr<InputManager> m_inputManager; // Store the InputManager
     float mouseSensitivity;
 
-    void updateCameraVectors();
+    // Camera Attributes
+    glm::vec3 m_position;
+    glm::vec3 m_front;
+    glm::vec3 m_up;
+    glm::vec3 m_right;
+    glm::vec3 m_worldUp;
 
-    glm::vec3 front;
-    glm::vec3 up;
-    glm::vec3 right;
-    glm::vec3 worldUp;
+    // Euler Angles
+    float m_yaw;   // In degrees
+    float m_pitch; // In degrees
+
+    // Camera options
+    float m_fov;   // In degrees
+    glm::vec3 m_horizontalVelocity; // For W, A, S, D momentum
+    float m_verticalVelocity;     // For Space, Left Shift momentum
+
+    void updateCameraVectors();
 };
 
 #endif // CAMERA_HPP

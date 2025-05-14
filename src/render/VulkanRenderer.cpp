@@ -6,6 +6,7 @@
 // #include "../resource/VulkanTextureLoader.hpp" // ResourceManager handles this
 #include "../resource/ModelLoader.hpp"         // For ModelLoader::loadGltfModel and ModelData
 #include "../resource/ResourceManager.hpp"     // Include the ResourceManager
+#include "../world/ChunkMesher.hpp"            // For generating chunk meshes
 #include "../world/World.hpp"                        // Include the World class definition
 #include "../Camera.hpp"            // Include the Camera class definition
 
@@ -87,13 +88,12 @@ VulkanRenderer::~VulkanRenderer() {
     // if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(deviceRef, descriptorPool, nullptr);
     // if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(deviceRef, descriptorSetLayout, nullptr);
 
-    // Destroy vertex buffer
-    if (vertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, vertexBuffer, nullptr);
-    if (vertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, vertexBufferMemory, nullptr);
+    // Destroy aggregated chunk mesh buffers
+    if (aggregatedVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, aggregatedVertexBuffer, nullptr);
+    if (aggregatedVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, aggregatedVertexBufferMemory, nullptr);
+    if (aggregatedIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, aggregatedIndexBuffer, nullptr);
+    if (aggregatedIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, aggregatedIndexBufferMemory, nullptr);
 
-    // Destroy index buffer
-    if (indexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(deviceRef, indexBuffer, nullptr);
-    if (indexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(deviceRef, indexBufferMemory, nullptr);
 
     // Destroy synchronization objects
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -133,6 +133,9 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     resourceManager->setDefaultModelPath("../resources/models/cube.glb"); // Default cube
     resourceManager->setDefaultTexturePath("../resources/textures/default_error.png"); // Default error texture    
     resourceManager->loadAssetsFromRegistry(blockRegistryRef, true); // Load assets using the passed BlockRegistry reference
+    // Build the texture atlas. Assuming 16x16 tiles. This should ideally be configurable.
+    const uint32_t ATLAS_TILE_SIZE = 32; // Manual coder note: changed from 16 to 32 to match the texture size
+    resourceManager->buildTextureAtlas(blockRegistryRef, ATLAS_TILE_SIZE);
     std::cout << "Assets loaded by ResourceManager." << std::endl;
 
     // Create buffer manager now that command pool and graphics queue exist
@@ -200,40 +203,39 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
 
     // Define descriptor pool sizes (previously in createDescriptorPool)
     // The manager's createDescriptorSets allocates swapChain->getImageCount() sets.
-    // The pool must also be large enough for all per-block descriptor sets.
-    const uint32_t MAX_EXPECTED_BLOCKS_FOR_POOL = 32; // Estimate max blocks for pool sizing
     uint32_t num_swap_chain_images = static_cast<uint32_t>(swapChainManager->getImageCount()); // Effectively MAX_FRAMES_IN_FLIGHT
 
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    // Total UBO descriptors: (initial sets + per-block sets)
-    poolSizes[0].descriptorCount = num_swap_chain_images * (1 + MAX_EXPECTED_BLOCKS_FOR_POOL);
+    poolSizes[0].descriptorCount = num_swap_chain_images; // One UBO per frame in flight
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    // Total Sampler descriptors: (initial sets + per-block sets)
-    poolSizes[1].descriptorCount = num_swap_chain_images * (1 + MAX_EXPECTED_BLOCKS_FOR_POOL);
+    poolSizes[1].descriptorCount = num_swap_chain_images; // One Atlas Sampler per frame in flight
 
 
     // Convert std::array to std::vector for the function call if necessary,
     // or modify createDescriptorPool to accept an array or iterators.
     std::vector<VkDescriptorPoolSize> poolSizesVec(poolSizes.begin(), poolSizes.end());
-    uint32_t maxSetsForPool = num_swap_chain_images * (1 + MAX_EXPECTED_BLOCKS_FOR_POOL);
+    // Max sets is just the number of frames in flight, as we have one descriptor set (UBO+Atlas) per frame.
+    uint32_t maxSetsForPool = num_swap_chain_images;
     descriptorSetManager->createDescriptorPool(poolSizesVec, maxSetsForPool);
     std::cout << "Descriptor Pool created by manager." << std::endl;
 
     // Allocate descriptor sets (previously in createDescriptorSets)
-    descriptorSetManager->createDescriptorSets(); // Allocates swapChainManager->getImageCount() sets
+    descriptorSetManager->createDescriptorSets(); // Allocates descriptor sets for each frame in flight
     std::cout << "Descriptor Sets allocated by manager." << std::endl;
 
     // Update descriptor sets (this logic remains in VulkanRenderer as it's application-specific)
-    // For now, we'll fetch the "dirt" texture for the single cube.
-    // In a multi-block scenario, this would be more dynamic or per-material.
-    VulkanTextureLoader* dirtTexture = resourceManager->getTextureForBlockType("dirt");
-    if (!dirtTexture) {
-        throw std::runtime_error("Failed to get 'dirt' texture from ResourceManager for initial setup!");
+    // Now we bind the UBO and the Texture Atlas
+    VkImageView atlasImageView = resourceManager->getAtlasImageView();
+    VkSampler atlasSampler = resourceManager->getAtlasSampler();
+
+    if (atlasImageView == VK_NULL_HANDLE || atlasSampler == VK_NULL_HANDLE) {
+        throw std::runtime_error("Failed to get atlas image view or sampler from ResourceManager for init!");
     }
+
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
-
+    
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffers[i]; // We update MAX_FRAMES_IN_FLIGHT UBOs
         bufferInfo.offset = 0;
@@ -249,8 +251,8 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
 
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = dirtTexture->getImageView(); // Use texture from ResourceManager
-        imageInfo.sampler = dirtTexture->getSampler();   // Use sampler from ResourceManager
+        imageInfo.imageView = atlasImageView; // Use the atlas image view
+        imageInfo.sampler = atlasSampler;     // Use the atlas sampler
 
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSetManager->getDescriptorSets()[i];
@@ -264,107 +266,66 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     }
     std::cout << "Descriptor Sets updated." << std::endl;
 
-    // Load the model
-    // Ensure "cube.glb" is in a path accessible from your executable, e.g., "../resources/cube.glb"
-    // Adjust the path as necessary.
-    // if (!ModelLoader::loadGltfModel("../resources/models/cube.glb", m_cubeModelData)) {
-    //     throw std::runtime_error("Failed to load cube model!");
-    // }
-    // Get the model data for "dirt" block (which should be a cube)
-    m_cubeModelData = resourceManager->getModelForBlockType("dirt"); // This returns a const ref, so copy if needed or store ref.
+    // --- Generate and aggregate chunk meshes ---
+    std::vector<Vertex> allVertices;
+    std::vector<uint32_t> allIndices;
+    chunkDrawCommands.clear();
 
-    // Create buffers *after* command pool (needed for transfer commands)
-    bufferManager->createVertexBuffer(m_cubeModelData.vertices, vertexBuffer, vertexBufferMemory);
-    std::cout << "Vertex Buffer created." << std::endl;
-    bufferManager->createIndexBuffer(m_cubeModelData.indices, indexBuffer, indexBufferMemory);
-    std::cout << "Index Buffer created." << std::endl;
+    uint32_t currentIndexBase = 0; // Renamed from currentIndexOffset to avoid confusion with VkDrawIndexedIndirectCommand
+    int32_t currentVertexBase = 0;  // Renamed from currentVertexOffset
+
+    if (m_worldRef) {
+        // Assuming m_worldRef->getChunkMap() returns something like:
+        // const std::map<ChunkPosition, std::unique_ptr<Chunk>>& getChunkMap() const;
+        // (ChunkPosition would be a struct for map key)
+        for (const auto& chunkPair : m_worldRef->getChunkMap()) {
+            const Chunk& chunk = chunkPair.second; // chunkPair.second is already a Chunk object
+
+            ChunkMesher::MeshData meshData = ChunkMesher::generateMesh(chunk, *m_worldRef, *resourceManager);
+
+            if (meshData.indices.empty() || meshData.vertices.empty()) {
+                continue; // Skip empty meshes
+            }
+
+            ChunkDrawCommand cmd;
+            cmd.indexCount = static_cast<uint32_t>(meshData.indices.size());
+            cmd.firstIndex = currentIndexBase;
+            cmd.vertexOffset = currentVertexBase;
+            
+            glm::vec3 chunkWorldPosFloat = glm::vec3(chunk.getWorldPosition());
+            cmd.modelMatrix = glm::translate(glm::mat4(1.0f), chunkWorldPosFloat);
+            
+            chunkDrawCommands.push_back(cmd);
+
+            // Append vertices
+            allVertices.insert(allVertices.end(), meshData.vertices.begin(), meshData.vertices.end());
+            
+            // Append indices, adjusting them for the global vertex offset
+            for (uint32_t index : meshData.indices) {
+                allIndices.push_back(index + currentVertexBase);
+            }
+            
+            currentIndexBase += cmd.indexCount;
+            currentVertexBase += static_cast<int32_t>(meshData.vertices.size());
+        }
+    }
+    totalAggregatedIndices = static_cast<uint32_t>(allIndices.size());
+
+    if (!allVertices.empty() && !allIndices.empty()) {
+        bufferManager->createVertexBuffer(allVertices, aggregatedVertexBuffer, aggregatedVertexBufferMemory);
+        std::cout << "Aggregated Vertex Buffer created. Vertices: " << allVertices.size() << std::endl;
+        bufferManager->createIndexBuffer(allIndices, aggregatedIndexBuffer, aggregatedIndexBufferMemory);
+        std::cout << "Aggregated Index Buffer created. Indices: " << allIndices.size() << std::endl;
+    } else {
+        std::cout << "No chunk mesh data to create buffers from. Renderer will draw nothing." << std::endl;
+    }
+
     createCommandBuffers();
     std::cout << "Command Buffers created." << std::endl;
     createSyncObjects();
     std::cout << "Synchronization Objects created." << std::endl;
     std::cout << "VulkanRenderer initialization complete." << std::endl;
 }
-void VulkanRenderer::prepareBlockTextures(uint32_t currentImage) {
-    if (!m_worldRef) return;
-
-    const auto& blocks = m_worldRef->getBlocks();
-    if (blocks.size() > numBlocksLastFrame) {
-        numBlocksLastFrame = static_cast<uint32_t>(blocks.size());
-        descriptorSetsPerBlock.resize(MAX_FRAMES_IN_FLIGHT);
-        for (auto &frameDescriptors : descriptorSetsPerBlock) {
-            frameDescriptors.resize(blocks.size());
-        }
-    }
-    uint32_t blockIndex = 0;
-    // Ensure we have enough descriptor sets in our array (per frame, per block)
-    for (const auto& worldBlock : blocks) {
-        // Get the texture for the current block
-        VulkanTextureLoader* blockTexture = resourceManager->getTextureForBlockType(worldBlock.type);
-        if (!blockTexture) {
-            // Fallback to a default texture if specific one not found
-            std::cerr << "Warning: Texture for type '" << worldBlock.type << "' not found. Using default." << std::endl;
-            blockTexture = resourceManager->getTextureForBlockType("default");
-            if (!blockTexture) { // If even the default fails (should not happen if default is properly set)
-                 throw std::runtime_error("Critical: Default texture failed to load for block type: " + worldBlock.type);
-            }
-        }
-
-        // Prepare the descriptor set for the texture of this block (for current frame)
-        // First allocate a descriptor set (and check if there is one already)
-        // TODO: Consider using a pool here.
-        if (descriptorSetsPerBlock[currentImage][blockIndex] == VK_NULL_HANDLE) {
-            // Allocate a new descriptor set for each frame.
-            auto result = descriptorSetManager->allocateDescriptorSets(1);
-            if (!result.has_value() || result->empty()) {
-                throw std::runtime_error("Failed to allocate texture descriptor set for block: " + worldBlock.type);
-            }
-            descriptorSetsPerBlock[currentImage][blockIndex] = result->front();
-
-            // IMPORTANT: Update the UBO binding for this newly allocated per-block descriptor set
-            // It should point to the uniform buffer for the current frame.
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffers[currentImage];
-            bufferInfo.offset = 0;
-            bufferInfo.range = sizeof(UniformBufferObject);
-
-            VkWriteDescriptorSet uboWrite{};
-            uboWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            uboWrite.dstSet = descriptorSetsPerBlock[currentImage][blockIndex];
-            uboWrite.dstBinding = 0; // UBO binding in the shader
-            uboWrite.dstArrayElement = 0;
-            uboWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            uboWrite.descriptorCount = 1;
-            uboWrite.pBufferInfo = &bufferInfo;
-            vkUpdateDescriptorSets(deviceRef, 1, &uboWrite, 0, nullptr);
-        }
-        // Now we update the texture descriptor information
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = blockTexture->getImageView();
-        imageInfo.sampler = blockTexture->getSampler();
-
-        VkWriteDescriptorSet textureWrite{};
-        textureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        textureWrite.dstSet = descriptorSetsPerBlock[currentImage][blockIndex]; // New per-block descriptor set
-        textureWrite.dstBinding = 1; // Texture sampler binding in the shader
-        textureWrite.dstArrayElement = 0;
-        textureWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        textureWrite.descriptorCount = 1;
-        textureWrite.pImageInfo = &imageInfo;
-
-        vkUpdateDescriptorSets(deviceRef, 1, &textureWrite, 0, nullptr);
-        blockIndex++;
-    }
-}
-
-
-
-
-
-
-
-
-
 
 // createSwapChain, createImageViews, createFramebuffers, cleanupSwapChain, recreateSwapChain
 // chooseSwapSurfaceFormat, chooseSwapPresentMode, chooseSwapExtent are now handled by VulkanSwapChain
@@ -530,41 +491,35 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Bind the pipeline
-    const auto& allDescriptorSets = descriptorSetManager->getDescriptorSets();
 
-    // Bind the common vertex and index buffers once (assuming all blocks use the same model for now)
-    VkBuffer vertexBuffers[] = {vertexBuffer};
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets); // Binding 0, 1 buffer, starting at offset 0
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    // Bind the aggregated vertex and index buffers if they exist and contain data
+    if (aggregatedVertexBuffer != VK_NULL_HANDLE && aggregatedIndexBuffer != VK_NULL_HANDLE && totalAggregatedIndices > 0) {
+        VkBuffer vertexBuffers[] = {aggregatedVertexBuffer};
+        VkDeviceSize offsets[] = {0};
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBuffer, aggregatedIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-    uint32_t blockIndex = 0; // This is the block index (for descriptor set)
-    // Loop through all blocks in the world
-    if (m_worldRef) {
-        // UniformBufferObject uboData; // No longer needed here for model matrix
-        // View and projection are the same for all blocks in this frame
-        // and are set in updateUniformBuffer once per frame.
+        // Bind the main descriptor set (UBO + Atlas Texture) for the current frame
+        // descriptorSetManager->getDescriptorSets() returns a vector indexed by frame-in-flight.
+        // 'currentFrame' (class member) is the correct index for UBOs and their descriptor sets.
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+                                &descriptorSetManager->getDescriptorSets()[currentFrame], 0, nullptr);
 
-        for (const auto& worldBlock : m_worldRef->getBlocks()) {
-            // 1. Set the model matrix for the current block via Push Constants
-            glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), worldBlock.position);
+        // Loop through pre-calculated chunk draw commands
+        for (const auto& cmd : chunkDrawCommands) {
             vkCmdPushConstants(
                 commandBuffer,
                 pipelineLayout,
                 VK_SHADER_STAGE_VERTEX_BIT,
                 0, // offset
                 sizeof(glm::mat4), // size
-                &modelMatrix);
+                &cmd.modelMatrix); // Use pre-calculated model matrix for the chunk
 
-            // 2. Bind the descriptor set (which now has the correct UBO model matrix and texture)
-            // Use our new array with per-block texture descriptor sets
-            // This set now has its UBO binding pointing to uniformBuffers[currentFrame]
-            // and its Sampler binding pointing to the block's specific texture.
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSetsPerBlock[currentFrame][blockIndex], 0, nullptr);
-            // 3. Draw the block
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_cubeModelData.indices.size()), 1, 0, 0, 0);
-            blockIndex++; // Increment blockIndex for the next block
+            vkCmdDrawIndexed(commandBuffer, cmd.indexCount, 1, cmd.firstIndex, cmd.vertexOffset, 0);
         }
+    } else {
+        // Optionally, log that nothing is being drawn if buffers are not ready
+        // std::cout << "RecordCommandBuffer: No aggregated mesh data to draw." << std::endl;
     }
 
     vkCmdEndRenderPass(commandBuffer);
@@ -592,9 +547,7 @@ void VulkanRenderer::drawFrame() {
     // Update uniform buffer for the current frame *before* recording command buffer
     updateUniformBuffer(currentFrame);
 
-    // --- Update texture descriptors *before* recording command buffer: new part ---
-    // This ensures the descriptors for each block are correct for the current frame.
-    prepareBlockTextures(currentFrame);
+    // prepareBlockTextures call removed as atlas is static and bound once per frame via descriptor set
 
     vkResetFences(deviceRef, 1, &inFlightFences[currentFrame]);
 

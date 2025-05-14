@@ -1,24 +1,58 @@
 #ifndef WORLD_HPP
 #define WORLD_HPP
 
-#include <vector>
-#include <string>
-#include <glm/vec3.hpp> // For glm::vec3
+#include <map>
+#include <glm/vec3.hpp>
+#include <glm/gtc/type_ptr.hpp> // For glm::ivec3
+#include <memory> // For std::shared_ptr
+#include "Chunk.hpp" // Include the Chunk definition
 
-// Struct to hold information about a single block instance in the world
-struct WorldBlock {
-    glm::vec3 position; // Integer coordinates stored as floats
-    std::string type;   // Type of the block, e.g., "dirt", "stone"
+// Forward declaration for Camera
+class Camera;
+
+// Comparator for glm::ivec3 to use it as a key in std::map
+struct IVec3Comparator {
+    bool operator()(const glm::ivec3& a, const glm::ivec3& b) const {
+        if (a.x != b.x) return a.x < b.x;
+        if (a.y != b.y) return a.y < b.y;
+        return a.z < b.z;
+    }
 };
 
 // Class to manage all blocks in the world
 class World {
 public:
-    World(); // Constructor to initialize the world with some blocks
-    const std::vector<WorldBlock>& getBlocks() const; // Getter for the list of blocks
+    // Constructor now accepts a shared pointer to the Camera
+    World(std::shared_ptr<Camera> camera);
+
+    // Gets the block ID at the given world position.
+    // Returns AIR_BLOCK_ID if the chunk doesn't exist or the block is air.
+    uint16_t getBlockID(glm::ivec3 worldPosition) const;
+
+    // Sets the block ID at the given world position.
+    // This may involve creating a new chunk if one doesn't exist at that location.
+    void setBlockID(glm::ivec3 worldPosition, uint16_t blockID);
+
+    // Retrieves a pointer to a chunk at the given chunk coordinates.
+    // Returns nullptr if the chunk does not exist.
+    Chunk* getChunk(glm::ivec3 chunkCoord);
+    const Chunk* getChunk(glm::ivec3 chunkCoord) const;
+
+    // Retrieves a reference to a chunk at the given chunk coordinates.
+    // If the chunk does not exist, it is created.
+    Chunk& getOrCreateChunk(glm::ivec3 chunkCoord);
+
+    // Helper to convert world coordinates to chunk coordinates
+    static glm::ivec3 worldToChunkCoordinates(glm::ivec3 worldPosition);
+    // Helper to convert world coordinates to local block coordinates within a chunk
+    static glm::ivec3 worldToLocalCoordinates(glm::ivec3 worldPosition, glm::ivec3 chunkCoord);
+
+    // Provides access to the underlying chunk map for iteration (e.g., by the renderer)
+    const std::map<glm::ivec3, Chunk, IVec3Comparator>& getChunkMap() const;
 
 private:
-    std::vector<WorldBlock> blocks; // Collection of all blocks in the world
+    std::map<glm::ivec3, Chunk, IVec3Comparator> m_chunks;
+    std::shared_ptr<Camera> m_camera; // Store a pointer to the camera
 };
 
 #endif // WORLD_HPP

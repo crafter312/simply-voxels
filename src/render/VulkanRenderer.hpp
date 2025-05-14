@@ -92,7 +92,7 @@ private:
     VkFormat depthFormat; // Store the chosen depth format
     // --- Rendering ---
     VkRenderPass renderPass = VK_NULL_HANDLE;
-    void prepareBlockTextures(uint32_t currentImage); // helper function that will update the necessary texture information for the current block.
+    // void prepareBlockTextures(uint32_t currentImage); // Removed, atlas is used
     VkCommandPool commandPool = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> commandBuffers;
 
@@ -102,16 +102,24 @@ private:
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
 
-    // --- Vertex/Index Buffers ---
-    VkBuffer vertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
-    VkBuffer indexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
+    // --- Aggregated Chunk Mesh Buffers ---
+    VkBuffer aggregatedVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory aggregatedVertexBufferMemory = VK_NULL_HANDLE;
+    VkBuffer aggregatedIndexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory aggregatedIndexBufferMemory = VK_NULL_HANDLE;
+    uint32_t totalAggregatedIndices = 0;
+    // Structure to hold draw commands for each chunk if using a single aggregated buffer
+    struct ChunkDrawCommand {
+        uint32_t indexCount;
+        uint32_t firstIndex;
+        int32_t vertexOffset;
+        glm::mat4 modelMatrix; // Pre-calculate model matrix for the chunk
+    };
+    std::vector<ChunkDrawCommand> chunkDrawCommands;
 
-    ModelData m_cubeModelData; // To store loaded model vertices and indices
     // --- Graphics Pipeline ---
-    std::vector<std::vector<VkDescriptorSet>> descriptorSetsPerBlock; // Add descriptor sets per block
-    uint32_t numBlocksLastFrame = 0; // Keep the number of blocks so we can allocate enough descriptor sets.
+    // std::vector<std::vector<VkDescriptorSet>> descriptorSetsPerBlock; // Removed
+    // uint32_t numBlocksLastFrame = 0; // Removed
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 

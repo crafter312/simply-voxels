@@ -6,26 +6,26 @@ BlockRegistry::BlockRegistry() {
     std::cout << "BlockRegistry created." << std::endl;
 }
 
-void BlockRegistry::registerBlockType(const std::string& typeName, const std::string& modelPath, const std::string& texturePath) {
-    if (typeName.empty()) {
-        std::cerr << "BlockRegistry Warning: Attempted to register a block type with an empty name. Ignoring." << std::endl;
-        return;
-    }
-    // Using emplace for efficiency. If typeName already exists, this will overwrite.
+void BlockRegistry::registerBlockType(uint16_t id, const std::string& modelPath, const std::string& texturePath) {
+    // Using emplace for efficiency. If an ID already exists, this will overwrite the Block definition.
+    // You might want to add a check here if overwriting is not desired:
+    // if (m_blockDefinitions.count(id)) {
+    //     std::cerr << "BlockRegistry Warning: Block ID " << id << " already registered. Overwriting." << std::endl;
+    // }
     m_blockDefinitions.emplace(std::piecewise_construct,
-                               std::forward_as_tuple(typeName),
-                               std::forward_as_tuple(typeName, modelPath, texturePath));
-    std::cout << "BlockRegistry: Registered block type '" << typeName << "'." << std::endl;
+                               std::forward_as_tuple(id), // Key for the map
+                               std::forward_as_tuple(id, modelPath, texturePath)); // Arguments for Block constructor
+    std::cout << "BlockRegistry: Registered block with ID " << id << "." << std::endl;
 }
 
-const Block* BlockRegistry::getBlockDefinition(const std::string& typeName) const {
-    auto it = m_blockDefinitions.find(typeName);
+const Block* BlockRegistry::getBlockDefinition(uint16_t id) const {
+    auto it = m_blockDefinitions.find(id);
     if (it != m_blockDefinitions.end()) {
         return &it->second;
     }
     return nullptr; // Return nullptr if not found
 }
 
-const std::map<std::string, Block>& BlockRegistry::getAllBlockDefinitions() const {
+const std::map<uint16_t, Block>& BlockRegistry::getAllBlockDefinitions() const {
     return m_blockDefinitions;
 }

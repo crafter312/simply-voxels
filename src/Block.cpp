@@ -1,12 +1,12 @@
 #include "Block.hpp"
 
-Block::Block(const std::string& typeName, const std::string& modelPath, const std::string& texturePath)
-    : m_typeName(typeName), m_modelPath(modelPath), m_texturePath(texturePath) {
+Block::Block(uint16_t id, const std::string& modelPath, const std::string& texturePath)
+    : m_id(id), m_modelPath(modelPath), m_texturePath(texturePath) {
     // Constructor initializes member variables
 }
 
-const std::string& Block::getTypeName() const {
-    return m_typeName;
+uint16_t Block::getID() const {
+    return m_id;
 }
 
 const std::string& Block::getModelPath() const {

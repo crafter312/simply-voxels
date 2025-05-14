@@ -14,6 +14,16 @@ public:
                         VkCommandPool commandPool, 
                         VkQueue graphicsQueue, 
                         const std::string& texturePath);
+
+    // Constructor for creating an empty texture (e.g., for a texture atlas)
+    VulkanTextureLoader(VkPhysicalDevice physicalDevice,
+                        VkDevice device,
+                        VkCommandPool commandPool,
+                        VkQueue graphicsQueue,
+                        uint32_t width, uint32_t height,
+                        VkFormat format, VkImageUsageFlags usage,
+                        VkImageTiling tiling, VkMemoryPropertyFlags properties,
+                        bool createSampler = true);
     ~VulkanTextureLoader();
 
     VulkanTextureLoader(const VulkanTextureLoader&) = delete;
@@ -23,6 +33,14 @@ public:
 
     VkImageView getImageView() const { return textureImageView_; }
     VkSampler getSampler() const { return textureSampler_; }
+    VkImage getImage() const { return textureImage_; }
+    uint32_t getWidth() const { return texWidth_; }
+    uint32_t getHeight() const { return texHeight_; }
+    std::string getPath() const { return texturePath_; } // Returns path if loaded from file, empty otherwise
+
+    // Command buffer utilities (made static and public)
+    static VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
+    static void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkCommandBuffer commandBuffer);
 
 private:
     VkPhysicalDevice physicalDevice_;
@@ -34,6 +52,11 @@ private:
     VkDeviceMemory textureImageMemory_;
     VkImageView textureImageView_;
     VkSampler textureSampler_;
+    
+    uint32_t texWidth_;
+    uint32_t texHeight_;
+    std::string texturePath_; // Store the path of the loaded texture
+    VkFormat imageFormat_; // Store the format of the texture image
 
     uint32_t mipLevels_ = 1; // For now, we'll stick to 1 mip level
 
@@ -44,7 +67,11 @@ private:
                            stbi_uc** pixels);
 
     void createTextureImage(const std::string& path);
-    
+    void createEmptyTextureImage(uint32_t width, uint32_t height, 
+                                 /* VkFormat format, */ VkImageUsageFlags usage, // Format will be taken from member imageFormat_
+                                 VkImageTiling tiling, VkMemoryPropertyFlags properties);
+
+    // Helper functions (can remain private members or become static if they don't rely on much state)
     void createBuffer(VkDeviceSize size, 
                       VkBufferUsageFlags usage, 
                       VkMemoryPropertyFlags properties, 
@@ -62,9 +89,6 @@ private:
                            VkImage image, 
                            uint32_t width, 
                            uint32_t height);
-
-    VkCommandBuffer beginSingleTimeCommands();
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 
     void createTextureImageView();
     void createTextureSampler();

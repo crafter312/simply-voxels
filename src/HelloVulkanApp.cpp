@@ -3,6 +3,7 @@
 #include "InputManager.hpp"          // Include the InputManager header
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
 #include "BlockRegistry.hpp"         // Include the BlockRegistry header
+#include "Blocks.hpp"                // Include the new Blocks header
 #include "Camera.hpp"                // Include the Camera header
 #include "world/World.hpp"                 // Include the World header
 
@@ -147,14 +148,13 @@ void HelloVulkanApp::initVulkan() {
 
     // --- Create and Populate Block Registry ---
     blockRegistry = std::make_unique<BlockRegistry>();
-    blockRegistry->registerBlockType("dirt", "../resources/models/cube.glb", "../resources/textures/dirt.png");
-    blockRegistry->registerBlockType("stone", "../resources/models/cube.glb", "../resources/textures/stone.png"); // Assuming you'll have a stone.png
-    // Add more block types here as needed
-    // blockRegistry->registerBlockType("grass", "../resources/models/cube.glb", "../resources/textures/grass.png");
+    // Use the new centralized function to register block types
+    Blocks::registerBlockTypes(*blockRegistry);
     std::cout << "BlockRegistry created and populated." << std::endl;
 
     // --- Create World ---
-    world = std::make_unique<World>();
+    // Pass the camera to the World constructor
+    world = std::make_unique<World>(camera);
     std::cout << "World created with initial blocks." << std::endl;
 
     // --- Create and Initialize Renderer ---
