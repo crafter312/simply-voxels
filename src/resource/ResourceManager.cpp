@@ -3,6 +3,7 @@
 #include <stdexcept> // For std::runtime_error
 #include <set>      // For std::set to collect unique texture paths
 #include <cmath>    // For ceil/sqrt in atlas dimension calculation
+#include <algorithm> // For std::max
 // Block.hpp and BlockRegistry.hpp are included via ResourceManager.hpp
 // #include "../Block.hpp"
 // #include "../BlockRegistry.hpp"
@@ -236,10 +237,7 @@ void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkForma
 
 } // namespace
 
-void ResourceManager::buildTextureAtlas(const BlockRegistry& registry, uint32_t tileTextureSize) {
-    if (tileTextureSize == 0) {
-        throw std::runtime_error("ResourceManager: tileTextureSize cannot be zero for atlas construction.");
-    }
+void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
     std::cout << "ResourceManager: Building texture atlas..." << std::endl;
     m_texturePathToAtlasInfoMap.clear();
 
@@ -278,10 +276,27 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry, uint32_t 
         return;
     }
 
+    // Determine the largest texture dimension among the unique textures
+    uint32_t largestTextureSize = 0;
+    for (const std::string& texturePath : uniqueTexturePaths) {
+        auto it = loadedTextures_.find(texturePath);
+        if (it != loadedTextures_.end() && it->second) {
+            largestTextureSize = std::max({largestTextureSize, it->second->getWidth(), it->second->getHeight()});
+        }
+    }
+
+    if (largestTextureSize == 0) {
+         std::cerr << "ResourceManager Critical Error: Could not determine largest texture size. No valid textures loaded for atlas." << std::endl;
+         m_defaultAtlasTextureInfo = {{0.0f, 0.0f}, {1.0f, 1.0f}}; // Full UVs for a non-existent atlas
+         m_textureAtlas = nullptr; // Ensure atlas is null
+         return;
+    }
+
     uint32_t numUniqueTextures = static_cast<uint32_t>(uniqueTexturePaths.size());
     uint32_t atlasDimInTiles = static_cast<uint32_t>(ceil(sqrt(static_cast<float>(numUniqueTextures))));
-    uint32_t atlasPixelWidth = atlasDimInTiles * tileTextureSize;
-    uint32_t atlasPixelHeight = atlasDimInTiles * tileTextureSize;
+    uint32_t atlasPixelWidth = atlasDimInTiles * largestTextureSize;
+    uint32_t atlasPixelHeight = atlasDimInTiles * largestTextureSize;
+    uint32_t tileTextureSize = largestTextureSize; // Use the determined size as the tile size
 
     std::cout << "ResourceManager: Atlas: " << numUniqueTextures << " unique textures. Dimensions: " << atlasPixelWidth << "x" << atlasPixelHeight
               << " (" << atlasDimInTiles << "x" << atlasDimInTiles << " tiles of " 
@@ -315,26 +330,21 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry, uint32_t 
         }
         std::shared_ptr<VulkanTextureLoader> sourceTextureLoader = it->second;
 
-        // VulkanTextureLoader now has getWidth(), getHeight(), getImage()
-        if (sourceTextureLoader->getWidth() != tileTextureSize || sourceTextureLoader->getHeight() != tileTextureSize) {
-            std::cerr << "ResourceManager Warning: Texture '" << texturePath << "' ("
-                      << sourceTextureLoader->getWidth() << "x" << sourceTextureLoader->getHeight()
-                      << ") does not match target tile size (" << tileTextureSize << "x" << tileTextureSize 
-                      << "). Skipping. Implement resizing or ensure uniform texture sizes." << std::endl;
-            continue;
-        }
-
         transitionImageLayout(commandBuffer, sourceTextureLoader->getImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-        VkImageCopy copyRegion{};
-        copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.srcOffset = {0, 0, 0};
-        copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        copyRegion.dstOffset = {static_cast<int32_t>(currentTileX * tileTextureSize), static_cast<int32_t>(currentTileY * tileTextureSize), 0};
-        copyRegion.extent = {tileTextureSize, tileTextureSize, 1};
+        // Use vkCmdBlitImage for potential scaling
+        VkImageBlit blitRegion{};
+        blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = {static_cast<int32_t>(sourceTextureLoader->getWidth()), static_cast<int32_t>(sourceTextureLoader->getHeight()), 1};
+        
+        blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        blitRegion.dstOffsets[0] = {static_cast<int32_t>(currentTileX * largestTextureSize), static_cast<int32_t>(currentTileY * largestTextureSize), 0};
+        blitRegion.dstOffsets[1] = {static_cast<int32_t>((currentTileX + 1) * largestTextureSize), static_cast<int32_t>((currentTileY + 1) * largestTextureSize), 1};
 
-        vkCmdCopyImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+        // Use linear filter for scaling
+        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blitRegion, VK_FILTER_LINEAR);
 
         transitionImageLayout(commandBuffer, sourceTextureLoader->getImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 

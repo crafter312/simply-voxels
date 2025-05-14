@@ -90,17 +90,22 @@ VulkanRenderer::~VulkanRenderer() {
 
     // Destroy synchronization objects
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        if (renderFinishedSemaphores.size() > i && renderFinishedSemaphores[i] != VK_NULL_HANDLE)
-            vkDestroySemaphore(m_vulkanDeviceRef.getLogicalDevice(), renderFinishedSemaphores[i], nullptr);
         if (imageAvailableSemaphores.size() > i && imageAvailableSemaphores[i] != VK_NULL_HANDLE)
             vkDestroySemaphore(m_vulkanDeviceRef.getLogicalDevice(), imageAvailableSemaphores[i], nullptr);
         if (inFlightFences.size() > i && inFlightFences[i] != VK_NULL_HANDLE)
             vkDestroyFence(m_vulkanDeviceRef.getLogicalDevice(), inFlightFences[i], nullptr);
     }
-    renderFinishedSemaphores.clear();
+
+    // Clean up presentationFinishedSemaphores
+    for (auto semaphore : presentationFinishedSemaphores) {
+        if (semaphore != VK_NULL_HANDLE) {
+            vkDestroySemaphore(m_vulkanDeviceRef.getLogicalDevice(), semaphore, nullptr);
+        }
+    }
+
     imageAvailableSemaphores.clear();
     inFlightFences.clear();
-
+    presentationFinishedSemaphores.clear();
     // Destroy command pool (also frees command buffers allocated from it)
     if (commandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(m_vulkanDeviceRef.getLogicalDevice(), commandPool, nullptr);
@@ -126,13 +131,18 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     resourceManager->setDefaultModelPath("../resources/models/cube.glb"); // Default cube
     resourceManager->setDefaultTexturePath("../resources/textures/default_error.png"); // Default error texture    
     resourceManager->loadAssetsFromRegistry(blockRegistryRef, true); // Load assets using the passed BlockRegistry reference
-    // Build the texture atlas. Assuming 16x16 tiles. This should ideally be configurable.
-    const uint32_t ATLAS_TILE_SIZE = 32; // Manual coder note: changed from 16 to 32 to match the texture size
-    resourceManager->buildTextureAtlas(blockRegistryRef, ATLAS_TILE_SIZE);
+    // Build the texture atlas.
+    resourceManager->buildTextureAtlas(blockRegistryRef);
     std::cout << "Assets loaded by ResourceManager." << std::endl;
     // Create buffer manager now that command pool and graphics queue exist
     // This needs to be created before depth resources and render pass if render pass depends on depth format
     bufferManager = std::make_unique<VulkanBufferManager>(m_vulkanDeviceRef.getLogicalDevice(), m_vulkanDeviceRef.getPhysicalDevice(), commandPool, m_vulkanDeviceRef.getGraphicsQueue());
+
+    // Initialize presentationFinishedSemaphores (one per swap chain image)
+    presentationFinishedSemaphores.resize(swapChainManager->getImageCount(), VK_NULL_HANDLE);
+
+    // Initialize imagesInFlight fences (one per swap chain image)
+    imagesInFlight.resize(swapChainManager->getImageCount(), VK_NULL_HANDLE);
 
     // Create depth buffer resources (needs swap chain extent, so after swapChainManager->init())
     bufferManager->createDepthResources(swapChainManager->getExtent(), depthImage, depthImageMemory, depthImageView, depthFormat);
@@ -405,8 +415,9 @@ void VulkanRenderer::createCommandBuffers() {
 
 void VulkanRenderer::createSyncObjects() {
     imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    // renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT); // Removed
     inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+    // presentationFinishedSemaphores are sized by swapchain image count, and resized in init/recreateSwapChainResources.
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -417,9 +428,14 @@ void VulkanRenderer::createSyncObjects() {
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         if (vkCreateSemaphore(m_vulkanDeviceRef.getLogicalDevice(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(m_vulkanDeviceRef.getLogicalDevice(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
             vkCreateFence(m_vulkanDeviceRef.getLogicalDevice(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create synchronization objects for a frame!");
+        }
+    }
+    // Create presentation semaphores (one per swapchain image)
+    for (size_t i = 0; i < presentationFinishedSemaphores.size(); ++i) {
+        if (vkCreateSemaphore(m_vulkanDeviceRef.getLogicalDevice(), &semaphoreInfo, nullptr, &presentationFinishedSemaphores[i]) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create presentation synchronization objects!");
         }
     }
 }
@@ -524,22 +540,31 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
 void VulkanRenderer::drawFrame() {
     vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    // Note: inFlightFences[currentFrame] is now signaled. It will be reset later before being used in vkQueueSubmit.
 
     uint32_t imageIndex;
     VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreateSwapChainResources(); // Call the renamed function
+        recreateSwapChainResources();
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("Failed to acquire swap chain image!");
     }
 
+    // Check if a previous frame is using this image (i.e. there is its fence to wait on)
+    if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+        vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    }
+    // Mark the image as now being in use by this frame's fence
+    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
     // Update uniform buffer for the current frame *before* recording command buffer
     updateUniformBuffer(currentFrame);
 
-    // prepareBlockTextures call removed as atlas is static and bound once per frame via descriptor set
-
+    // Only reset the fence if we are submitting commands to it.
+    // This fence has been waited upon (top of drawFrame) and is now associated with imagesInFlight[imageIndex].
+    // It needs to be reset before being signaled by vkQueueSubmit.
     vkResetFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame]);
 
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
@@ -554,10 +579,12 @@ void VulkanRenderer::drawFrame() {
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
-    submitInfo.signalSemaphoreCount = 1;
+    // Signal only the per-image presentation semaphore.
+    // The inFlightFences[currentFrame] handles the frame-in-flight GPU completion.
+    VkSemaphore signalSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
+    submitInfo.signalSemaphoreCount = 1; 
     submitInfo.pSignalSemaphores = signalSemaphores;
-    
+
     if (vkQueueSubmit(m_vulkanDeviceRef.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
@@ -565,8 +592,9 @@ void VulkanRenderer::drawFrame() {
     VkPresentInfoKHR presentInfo{}; // Get handle from manager
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-    VkSwapchainKHR swapChains[] = {swapChainManager->getSwapChainHandle()}; // Get handle from manager
+    // Wait on the per-image presentation semaphore
+    VkSemaphore presentWaitSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
+    presentInfo.pWaitSemaphores = presentWaitSemaphores;    VkSwapchainKHR swapChains[] = {swapChainManager->getSwapChainHandle()}; // Get handle from manager
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
@@ -575,7 +603,7 @@ void VulkanRenderer::drawFrame() {
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
-        recreateSwapChainResources(); // Call the renamed function
+        recreateSwapChainResources();
     } else if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to present swap chain image!");
     }
@@ -618,6 +646,25 @@ void VulkanRenderer::recreateSwapChainResources() {
     swapChainManager->createImageViews();
     std::cout << "Swap chain and image views recreated by manager." << std::endl;
 
+    // 4.5. Re-initialize imagesInFlight fences as image count might have changed
+    // Fences in inFlightFences are not destroyed, so we can reuse them.
+    imagesInFlight.assign(swapChainManager->getImageCount(), VK_NULL_HANDLE);
+
+    // Destroy existing presentation semaphores before recreating them.
+    // These semaphores are tied to the number of swap chain images, which might change.
+    for (auto semaphore : presentationFinishedSemaphores) {
+        if (semaphore != VK_NULL_HANDLE) {
+            vkDestroySemaphore(m_vulkanDeviceRef.getLogicalDevice(), semaphore, nullptr);
+        }
+    }
+    // The vector will be cleared and resized, or just resized, then repopulated by createSyncObjects.
+
+    // Re-initialize presentationFinishedSemaphores as image count might have changed
+    // Old semaphores were cleaned up in cleanupDepthResources (or should be if not already)
+    // We resize and then createSyncObjects will recreate them.
+    presentationFinishedSemaphores.resize(swapChainManager->getImageCount(), VK_NULL_HANDLE);
+    // createSyncObjects(); // This will recreate all semaphores and fences, including the newly sized presentationFinishedSemaphores
+
     // 5. Recreate depth buffer resources (depends on new swap chain extent)
     bufferManager->createDepthResources(swapChainManager->getExtent(), depthImage, depthImageMemory, depthImageView, depthFormat);
     std::cout << "Depth Resources recreated." << std::endl;
@@ -644,5 +691,20 @@ void VulkanRenderer::recreateSwapChainResources() {
     // Command buffers need to be re-recorded because they reference the old framebuffers.
     // We don't explicitly recreate them here because the drawFrame loop resets and
     // re-records the command buffer for the current frame anyway.
+    // However, sync objects need to be recreated.
+    // Destroy MAX_FRAMES_IN_FLIGHT sync objects before calling createSyncObjects,
+    // as createSyncObjects will unconditionally recreate them.
+    // presentationFinishedSemaphores are handled by their own loop earlier.
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        if (imageAvailableSemaphores.size() > i && imageAvailableSemaphores[i] != VK_NULL_HANDLE) {
+            vkDestroySemaphore(m_vulkanDeviceRef.getLogicalDevice(), imageAvailableSemaphores[i], nullptr);
+        }
+        if (inFlightFences.size() > i && inFlightFences[i] != VK_NULL_HANDLE) {
+            vkDestroyFence(m_vulkanDeviceRef.getLogicalDevice(), inFlightFences[i], nullptr);
+        }
+    }
+    // However, sync objects need to be recreated if their count changed or if they were destroyed.
+    createSyncObjects(); // Recreate all sync objects, including presentationFinishedSemaphores
+
     std::cout << "Swap chain dependent resources fully recreated." << std::endl;
 }

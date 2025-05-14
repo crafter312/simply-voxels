@@ -67,7 +67,7 @@ private:
     VulkanDevice& m_vulkanDeviceRef; // Reference to the main VulkanDevice object
 
     // --- Constants ---
-    const int MAX_FRAMES_IN_FLIGHT = 2;
+    static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
@@ -91,8 +91,10 @@ private:
 
     // --- Synchronization ---
     std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
+    // std::vector<VkSemaphore> renderFinishedSemaphores; // Replaced by presentationFinishedSemaphores for clarity and robustness
     std::vector<VkFence> inFlightFences;
+    std::vector<VkSemaphore> presentationFinishedSemaphores; // Semaphores signaled when rendering to an image is finished, waited on by presentation
+    std::vector<VkFence> imagesInFlight; // Tracks fences for each swap chain image
     uint32_t currentFrame = 0;
 
     // --- Aggregated Chunk Mesh Buffers ---
@@ -111,8 +113,6 @@ private:
     std::vector<ChunkDrawCommand> chunkDrawCommands;
 
     // --- Graphics Pipeline ---
-    // std::vector<std::vector<VkDescriptorSet>> descriptorSetsPerBlock; // Removed
-    // uint32_t numBlocksLastFrame = 0; // Removed
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 

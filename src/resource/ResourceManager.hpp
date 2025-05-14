@@ -42,7 +42,7 @@ public:
 
     // Builds the texture atlas from all loaded unique block textures.
     // Should be called after all individual textures are loaded (e.g., at the end of loadAssetsFromRegistry).
-    void buildTextureAtlas(const BlockRegistry& registry, uint32_t textureSize = 16);
+    void buildTextureAtlas(const BlockRegistry& registry);
 
     std::shared_ptr<const ModelData> getModelForBlockType(uint16_t blockID) const;
     std::shared_ptr<VulkanTextureLoader> getTextureForBlockType(uint16_t blockID) const;
