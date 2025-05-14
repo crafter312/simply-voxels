@@ -2,7 +2,7 @@
 #include "Chunk.hpp" // For CHUNK_WIDTH, etc., and Chunk class definition
 #include "World.hpp" // For World class definition (to query neighbors)
 #include "../resource/ResourceManager.hpp" // For ResourceManager definition
-#include "../Blocks.hpp" // For Blocks::AIR_ID
+#include "../block/Blocks.hpp" // For Blocks::AIR_ID
 
 #include <array>
 #include <iostream> // For debugging

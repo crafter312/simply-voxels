@@ -2,7 +2,7 @@
 #include <random> // For random number generation
 #include <cmath>  // For std::floor
 #include "../Camera.hpp" // Include Camera definition
-#include "../Blocks.hpp" // Include the centralized block definitions
+#include "../block/Blocks.hpp" // Include the centralized block definitions
 
 World::World(std::shared_ptr<Camera> camera)
     : m_camera(camera) {

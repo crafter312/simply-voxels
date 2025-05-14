@@ -2,8 +2,8 @@
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
 #include "InputManager.hpp"          // Include the InputManager header
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
-#include "BlockRegistry.hpp"         // Include the BlockRegistry header
-#include "Blocks.hpp"                // Include the new Blocks header
+#include "block/BlockRegistry.hpp"         // Include the BlockRegistry header
+#include "block/Blocks.hpp"                // Include the new Blocks header
 #include "Camera.hpp"                // Include the Camera header
 #include "world/World.hpp"                 // Include the World header
 

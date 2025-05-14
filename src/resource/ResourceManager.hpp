@@ -10,8 +10,8 @@
 
 #include "ModelLoader.hpp"         // For ModelData
 #include "VulkanTextureLoader.hpp" // For VulkanTextureLoader
-#include "../Block.hpp"            // For the Block class (defines type, model/texture paths)
-#include "../BlockRegistry.hpp"    // For BlockRegistry class
+#include "../block/Block.hpp"            // For the Block class (defines type, model/texture paths)
+#include "../block/BlockRegistry.hpp"    // For BlockRegistry class
 
 // It's assumed glm/glm.hpp or equivalent is included for glm::vec2
 struct ResolvedBlockAssets {
