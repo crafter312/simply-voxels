@@ -50,6 +50,7 @@ bool loadGltfModel(const std::string& filepath, ModelData& outModelData) {
         // Vertices
         const float* positionBuffer = nullptr;
         const float* texCoordBuffer = nullptr;
+        const float* normalBuffer = nullptr;
         size_t vertexCount = 0;
 
         if (primitive.attributes.find("POSITION") != primitive.attributes.end()) {
@@ -60,6 +61,15 @@ bool loadGltfModel(const std::string& filepath, ModelData& outModelData) {
         } else {
             std::cerr << "Primitive has no POSITION attribute." << std::endl;
             continue; // Skip this primitive
+        }
+
+        if (primitive.attributes.find("NORMAL") != primitive.attributes.end()) {
+            const tinygltf::Accessor& accessor = model.accessors[primitive.attributes.at("NORMAL")];
+            const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
+            normalBuffer = reinterpret_cast<const float*>(&(model.buffers[bufferView.buffer].data[accessor.byteOffset + bufferView.byteOffset]));
+        } else {
+            std::cerr << "Primitive has no NORMAL attribute. Using (0,0,1) as default." << std::endl;
+            // normalBuffer will remain nullptr, handled below
         }
 
         if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end()) {
@@ -74,10 +84,17 @@ bool loadGltfModel(const std::string& filepath, ModelData& outModelData) {
         for (size_t v = 0; v < vertexCount; ++v) {
             Vertex vert{};
             vert.pos = glm::make_vec3(&positionBuffer[v * 3]);
+
+            if (normalBuffer) {
+                vert.normal = glm::normalize(glm::make_vec3(&normalBuffer[v * 3]));
+            } else {
+                vert.normal = glm::vec3(0.0f, 0.0f, 1.0f); // Default normal if not found
+            }
+
             if (texCoordBuffer) {
                 vert.texCoord = glm::make_vec2(&texCoordBuffer[v * 2]);
             } else {
-                vert.texCoord = glm::vec2(0.0f, 0.0f); // Default tex coords
+                vert.texCoord = glm::vec2(0.0f, 0.0f); 
             }
             outModelData.vertices.push_back(vert);
         }

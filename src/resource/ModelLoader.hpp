@@ -15,7 +15,8 @@
 // Moved Vertex struct here
 struct Vertex {
     glm::vec3 pos;
-    glm::vec2 texCoord; // Texture coordinates
+    glm::vec3 normal;   // Normal vector
+    glm::vec2 texCoord; // Texture coordinates (UVs)
 
     // Describe how to pass this vertex data to the vertex shader
     static VkVertexInputBindingDescription getBindingDescription() {
@@ -27,18 +28,27 @@ struct Vertex {
     }
 
     // Describe how to handle vertex input attributes
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescription() {
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescription() {
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+
         // Position attribute: location 0, binding 0
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(Vertex, pos);
-        // Texture Coordinate attribute: location 1, binding 0
-        attributeDescriptions[1].location = 1; // Use location 1 for texCoord
-        attributeDescriptions[1].binding = 0;  // Data comes from the same binding as position
-        attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, texCoord);
+
+        // Normal attribute: location 1, binding 0
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(Vertex, normal);
+
+        // Texture Coordinate attribute: location 2, binding 0
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
         return attributeDescriptions;
     }
 };
