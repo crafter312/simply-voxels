@@ -6,7 +6,7 @@
 // Define the list of keys we want our InputManager to track.
 // This makes it easy to add or remove keys without changing loop logic much.
 static const std::vector<KeyCode> monitoredKeys = {
-    KeyCode::W, KeyCode::A, KeyCode::S, KeyCode::D, KeyCode::Space, KeyCode::LeftShift,
+    KeyCode::W, KeyCode::A, KeyCode::S, KeyCode::D, KeyCode::Space, KeyCode::LeftShift, KeyCode::LeftControl,
     KeyCode::LeftArrow, KeyCode::RightArrow, KeyCode::UpArrow, KeyCode::DownArrow
     // Add any other KeyCode enum values you want to track here
 };
@@ -39,6 +39,7 @@ int InputManager::getGlfwKeyCode(KeyCode key) const {
         case KeyCode::D:         return GLFW_KEY_D;
         case KeyCode::Space:     return GLFW_KEY_SPACE;
         case KeyCode::LeftShift: return GLFW_KEY_LEFT_SHIFT;
+        case KeyCode::LeftControl: return GLFW_KEY_LEFT_CONTROL;
         case KeyCode::LeftArrow: return GLFW_KEY_LEFT;
         case KeyCode::RightArrow:return GLFW_KEY_RIGHT;
         case KeyCode::UpArrow:   return GLFW_KEY_UP;

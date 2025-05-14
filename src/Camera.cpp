@@ -5,6 +5,10 @@
 #define GLM_ENABLE_EXPERIMENTAL // Enable experimental GLM features
 #include <glm/gtx/compatibility.hpp> // For glm::lerp
 
+// Define the static constants
+const float Camera::BASE_MOVE_SPEED = 5.0f;
+const float Camera::SPRINT_MULTIPLIER = 2.5f;
+
 Camera::Camera(std::shared_ptr<InputManager> inputManager)
     : m_inputManager(inputManager),
       m_position(0.0f, 0.0f, 3.0f), // Initial position
@@ -41,7 +45,11 @@ void Camera::updateCameraVectors() {
 void Camera::update(float deltaTime) {
     if (!m_inputManager) return;
 
-    float moveSpeed = 5.0f; // Base speed for all keyboard movement
+    // Determine current move speed based on sprint key
+    float currentMoveSpeed = BASE_MOVE_SPEED;
+    if (m_inputManager->isKeyDown(KeyCode::LeftControl)) {
+        currentMoveSpeed *= SPRINT_MULTIPLIER;
+    }
 
     // --- Horizontal keyboard movement (WASD) ---
     glm::vec3 targetHorizontalVelocity(0.0f);
@@ -55,25 +63,25 @@ void Camera::update(float deltaTime) {
     // So, 'right' can be used directly for A/D strafing.
 
     if (m_inputManager->isKeyDown(KeyCode::W)) {
-        targetHorizontalVelocity += horizontalForward * moveSpeed; // Use local horizontalForward
+        targetHorizontalVelocity += horizontalForward * currentMoveSpeed; // Use local horizontalForward
     }
     if (m_inputManager->isKeyDown(KeyCode::S)) {
-        targetHorizontalVelocity -= horizontalForward * moveSpeed; // Use local horizontalForward
+        targetHorizontalVelocity -= horizontalForward * currentMoveSpeed; // Use local horizontalForward
     }
     if (m_inputManager->isKeyDown(KeyCode::A)) {
-        targetHorizontalVelocity -= m_right * moveSpeed;
+        targetHorizontalVelocity -= m_right * currentMoveSpeed;
     }
     if (m_inputManager->isKeyDown(KeyCode::D)) {
-        targetHorizontalVelocity += m_right * moveSpeed;
+        targetHorizontalVelocity += m_right * currentMoveSpeed;
     }
 
     // --- Vertical keyboard movement (Space/Shift) ---
     float targetVerticalVelocity = 0.0f;
     if (m_inputManager->isKeyDown(KeyCode::Space)) {
-        targetVerticalVelocity += moveSpeed;
+        targetVerticalVelocity += BASE_MOVE_SPEED; // Vertical movement uses base speed
     }
     if (m_inputManager->isKeyDown(KeyCode::LeftShift)) {
-        targetVerticalVelocity -= moveSpeed;
+        targetVerticalVelocity -= BASE_MOVE_SPEED; // Vertical movement uses base speed
     }
 
     // --- Apply Momentum ---

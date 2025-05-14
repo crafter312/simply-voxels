@@ -10,7 +10,7 @@ struct GLFWwindow;
 // You'll need to define this properly based on your framework/needs.
 enum class KeyCode {
     Unknown, // Default
-    W, A, S, D, Space, LeftShift, LeftArrow, RightArrow, UpArrow, DownArrow
+    W, A, S, D, Space, LeftShift, LeftControl, LeftArrow, RightArrow, UpArrow, DownArrow
     // ... add other keys you need
 };
 

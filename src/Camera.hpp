@@ -56,6 +56,10 @@ private:
     float m_verticalVelocity;     // For Space, Left Shift momentum
 
     void updateCameraVectors();
+
+public: // Making constants public for potential external reference, or move to private if only internal
+    static const float BASE_MOVE_SPEED;
+    static const float SPRINT_MULTIPLIER;
 };
 
 #endif // CAMERA_HPP
