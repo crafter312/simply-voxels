@@ -29,6 +29,9 @@ class BlockRegistry;
 // Forward declare World
 class World;
 
+// Forward declare VulkanDebug
+class VulkanDebug;
+
 class HelloVulkanApp {
 public:
     HelloVulkanApp();
@@ -44,7 +47,6 @@ private:
     // --- Core Components ---
     GLFWwindow* window = nullptr;
     VkInstance instance = VK_NULL_HANDLE;
-    VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE; // Window surface for Vulkan
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // Physical device (GPU)
     VkDevice device = VK_NULL_HANDLE; // Logical device
@@ -75,6 +77,9 @@ private:
     // --- Timing ---
     float lastFrameTime = 0.0f;
 
+    // --- Debugging ---
+    std::unique_ptr<VulkanDebug> vulkanDebug;
+
     void initWindow();
     void initVulkan();
     void mainLoop();
@@ -82,14 +87,11 @@ private:
 
     // --- Vulkan Setup Steps ---
     void createInstance();
-    void setupDebugMessenger();
     void createSurface();
     void pickPhysicalDevice();
     void createLogicalDevice();
 
     // --- Helpers ---
-    bool checkValidationLayerSupport();
-    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     bool isDeviceSuitable(VkPhysicalDevice device);

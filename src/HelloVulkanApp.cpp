@@ -6,6 +6,7 @@
 #include "block/Blocks.hpp"                // Include the new Blocks header
 #include "Camera.hpp"                // Include the Camera header
 #include "world/World.hpp"                 // Include the World header
+#include "VulkanDebug.hpp"           // Include the new VulkanDebug header
 
 #include <iostream>
 #include <vector>
@@ -24,56 +25,14 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-// Configuration: Enable validation layers in debug builds?
-#ifdef NDEBUG
-const bool enableValidationLayers = false;
-#else
-const bool enableValidationLayers = true;
-#endif
-
-// List of validation layers to enable
-const std::vector<const char*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
+// Note: enableValidationLayers and validationLayers are now part of VulkanDebug
 
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
-// --- Debug Messenger Setup (Helper Functions) ---
-
-// Proxy function to load vkCreateDebugUtilsMessengerEXT
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    } else {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-}
-
-// Proxy function to load vkDestroyDebugUtilsMessengerEXT
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        func(instance, debugMessenger, pAllocator);
-    }
-}
-
-// The debug callback function
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
-
-    // Decide which messages to log (e.g., ignore INFO)
-    if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-         std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
-    }
-
-    return VK_FALSE; // Should always return VK_FALSE
-}
+// Note: Debug messenger functions (CreateDebugUtilsMessengerEXT, DestroyDebugUtilsMessengerEXT, debugCallback)
+// are now static private members of VulkanDebug.
 
 // --- GLFW Framebuffer Resize Callback ---
 
@@ -129,11 +88,16 @@ void HelloVulkanApp::initWindow() {
 }
 
 void HelloVulkanApp::initVulkan() {
+    // --- Initialize Vulkan Debugging ---
+    // Create VulkanDebug instance first, as it contains static configuration
+    // like enableValidationLayers used by createInstance().
+    vulkanDebug = std::make_unique<VulkanDebug>();
+
     createInstance();
     std::cout << "Vulkan Instance created." << std::endl;
-    setupDebugMessenger();
-    std::cout << "Debug Messenger setup." << std::endl;
-    createSurface();
+    // Setup debug messenger after instance creation
+    vulkanDebug->setupMessenger(instance); // This will print its own success message
+     createSurface();
     std::cout << "Surface created." << std::endl;
     pickPhysicalDevice();
     std::cout << "Physical Device selected." << std::endl;
@@ -167,7 +131,7 @@ void HelloVulkanApp::initVulkan() {
 }
 
 void HelloVulkanApp::createInstance() {
-    if (enableValidationLayers && !checkValidationLayerSupport()) {
+    if (VulkanDebug::enableValidationLayers && !VulkanDebug::checkValidationLayerSupport()) {
         throw std::runtime_error("Validation layers requested, but not available!");
     }
 
@@ -187,8 +151,7 @@ void HelloVulkanApp::createInstance() {
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-    if (enableValidationLayers) {
+    if (VulkanDebug::enableValidationLayers) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
@@ -196,10 +159,10 @@ void HelloVulkanApp::createInstance() {
     createInfo.ppEnabledExtensionNames = extensions.data();
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-    if (enableValidationLayers) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-        createInfo.ppEnabledLayerNames = validationLayers.data();
-        populateDebugMessengerCreateInfo(debugCreateInfo);
+    if (VulkanDebug::enableValidationLayers) {
+        createInfo.enabledLayerCount = static_cast<uint32_t>(VulkanDebug::validationLayers.size());
+        createInfo.ppEnabledLayerNames = VulkanDebug::validationLayers.data();
+        VulkanDebug::populateDebugMessengerCreateInfo(debugCreateInfo);
         createInfo.pNext = &debugCreateInfo;
     } else {
         createInfo.enabledLayerCount = 0;
@@ -281,9 +244,9 @@ void HelloVulkanApp::createLogicalDevice() {
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
     // Device specific validation layers (deprecated but good for older implementations)
-    if (enableValidationLayers) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-        createInfo.ppEnabledLayerNames = validationLayers.data();
+    if (VulkanDebug::enableValidationLayers) {
+        createInfo.enabledLayerCount = static_cast<uint32_t>(VulkanDebug::validationLayers.size());
+        createInfo.ppEnabledLayerNames = VulkanDebug::validationLayers.data();
     } else {
         createInfo.enabledLayerCount = 0;
     }
@@ -295,49 +258,6 @@ void HelloVulkanApp::createLogicalDevice() {
     // Get queue handles
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
-}
-
-bool HelloVulkanApp::checkValidationLayerSupport() {
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-    std::vector<VkLayerProperties> availableLayers(layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-    for (const char* layerName : validationLayers) {
-        bool layerFound = false;
-        for (const auto& layerProperties : availableLayers) {
-            if (strcmp(layerName, layerProperties.layerName) == 0) {
-                layerFound = true;
-                break;
-            }
-        }
-        if (!layerFound) {
-            std::cerr << "Validation layer not found: " << layerName << std::endl;
-            return false;
-        }
-    }
-    return true;
-}
-
-void HelloVulkanApp::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
-    createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
-    createInfo.pUserData = nullptr;
-}
-
-void HelloVulkanApp::setupDebugMessenger() {
-    if (!enableValidationLayers) return;
-
-    VkDebugUtilsMessengerCreateInfoEXT createInfo;
-    populateDebugMessengerCreateInfo(createInfo);
-
-    if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to set up debug messenger!");
-    }
-    std::cout << "Vulkan debug messenger set up successfully." << std::endl;
 }
 
 // --- Helper Implementations ---
@@ -456,10 +376,8 @@ void HelloVulkanApp::cleanup() {
         vkDestroyDevice(device, nullptr);
     }
 
-    // Destroy debug messenger
-    if (enableValidationLayers) {
-        DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-    }
+    // vulkanDebug's destructor will handle destroying the debug messenger.
+    vulkanDebug.reset();
 
     // Destroy surface
     if (surface != VK_NULL_HANDLE) { // Check handle before destroying

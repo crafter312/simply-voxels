@@ -108,6 +108,7 @@ endif()
 add_executable(SimpleVulkanWindow
     src/main.cpp
     src/HelloVulkanApp.cpp
+    src/VulkanDebug.cpp                  # Add the new VulkanDebug source file
     src/render/VulkanRenderer.cpp
     src/render/VulkanSwapChain.cpp
     src/render/VulkanDevice.cpp
