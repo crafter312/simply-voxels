@@ -2,22 +2,22 @@
 #include <random> // For random number generation
 #include <cmath>  // For std::floor
 #include "../Camera.hpp" // Include Camera definition
-
-// Define a default solid block ID for random generation (e.g., "dirt")
-const uint16_t DIRT_BLOCK_ID = 1; // Assuming 1 is a valid block ID like "dirt"
+#include "../Blocks.hpp" // Include the centralized block definitions
 
 World::World(std::shared_ptr<Camera> camera)
     : m_camera(camera) {
     // Initialize a random number generator
     std::random_device rd;  // Obtain a random number from hardware
     std::mt19937 gen(rd()); // Seed the generator
+    std::uniform_int_distribution<> block_type_distrib(0, 1); // For choosing between dirt and stone
 
-    // Define the range for coordinates (e.g., 0 to 31 for x, z and 0 to 1 for y for a flatter world)
-    std::uniform_int_distribution<> xz_distrib(0, 31);
-    std::uniform_int_distribution<> y_distrib(0, 1); // Keep it low for initial testing
+    // Define the range for coordinates for a much larger area
+    // Let's say -100 to 100 for x and z, and 0 to 5 for y for some gentle hills
+    std::uniform_int_distribution<> xz_distrib(-100, 100);
+    std::uniform_int_distribution<> y_distrib(0, 5); 
 
     // Define the number of blocks to generate
-    int num_blocks_to_create = 200; // Generate more blocks to see chunking in action
+    int num_blocks_to_create = 5000; // Generate significantly more blocks for a larger area
 
     // Generate random blocks
     for (int i = 0; i < num_blocks_to_create; ++i) {
@@ -26,7 +26,9 @@ World::World(std::shared_ptr<Camera> camera)
             y_distrib(gen),
             xz_distrib(gen)
         );
-        setBlockID(blockPos, DIRT_BLOCK_ID);
+        // Randomly choose between dirt and stone
+        uint16_t blockID = (block_type_distrib(gen) == 0) ? Blocks::DIRT_ID : Blocks::STONE_ID;
+        setBlockID(blockPos, blockID);
     }
 
     if (!m_camera) {
@@ -59,7 +61,7 @@ uint16_t World::getBlockID(glm::ivec3 worldPosition) const {
         glm::ivec3 localPos = worldToLocalCoordinates(worldPosition, chunkCoord);
         return chunk.getBlock(localPos.x, localPos.y, localPos.z);
     }
-    return AIR_BLOCK_ID; // Chunk doesn't exist, so it's air
+    return Blocks::AIR_ID; // Chunk doesn't exist, so it's air. Using Blocks::AIR_ID for consistency.
 }
 
 void World::setBlockID(glm::ivec3 worldPosition, uint16_t blockID) {
