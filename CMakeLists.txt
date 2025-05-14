@@ -121,7 +121,7 @@ add_executable(SimpleVulkanWindow
     src/Camera.cpp                       # Add the new Camera source file
     src/Block.cpp                        # Add Block class
     src/BlockRegistry.cpp                # Add BlockRegistry class
-    src/World.cpp                        # Add World class
+    src/world/World.cpp                        # Add World class
 )
 
 # Add compile definitions for tinygltf configuration to the target

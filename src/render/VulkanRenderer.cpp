@@ -6,7 +6,7 @@
 // #include "../resource/VulkanTextureLoader.hpp" // ResourceManager handles this
 #include "../resource/ModelLoader.hpp"         // For ModelLoader::loadGltfModel and ModelData
 #include "../resource/ResourceManager.hpp"     // Include the ResourceManager
-#include "../World.hpp"                        // Include the World class definition
+#include "../world/World.hpp"                        // Include the World class definition
 #include "../Camera.hpp"            // Include the Camera class definition
 
 #include <iostream>

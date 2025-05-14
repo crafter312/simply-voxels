@@ -4,7 +4,7 @@
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
 #include "BlockRegistry.hpp"         // Include the BlockRegistry header
 #include "Camera.hpp"                // Include the Camera header
-#include "World.hpp"                 // Include the World header
+#include "world/World.hpp"                 // Include the World header
 
 #include <iostream>
 #include <vector>
