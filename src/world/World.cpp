@@ -184,10 +184,15 @@ void World::clearChangedChunks() {
 }
 
 void World::markAllChunksDirty() {
-    // Add all currently loaded chunk coordinates to the changed set
+    // Add all currently loaded chunk coordinates to the rebase mesh update queue
+    // This queue will be processed gradually by the renderer
     for (const auto& pair : m_chunks) {
-        m_changedChunks.insert(pair.first);
+        m_rebaseMeshUpdateQueue.push(pair.first);
     }
+    // Clear the regular changed chunks set, as rebase handles all current chunks
+    // m_changedChunks.clear(); // Maybe not clear, as other changes might be pending?
+                               // Let's keep it separate. The renderer will process both.
+
     std::cout << "Marked all " << m_chunks.size() << " chunks as dirty for rebase." << std::endl;
 }
 
@@ -206,8 +211,11 @@ void World::checkAndRebase() {
         m_rebaseOriginChunkCoord = cameraCurrentChunkPos; // New origin is the chunk the camera is in
         // std::cout << "Rebasing origin from " << glm::to_string(oldRebaseOriginChunkCoord) << " to " << glm::to_string(m_rebaseOriginChunkCoord) << std::endl;
 
-        // The camera always knows its absolute position. No need to tell it to rebase.
-        // The renderer will use the new m_rebaseOriginChunkCoord.
+        // Signal renderer to update all chunk model matrices by populating the rebase queue
         markAllChunksDirty(); // Signal renderer to update all chunk model matrices
     }
+}
+
+std::queue<glm::ivec3>& World::getRebaseMeshUpdateQueue() {
+    return m_rebaseMeshUpdateQueue;
 }

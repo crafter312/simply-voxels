@@ -721,24 +721,51 @@ void VulkanRenderer::createChunkRenderData(const glm::ivec3& chunkCoord, const C
 }
 
 void VulkanRenderer::processChunkChanges() {
+    // Wait for the device to be idle before destroying/creating buffers
     vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
 
+    // Process regular chunk changes (block edits, new chunks from loading)
     const auto& changedChunks = m_world.getChangedChunks();
     const auto& worldChunkMap = m_world.getChunkMap(); // Get the world's chunk map once
 
-    for (const glm::ivec3& chunkCoord : changedChunks) {
+    // Use a temporary set to process changes to avoid modifying the world's set while iterating
+    std::set<glm::ivec3, IVec3Comparator> chunksToProcessRegular = changedChunks;
+    // It's important to clear the world's changed set *after* copying,
+    // but before processing the rebase queue, in case rebase processing adds to it (though unlikely with current logic).
+    // For safety, we clear it after both types of processing are done or right after copying.
+    // Let's clear it after copying for regular changes.
+    m_world.clearChangedChunks(); 
+    
+    for (const glm::ivec3& chunkCoord : chunksToProcessRegular) {
         auto mapIterator = worldChunkMap.find(chunkCoord);
         if (mapIterator != worldChunkMap.end()) { // Chunk exists in the world map (modified or newly loaded)
             const Chunk& chunkRef = mapIterator->second;
+            // std::cout << "Processing regular change for chunk: " << glm::to_string(chunkCoord) << std::endl;
             createChunkRenderData(chunkCoord, chunkRef);
         } else { // Chunk was unloaded (or in changedChunks but not in map, implying it was removed)
             auto renderDataIt = m_chunkRenderData.find(chunkCoord);
             if (renderDataIt != m_chunkRenderData.end()) {
                 destroyChunkRenderData(renderDataIt->second);
                 m_chunkRenderData.erase(renderDataIt);
-                // std::cout << "Destroyed render data for unloaded chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << std::endl;
+                // std::cout << "Destroyed render data for unloaded chunk: " << glm::to_string(chunkCoord) << std::endl;
             }
         }
     }
-    m_world.clearChangedChunks();
+
+    // Process rebase-related mesh updates gradually
+    int processedRebaseCount = 0;
+    while (!m_world.getRebaseMeshUpdateQueue().empty() && processedRebaseCount < MAX_REBASE_MESH_UPDATES_PER_FRAME) {
+        glm::ivec3 chunkCoord = m_world.getRebaseMeshUpdateQueue().front();
+        m_world.getRebaseMeshUpdateQueue().pop();
+
+        auto mapIterator = worldChunkMap.find(chunkCoord); // Re-check, as it might have been unloaded since queuing
+        if (mapIterator != worldChunkMap.end()) { // Ensure the chunk is still loaded
+            const Chunk& chunkRef = mapIterator->second;
+            // std::cout << "Processing rebase update for chunk: " << glm::to_string(chunkCoord) << std::endl;
+            createChunkRenderData(chunkCoord, chunkRef); // This recalculates the model matrix and rebuilds the mesh
+            processedRebaseCount++;
+        }
+        // If the chunk is no longer in worldChunkMap, it might have been processed by the regular unload logic above
+        // or will be caught in a subsequent frame if it was added to changedChunks for unloading.
+    }
 }

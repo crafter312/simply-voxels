@@ -62,6 +62,8 @@ public:
     const std::set<glm::ivec3, IVec3Comparator>& getChangedChunks() const; // IVec3Comparator for std::set
     void clearChangedChunks();
     void markAllChunksDirty(); // Mark all loaded chunks for mesh regeneration (used after rebase)
+    // Get access to the rebase mesh update queue
+    std::queue<glm::ivec3>& getRebaseMeshUpdateQueue();
 
 private:
     // --- Constants for chunk management ---
@@ -78,6 +80,7 @@ private:
     // Queues for loading and unloading chunks.  They hold chunk coordinates.
     std::queue<glm::ivec3> m_loadQueue;
     std::queue<glm::ivec3> m_unloadQueue;
+    std::queue<glm::ivec3> m_rebaseMeshUpdateQueue; // Chunks needing mesh update due to rebase
 
     // Internal methods for managing chunk loading/unloading
     void enqueueChunksNearCamera();
