@@ -3,6 +3,9 @@
 #include <cmath>  // For std::floor
 #include <iostream> // For debugging output (can be removed later)
 #include <algorithm> // For std::max
+
+//#define GLM_ENABLE_EXPERIMENTAL
+//#include <glm/gtx/string_cast.hpp> // For glm::to_string
 #include "../Camera.hpp" // Include Camera definition
 #include "../block/Blocks.hpp" // Include the centralized block definitions
 
@@ -86,6 +89,7 @@ const std::map<glm::ivec3, Chunk, IVec3Comparator>& World::getChunkMap() const {
 }
 
 void World::update(float deltaTime) {
+    m_rebaseOccurredThisFrame = false; // Reset flag at the start of update
     checkAndRebase(); // Check and perform rebase first
     enqueueChunksNearCamera();
     enqueueChunksToUnload();
@@ -184,16 +188,12 @@ void World::clearChangedChunks() {
 }
 
 void World::markAllChunksDirty() {
-    // Add all currently loaded chunk coordinates to the rebase mesh update queue
-    // This queue will be processed gradually by the renderer
+    // This function is now for general "all chunks need mesh update" scenarios,
+    // not specifically for rebase model matrix updates.
     for (const auto& pair : m_chunks) {
-        m_rebaseMeshUpdateQueue.push(pair.first);
+        m_changedChunks.insert(pair.first); // Add to regular changed chunks for mesh processing
     }
-    // Clear the regular changed chunks set, as rebase handles all current chunks
-    // m_changedChunks.clear(); // Maybe not clear, as other changes might be pending?
-                               // Let's keep it separate. The renderer will process both.
-
-    std::cout << "Marked all " << m_chunks.size() << " chunks as dirty for rebase." << std::endl;
+    std::cout << "Marked all " << m_chunks.size() << " chunks as dirty." << std::endl;
 }
 
 void World::checkAndRebase() {
@@ -209,13 +209,13 @@ void World::checkAndRebase() {
     if (max_dist > REBASE_TRIGGER_RADIUS_CHUNKS) {
         glm::ivec3 oldRebaseOriginChunkCoord = m_rebaseOriginChunkCoord;
         m_rebaseOriginChunkCoord = cameraCurrentChunkPos; // New origin is the chunk the camera is in
+        m_rebaseOccurredThisFrame = true; // Set the flag
         // std::cout << "Rebasing origin from " << glm::to_string(oldRebaseOriginChunkCoord) << " to " << glm::to_string(m_rebaseOriginChunkCoord) << std::endl;
-
-        // Signal renderer to update all chunk model matrices by populating the rebase queue
-        markAllChunksDirty(); // Signal renderer to update all chunk model matrices
+        // No longer calling markAllChunksDirty() here for rebase.
+        // The renderer will detect m_rebaseOccurredThisFrame.
     }
 }
 
-std::queue<glm::ivec3>& World::getRebaseMeshUpdateQueue() {
-    return m_rebaseMeshUpdateQueue;
+bool World::rebaseOccurredLastFrame() const {
+    return m_rebaseOccurredThisFrame;
 }

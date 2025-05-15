@@ -73,8 +73,8 @@ private:
 
     // --- Constants ---
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+    // MAX_REBASE_MESH_UPDATES_PER_FRAME is no longer needed as rebase only updates model matrices immediately.
 
-    static constexpr int MAX_REBASE_MESH_UPDATES_PER_FRAME = 5; // Limit how many chunk meshes are rebuilt per frame after rebase
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
     std::unique_ptr<VulkanPipelineFactory> pipelineFactory;

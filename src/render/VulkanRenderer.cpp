@@ -484,8 +484,22 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
 void VulkanRenderer::drawFrame() {
     vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-    // Note: inFlightFences[currentFrame] is now signaled. It will be reset later before being used in vkQueueSubmit.
-    // Process any changes in chunks (new, modified, removed)
+
+    // If a rebase occurred, update all chunk model matrices immediately
+    if (m_world.rebaseOccurredLastFrame()) {
+        // std::cout << "Rebase detected by renderer. Updating all model matrices." << std::endl;
+        glm::ivec3 newRebaseOrigin = m_world.getRebaseOriginChunkCoord();
+        for (auto& pair : m_chunkRenderData) {
+            const glm::ivec3& chunkCoord = pair.first;
+            ChunkRenderData& renderData = pair.second;
+            glm::ivec3 relativeChunkCoord = chunkCoord - newRebaseOrigin;
+            renderData.modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(relativeChunkCoord.x * CHUNK_WIDTH,
+                                                                               relativeChunkCoord.y * CHUNK_HEIGHT,
+                                                                               relativeChunkCoord.z * CHUNK_DEPTH));
+        }
+    }
+
+    // Process chunk changes (mesh rebuilds for modified/new chunks, cleanup for unloaded)
     processChunkChanges();
 
     uint32_t imageIndex;
@@ -752,20 +766,7 @@ void VulkanRenderer::processChunkChanges() {
         }
     }
 
-    // Process rebase-related mesh updates gradually
-    int processedRebaseCount = 0;
-    while (!m_world.getRebaseMeshUpdateQueue().empty() && processedRebaseCount < MAX_REBASE_MESH_UPDATES_PER_FRAME) {
-        glm::ivec3 chunkCoord = m_world.getRebaseMeshUpdateQueue().front();
-        m_world.getRebaseMeshUpdateQueue().pop();
-
-        auto mapIterator = worldChunkMap.find(chunkCoord); // Re-check, as it might have been unloaded since queuing
-        if (mapIterator != worldChunkMap.end()) { // Ensure the chunk is still loaded
-            const Chunk& chunkRef = mapIterator->second;
-            // std::cout << "Processing rebase update for chunk: " << glm::to_string(chunkCoord) << std::endl;
-            createChunkRenderData(chunkCoord, chunkRef); // This recalculates the model matrix and rebuilds the mesh
-            processedRebaseCount++;
-        }
-        // If the chunk is no longer in worldChunkMap, it might have been processed by the regular unload logic above
-        // or will be caught in a subsequent frame if it was added to changedChunks for unloading.
-    }
+    // The m_rebaseMeshUpdateQueue and its processing loop are removed.
+    // Rebase now only triggers immediate model matrix updates.
+    // Actual mesh changes are handled by m_changedChunks.
 }
