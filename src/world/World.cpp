@@ -2,6 +2,7 @@
 #include <random> // For random number generation
 #include <cmath>  // For std::floor
 #include <iostream> // For debugging output (can be removed later)
+#include <algorithm> // For std::max
 #include "../Camera.hpp" // Include Camera definition
 #include "../block/Blocks.hpp" // Include the centralized block definitions
 
@@ -11,7 +12,8 @@ World::World(std::shared_ptr<Camera> camera)
     std::random_device rd;  // Obtain a random number from hardware
     std::mt19937 gen(rd()); // Seed the generator
     std::uniform_int_distribution<> block_type_distrib(0, 1); // For choosing between dirt and stone
-    // Initially, enqueue chunks around the starting camera position
+    
+    // Initially, enqueue chunks around the starting camera position (which is relative to the initial rebase origin 0,0,0)
     enqueueChunksNearCamera();
 }
 
@@ -84,6 +86,7 @@ const std::map<glm::ivec3, Chunk, IVec3Comparator>& World::getChunkMap() const {
 }
 
 void World::update(float deltaTime) {
+    checkAndRebase(); // Check and perform rebase first
     enqueueChunksNearCamera();
     enqueueChunksToUnload();
     processLoadQueue();
@@ -93,8 +96,8 @@ void World::update(float deltaTime) {
 void World::enqueueChunksNearCamera() {
     if (!m_camera) return;
 
-    glm::vec3 cameraPos = m_camera->getPosition();
-    glm::ivec3 cameraChunkPos = worldToChunkCoordinates(glm::ivec3(cameraPos));
+    // Get camera's absolute chunk position
+    glm::ivec3 cameraChunkPos = m_camera->getAbsoluteChunkPos();
 
     // Calculate the bounds of the cubic region in chunk coordinates
     glm::ivec3 minChunk = cameraChunkPos - glm::ivec3(LOAD_CHUNK_RADIUS);
@@ -114,8 +117,8 @@ void World::enqueueChunksNearCamera() {
 void World::enqueueChunksToUnload() {
     if (!m_camera) return;
 
-    glm::vec3 cameraPos = m_camera->getPosition();
-    glm::ivec3 cameraChunkPos = worldToChunkCoordinates(glm::ivec3(cameraPos));
+    // Get camera's absolute chunk position
+    glm::ivec3 cameraChunkPos = m_camera->getAbsoluteChunkPos();
 
     // Iterate through existing chunks and unload those outside the radius
     for (auto it = m_chunks.begin(); it != m_chunks.end(); ++it) {
@@ -178,4 +181,33 @@ const std::set<glm::ivec3, IVec3Comparator>& World::getChangedChunks() const {
 }
 void World::clearChangedChunks() {
     m_changedChunks.clear();
+}
+
+void World::markAllChunksDirty() {
+    // Add all currently loaded chunk coordinates to the changed set
+    for (const auto& pair : m_chunks) {
+        m_changedChunks.insert(pair.first);
+    }
+    std::cout << "Marked all " << m_chunks.size() << " chunks as dirty for rebase." << std::endl;
+}
+
+void World::checkAndRebase() {
+    if (!m_camera) return;
+
+    // Get camera's absolute chunk position directly
+    glm::ivec3 cameraCurrentChunkPos = m_camera->getAbsoluteChunkPos();
+
+    // Calculate distance from the current rebase origin chunk
+    glm::ivec3 diff = cameraCurrentChunkPos - m_rebaseOriginChunkCoord;
+    int max_dist = std::max({std::abs(diff.x), std::abs(diff.y), std::abs(diff.z)});
+
+    if (max_dist > REBASE_TRIGGER_RADIUS_CHUNKS) {
+        glm::ivec3 oldRebaseOriginChunkCoord = m_rebaseOriginChunkCoord;
+        m_rebaseOriginChunkCoord = cameraCurrentChunkPos; // New origin is the chunk the camera is in
+        // std::cout << "Rebasing origin from " << glm::to_string(oldRebaseOriginChunkCoord) << " to " << glm::to_string(m_rebaseOriginChunkCoord) << std::endl;
+
+        // The camera always knows its absolute position. No need to tell it to rebase.
+        // The renderer will use the new m_rebaseOriginChunkCoord.
+        markAllChunksDirty(); // Signal renderer to update all chunk model matrices
+    }
 }

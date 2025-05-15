@@ -3,20 +3,22 @@
 #include "InputManager.hpp" // Include InputManager header
 #include <stdexcept> // For std::runtime_error
 #define GLM_ENABLE_EXPERIMENTAL // Enable experimental GLM features
+#include "world/Chunk.hpp" // Include Chunk for dimension constants
 #include <glm/gtx/compatibility.hpp> // For glm::lerp
 
 // Define the static constants
-const float Camera::BASE_MOVE_SPEED = 5.0f;
-const float Camera::SPRINT_MULTIPLIER = 2.5f;
+const float Camera::BASE_MOVE_SPEED = 5.0f; // Units per second
+const float Camera::SPRINT_MULTIPLIER = 2.5f; // Multiplier for sprint speed
 
 Camera::Camera(std::shared_ptr<InputManager> inputManager)
     : m_inputManager(inputManager),
-      m_position(0.0f, 0.0f, 3.0f), // Initial position
+      m_absoluteChunkPos(0, 0, 0), // Start at chunk (0,0,0)
+      m_localPositionInChunk(0.0f, 0.0f, 3.0f), // Start at local (0,0,3) within chunk (0,0,0)
       m_worldUp(0.0f, 1.0f, 0.0f), // Y is up
       m_yaw(-90.0f), // Pointing down negative Z-axis
       m_pitch(0.0f),
       m_fov(45.0f),
-      mouseSensitivity(0.05f), // Added mouse sensitivity
+      m_mouseSensitivity(0.05f), // Correctly initialize the member variable m_mouseSensitivity
       m_horizontalVelocity(0.0f), // Initialize horizontal velocity
       m_verticalVelocity(0.0f) {   // Initialize vertical velocity
     if (!m_inputManager) {
@@ -94,8 +96,35 @@ void Camera::update(float deltaTime) {
     m_verticalVelocity = glm::lerp(m_verticalVelocity, targetVerticalVelocity, verticalSmoothingFactor * deltaTime);
 
     // --- Update Position ---
-    m_position += m_horizontalVelocity * deltaTime;
-    m_position += m_worldUp * m_verticalVelocity * deltaTime; // Apply vertical velocity along worldUp
+    glm::vec3 deltaPosition = m_horizontalVelocity * deltaTime + m_worldUp * m_verticalVelocity * deltaTime;
+    m_localPositionInChunk += deltaPosition;
+
+    // --- Handle crossing chunk boundaries ---
+    // Check each dimension and update absolute chunk position and local position
+
+    if (m_localPositionInChunk.x < 0.0f) {
+        m_absoluteChunkPos.x--;
+        m_localPositionInChunk.x += CHUNK_WIDTH;
+    } else if (m_localPositionInChunk.x >= CHUNK_WIDTH) {
+        m_absoluteChunkPos.x++;
+        m_localPositionInChunk.x -= CHUNK_WIDTH;
+    }
+
+    if (m_localPositionInChunk.y < 0.0f) {
+        m_absoluteChunkPos.y--;
+        m_localPositionInChunk.y += CHUNK_HEIGHT;
+    } else if (m_localPositionInChunk.y >= CHUNK_HEIGHT) {
+        m_absoluteChunkPos.y++;
+        m_localPositionInChunk.y -= CHUNK_HEIGHT;
+    }
+
+    if (m_localPositionInChunk.z < 0.0f) {
+        m_absoluteChunkPos.z--;
+        m_localPositionInChunk.z += CHUNK_DEPTH;
+    } else if (m_localPositionInChunk.z >= CHUNK_DEPTH) {
+        m_absoluteChunkPos.z++;
+        m_localPositionInChunk.z -= CHUNK_DEPTH;
+    }
 
     // --- Apply Drag ---
     // Optional: Apply drag to slow down when no keys are pressed
@@ -113,8 +142,8 @@ void Camera::update(float deltaTime) {
     // Typically, a positive deltaY from GLFW means the mouse moved down.
     // If you want moving the mouse up to make the camera pitch up, you might need to negate deltaY.
     // Let's assume standard: mouse up -> pitch up, mouse right -> yaw right (increases yaw)
-    m_yaw   += static_cast<float>(deltaX) * mouseSensitivity;
-    m_pitch -= static_cast<float>(deltaY) * mouseSensitivity; // Subtract because positive Y delta is downwards
+    m_yaw   += static_cast<float>(deltaX) * m_mouseSensitivity;
+    m_pitch -= static_cast<float>(deltaY) * m_mouseSensitivity; // Subtract because positive Y delta is downwards
 
     // Constrain pitch to avoid flipping
     if (m_pitch > 89.0f)
@@ -126,12 +155,25 @@ void Camera::update(float deltaTime) {
     updateCameraVectors();
 }
 
-glm::mat4 Camera::getViewMatrix() const {
-    return glm::lookAt(m_position, m_position + m_front, m_up);
+// Get the camera's position relative to the provided rebase origin for rendering
+glm::vec3 Camera::getPositionRelativeTo(glm::ivec3 rebaseOriginChunkCoord) const {
+    // Calculate the relative chunk coordinate
+    glm::ivec3 relativeChunkPos = m_absoluteChunkPos - rebaseOriginChunkCoord;
+    // Calculate the world position of the relative chunk origin
+    glm::vec3 relativeChunkWorldPos = glm::vec3(relativeChunkPos.x * CHUNK_WIDTH,
+                                               relativeChunkPos.y * CHUNK_HEIGHT,
+                                               relativeChunkPos.z * CHUNK_DEPTH);
+    // Add the local position within the chunk
+    return relativeChunkWorldPos + m_localPositionInChunk;
+}
+
+glm::mat4 Camera::getViewMatrix(glm::ivec3 rebaseOriginChunkCoord) const {
+    // Pass rebaseOriginChunkCoord to getPositionRelativeTo, which no longer needs chunkDimensions
+    glm::vec3 relativePosition = getPositionRelativeTo(rebaseOriginChunkCoord);
+    return glm::lookAt(relativePosition, relativePosition + m_front, m_up);
 }
 
 glm::mat4 Camera::getProjectionMatrix(float aspectRatio) const {
-    // Ensure FOV is not too small or too large
     float currentFov = glm::clamp(m_fov, 1.0f, 120.0f);
     glm::mat4 proj = glm::perspective(glm::radians(currentFov), aspectRatio, 0.1f, 100.0f); // Near/Far planes
     proj[1][1] *= -1; // GLM is designed for OpenGL; Vulkan's Y-coordinate in clip space is inverted.
@@ -139,20 +181,21 @@ glm::mat4 Camera::getProjectionMatrix(float aspectRatio) const {
 }
 
 // --- Getters ---
-glm::vec3 Camera::getPosition() const { return m_position; }
 float Camera::getYaw() const { return m_yaw; }
 float Camera::getPitch() const { return m_pitch; }
 float Camera::getFov() const { return m_fov; }
 glm::vec3 Camera::getFront() const { return m_front; }
-glm::vec3 Camera::getHorizontalVelocity() const { return m_horizontalVelocity; }
-float Camera::getVerticalVelocity() const { return m_verticalVelocity; }
 
 // --- Setters ---
 void Camera::setPosition(const glm::vec3& position) {
-    m_position = position;
-    // No need to call updateCameraVectors() unless orientation changes,
-    // but if external code sets position, it might expect view matrix to be immediately correct
-    // For now, we assume update() will be called soon after, or view matrix is requested after.
+    // This setter is now ambiguous (absolute or relative?). Consider removing or clarifying.
+    // For now, let's assume it sets the absolute position.
+    m_absoluteChunkPos = glm::ivec3(std::floor(position.x / CHUNK_WIDTH),
+                                    std::floor(position.y / CHUNK_HEIGHT),
+                                    std::floor(position.z / CHUNK_DEPTH));
+    m_localPositionInChunk = position - glm::vec3(m_absoluteChunkPos.x * CHUNK_WIDTH,
+                                                 m_absoluteChunkPos.y * CHUNK_HEIGHT,
+                                                 m_absoluteChunkPos.z * CHUNK_DEPTH);
 }
 
 void Camera::setYaw(float yaw) {
@@ -173,3 +216,23 @@ void Camera::setFov(float fov) {
     // No need to call updateCameraVectors() as FOV only affects projection.
     // Projection matrix will use the new FOV when getProjectionMatrix() is called.
 }
+
+// --- Origin Rebasing Methods (Removed/Modified) ---
+
+// getAbsolutePosition is no longer needed as camera tracks absolute pos internally
+// glm::vec3 Camera::getAbsolutePosition(glm::ivec3 currentRebaseOriginChunkCoord, glm::ivec3 chunkDimensions) const {
+//     // Calculate the world position of the origin of the rebase chunk
+//     glm::vec3 rebaseOriginWorldPos = glm::vec3(
+//         currentRebaseOriginChunkCoord.x * chunkDimensions.x,
+//         currentRebaseOriginChunkCoord.y * chunkDimensions.y,
+//         currentRebaseOriginChunkCoord.z * chunkDimensions.z
+//     );
+//     // The camera's m_position is relative to this rebase origin
+//     return rebaseOriginWorldPos + m_position;
+// }
+
+// rebase is no longer needed as camera always tracks absolute pos
+// void Camera::rebase(glm::ivec3 newRebaseOriginChunkCoord, glm::ivec3 oldRebaseOriginChunkCoord, glm::ivec3 chunkDimensions) {
+//     // The camera's absolute position (m_absoluteChunkPos + m_localPositionInChunk) remains constant.
+//     // The "rebasing" happens when getPositionRelativeTo is called for rendering.
+// }

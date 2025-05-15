@@ -397,7 +397,9 @@ void VulkanRenderer::createSyncObjects() {
 void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
     UniformBufferObject ubo{};
     // Get view and projection matrices from the camera
-    ubo.view = m_camera->getViewMatrix();
+    // Pass the current rebase origin to getViewMatrix
+    glm::ivec3 rebaseOriginChunkCoord = m_world.getRebaseOriginChunkCoord();
+    ubo.view = m_camera->getViewMatrix(rebaseOriginChunkCoord);
     float aspectRatio = swapChainManager->getExtent().width / (float)swapChainManager->getExtent().height;
        ubo.proj = m_camera->getProjectionMatrix(aspectRatio);    
        // ubo.model = glm::mat4(1.0f); // Removed, model matrix handled by push constants
@@ -700,7 +702,14 @@ void VulkanRenderer::createChunkRenderData(const glm::ivec3& chunkCoord, const C
         bufferManager->createVertexBuffer(meshData.vertices, renderData.vertexBuffer, renderData.vertexBufferMemory);
         bufferManager->createIndexBuffer(meshData.indices, renderData.indexBuffer, renderData.indexBufferMemory);
         renderData.indexCount = static_cast<uint32_t>(meshData.indices.size());
-        renderData.modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(chunk.getWorldPosition()));
+
+        // Calculate the chunk's position relative to the current rebase origin
+        glm::ivec3 rebaseOriginChunkCoord = m_world.getRebaseOriginChunkCoord();
+        glm::ivec3 relativeChunkCoord = chunkCoord - rebaseOriginChunkCoord;
+        glm::vec3 relativeWorldPos = glm::vec3(relativeChunkCoord.x * CHUNK_WIDTH,
+                                               relativeChunkCoord.y * CHUNK_HEIGHT,
+                                               relativeChunkCoord.z * CHUNK_DEPTH);
+        renderData.modelMatrix = glm::translate(glm::mat4(1.0f), relativeWorldPos);
         // std::cout << "Created render data for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " Indices: " << renderData.indexCount << std::endl;
     } else {
         // If mesh is empty, ensure no render data exists or it's cleared

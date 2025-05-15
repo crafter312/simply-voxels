@@ -16,28 +16,31 @@ public:
 
     void update(float deltaTime);
 
-    glm::mat4 getViewMatrix() const;
+    // Get the camera's position relative to the provided rebase origin for rendering
+    glm::vec3 getPositionRelativeTo(glm::ivec3 rebaseOriginChunkCoord) const;
+    glm::mat4 getViewMatrix(glm::ivec3 rebaseOriginChunkCoord) const;
     glm::mat4 getProjectionMatrix(float aspectRatio) const;
 
     // Getters
-    glm::vec3 getPosition() const;
+    glm::ivec3 getAbsoluteChunkPos() const { return m_absoluteChunkPos; }
+    glm::vec3 getLocalPositionInChunk() const { return m_localPositionInChunk; }
     float getYaw() const;
-    float getPitch() const;
     float getFov() const;
-    glm::vec3 getFront() const; // Useful for external logic that might need camera direction
-    glm::vec3 getHorizontalVelocity() const;
-    float getVerticalVelocity() const;
-
+    glm::vec3 getFront() const;
+    float getPitch() const;
     // Setters
     void setPosition(const glm::vec3& position);
     void setYaw(float yaw);
     void setPitch(float pitch);
     void setFov(float fov);
-    // Note: horizontalVelocity and verticalVelocity are typically managed internally by update()
+
+    // For origin rebasing
+    // These methods are no longer needed with the new absolute position tracking
+    // glm::vec3 getAbsolutePosition(glm::ivec3 currentRebaseOriginChunkCoord, glm::ivec3 chunkDimensions) const;
+    // void rebase(glm::ivec3 newRebaseOriginChunkCoord, glm::ivec3 oldRebaseOriginChunkCoord, glm::ivec3 chunkDimensions);
 
 private:
     std::shared_ptr<InputManager> m_inputManager; // Store the InputManager
-    float mouseSensitivity;
 
     // Camera Attributes
     glm::vec3 m_position;
@@ -51,7 +54,10 @@ private:
     float m_pitch; // In degrees
 
     // Camera options
-    float m_fov;   // In degrees
+    float m_fov; // In degrees
+    glm::ivec3 m_absoluteChunkPos; // Camera's absolute chunk coordinate
+    glm::vec3 m_localPositionInChunk; // Camera's position within the current chunk [0, CHUNK_DIMENSION)
+    float m_mouseSensitivity;     // Sensitivity for mouse look
     glm::vec3 m_horizontalVelocity; // For W, A, S, D momentum
     float m_verticalVelocity;     // For Space, Left Shift momentum
 

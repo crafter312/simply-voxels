@@ -27,6 +27,7 @@ public:
     // Constructor now accepts a shared pointer to the Camera
     World(std::shared_ptr<Camera> camera);
 
+    // Destructor (optional, but good practice)
     // Gets the block ID at the given world position.
     // Returns AIR_BLOCK_ID if the chunk doesn't exist or the block is air.
     uint16_t getBlockID(glm::ivec3 worldPosition) const;
@@ -55,12 +56,17 @@ public:
     // Call this periodically to process loading/unloading
     void update(float deltaTime);
 
+    // Get the current rebase origin in chunk coordinates
+    glm::ivec3 getRebaseOriginChunkCoord() const { return m_rebaseOriginChunkCoord; }
+
     const std::set<glm::ivec3, IVec3Comparator>& getChangedChunks() const; // IVec3Comparator for std::set
     void clearChangedChunks();
+    void markAllChunksDirty(); // Mark all loaded chunks for mesh regeneration (used after rebase)
 
 private:
     // --- Constants for chunk management ---
     static constexpr int LOAD_CHUNK_RADIUS = 2; // Radius in chunks around the camera to load chunks
+    static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 8; // Radius in chunks from rebase origin to trigger a rebase
     static constexpr int UNLOAD_CHUNK_RADIUS = 3; // Radius in chunks beyond which to unload chunks
     static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 2; // Max chunks to process from load queue per frame
 
@@ -68,6 +74,7 @@ private:
     std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    
     std::set<glm::ivec3, IVec3Comparator> m_changedChunks; // Set of chunk coordinates that have been modified
 
+    glm::ivec3 m_rebaseOriginChunkCoord = glm::ivec3(0,0,0); // The current origin for rendering
     // Queues for loading and unloading chunks.  They hold chunk coordinates.
     std::queue<glm::ivec3> m_loadQueue;
     std::queue<glm::ivec3> m_unloadQueue;
@@ -77,6 +84,7 @@ private:
     void enqueueChunksToUnload();
     void processLoadQueue();
     void processUnloadQueue();
+    void checkAndRebase(); // Check if rebase is needed and perform it
 };
 
 #endif // WORLD_HPP
