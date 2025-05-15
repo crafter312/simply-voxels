@@ -12,6 +12,7 @@
 #include <vector>
 #include <memory>   // For std::unique_ptr
 #include <optional>
+#include <map> // To store per-chunk render data
 #include <stdexcept>
 #include <string>   // For shader file loading
 #include <fstream>  // For shader file loading
@@ -30,7 +31,8 @@ class VulkanPipelineFactory; // Forward declaration
 class Camera; // Forward declaration
 class BlockRegistry; // Forward declaration
 class ResourceManager; // Forward declaration
-class World; // Forward declaration
+//#include "../world/World.hpp" // This will bring in IVec3Comparator and Chunk
+class Chunk; // Forward declaration for Chunk
 
 // --- Uniform Buffer Object ---
 // class VulkanTextureLoader; // No longer directly managed here
@@ -44,14 +46,17 @@ struct UniformBufferObject {
 // Forward declare VulkanSwapChain
 class VulkanSwapChain;
 
+// Include World.hpp to get the definition of World, IVec3Comparator, and Chunk
+#include "../world/World.hpp"
+
 
 class VulkanRenderer {
 public:
-    VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, std::shared_ptr<Camera> cameraPtr);
+    VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, std::shared_ptr<Camera> cameraPtr);
     ~VulkanRenderer(); // Use destructor for cleanup
 
-    // Call this after constructor to create pipeline resources, now takes BlockRegistry and World
-    void init(const BlockRegistry& blockRegistryRef, const World& worldRef);
+    // Call this after constructor to create pipeline resources
+    void init(const BlockRegistry& blockRegistryRef);
 
     // Main drawing function
     void drawFrame();
@@ -61,7 +66,7 @@ public:
 
 private:
     // --- References to external objects ---
-    GLFWwindow* window;
+    GLFWwindow& window; // Changed from GLFWwindow* to GLFWwindow&
     VkInstance instanceRef; // Keep refs to objects managed by HelloVulkanApp
     VkSurfaceKHR surfaceRef;
     VulkanDevice& m_vulkanDeviceRef; // Reference to the main VulkanDevice object
@@ -76,7 +81,7 @@ private:
     // std::unique_ptr<VulkanTextureLoader> textureLoader; // Replaced by ResourceManager
     std::unique_ptr<ResourceManager> resourceManager; // Manages models and textures
     std::shared_ptr<Camera> m_camera; // Store the camera
-    const World* m_worldRef = nullptr; // Reference to the world data
+    World& m_world; // Reference to the world data
 
     // --- Depth Buffer Resources ---
     VkImage depthImage = VK_NULL_HANDLE;
@@ -98,19 +103,20 @@ private:
     uint32_t currentFrame = 0;
 
     // --- Aggregated Chunk Mesh Buffers ---
-    VkBuffer aggregatedVertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory aggregatedVertexBufferMemory = VK_NULL_HANDLE;
-    VkBuffer aggregatedIndexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory aggregatedIndexBufferMemory = VK_NULL_HANDLE;
-    uint32_t totalAggregatedIndices = 0;
-    // Structure to hold draw commands for each chunk if using a single aggregated buffer
-    struct ChunkDrawCommand {
+    struct ChunkRenderData {
+        VkBuffer vertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
+        VkBuffer indexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
         uint32_t indexCount;
-        uint32_t firstIndex;
-        int32_t vertexOffset;
-        glm::mat4 modelMatrix; // Pre-calculate model matrix for the chunk
+        // No need for firstIndex or vertexOffset with per-chunk buffers
+        glm::mat4 modelMatrix; // Model matrix for this chunk
     };
-    std::vector<ChunkDrawCommand> chunkDrawCommands;
+    std::map<glm::ivec3, ChunkRenderData, struct IVec3Comparator> m_chunkRenderData; // Map chunk coordinates to render data
+
+    // Helper to destroy chunk buffers
+    void destroyChunkRenderData(ChunkRenderData& data);
+    void destroyAllChunkRenderData();
 
     // --- Graphics Pipeline ---
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
@@ -139,6 +145,9 @@ private:
 
     void recreateSwapChainResources();
     void updateUniformBuffer(uint32_t currentImage);
+    // Renamed and modified to process changes
+    void processChunkChanges();
+    void createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk);
 };
 
 #endif // VULKAN_RENDERER_HPP

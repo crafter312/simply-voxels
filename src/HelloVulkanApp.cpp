@@ -123,14 +123,15 @@ void HelloVulkanApp::initVulkan() {
 
     // --- Create and Initialize Renderer ---
     renderer = std::make_unique<VulkanRenderer>(
-        window,
+        *window,       // Dereference window to pass as GLFWwindow&
         instance,
         surface,
-        *vulkanDevice, // Pass the VulkanDevice object by reference
+        *vulkanDevice, // Pass the VulkanDevice object
+        *world,        // Pass the World object by reference
         camera
     );
-    renderer->init(*blockRegistry, *world); // Pass BlockRegistry and World to init()
-    // --- End Renderer Init ---
+    renderer->init(*blockRegistry); // Pass BlockRegistry to init()
+                                    // --- End Renderer Init ---
 
     std::cout << "Vulkan initialization complete." << std::endl;
 }
@@ -204,6 +205,10 @@ void HelloVulkanApp::mainLoop() {
 
         if (camera) {
             camera->update(deltaTime); // Call camera update (e.g., for smoothing, animations, or if it polls input itself)
+        }
+
+        if (world) {
+            world->update(deltaTime); // Update world logic (chunk loading/unloading)
         }
 
         if (renderer) {

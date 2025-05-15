@@ -7,6 +7,7 @@
 #include "../resource/ModelLoader.hpp"         // For ModelLoader::loadGltfModel and ModelData
 #include "../resource/ResourceManager.hpp"     // Include the ResourceManager
 #include "../world/ChunkMesher.hpp"            // For generating chunk meshes
+#include "../world/Chunk.hpp"                  // Include the Chunk class definition
 #include "../world/World.hpp"                        // Include the World class definition
 #include "../Camera.hpp"            // Include the Camera class definition
 
@@ -20,14 +21,17 @@
 #include <string>   // For shader file loading
 #include <fstream>  // For shader file loading
 #include <cstring> // For memcpy
-VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, std::shared_ptr<Camera> cameraPtr)
-    : window(glfwWindow),
+VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, std::shared_ptr<Camera> cameraPtr)
+    : window(glfwWindow), // Initialized with a reference
       instanceRef(instance),
       surfaceRef(surface),
-      m_vulkanDeviceRef(vulkanDevice), // Initialize the reference
-      m_camera(cameraPtr) // m_blockRegistryRef initialization removed
+      m_vulkanDeviceRef(vulkanDevice),
+      m_world(worldRef), // Initialize world reference
+      m_camera(cameraPtr)
 {
-    if (!window || instanceRef == VK_NULL_HANDLE || surfaceRef == VK_NULL_HANDLE ||
+    // The check for 'window' being null is removed as it's now a reference.
+    // The caller is responsible for ensuring glfwWindow is valid.
+    if (instanceRef == VK_NULL_HANDLE || surfaceRef == VK_NULL_HANDLE ||
         // Access device properties through m_vulkanDeviceRef
         m_vulkanDeviceRef.getPhysicalDevice() == VK_NULL_HANDLE || m_vulkanDeviceRef.getLogicalDevice() == VK_NULL_HANDLE ||
         !m_vulkanDeviceRef.getQueueFamilyIndices().isComplete() || m_vulkanDeviceRef.getGraphicsQueue() == VK_NULL_HANDLE || m_vulkanDeviceRef.getPresentQueue() == VK_NULL_HANDLE ||
@@ -35,8 +39,9 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* glfwWindow, VkInstance instance, VkSu
     {
         throw std::runtime_error("VulkanRenderer received null or invalid handles during construction!");
     }
-    // Create the swap chain manager
-    swapChainManager = std::make_unique<VulkanSwapChain>(instanceRef, m_vulkanDeviceRef.getPhysicalDevice(), m_vulkanDeviceRef.getLogicalDevice(), surfaceRef, window, m_vulkanDeviceRef.getQueueFamilyIndices());
+    // Create the swap chain manager. Since 'window' is now a GLFWwindow&,
+    // we pass its address (&window) if VulkanSwapChain expects a GLFWwindow*.
+    swapChainManager = std::make_unique<VulkanSwapChain>(instanceRef, m_vulkanDeviceRef.getPhysicalDevice(), m_vulkanDeviceRef.getLogicalDevice(), surfaceRef, &window, m_vulkanDeviceRef.getQueueFamilyIndices());
 
     // The line below caused the error and is no longer needed as we use m_vulkanDeviceRef
     // m_vulkanDeviceWrapper = std::make_unique<VulkanDevice>(physicalDeviceRef, deviceRef); 
@@ -81,13 +86,8 @@ VulkanRenderer::~VulkanRenderer() {
     // if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(m_vulkanDeviceRef.getLogicalDevice(), descriptorPool, nullptr);
     // if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_vulkanDeviceRef.getLogicalDevice(), descriptorSetLayout, nullptr);
 
-    // Destroy aggregated chunk mesh buffers
-    if (aggregatedVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), aggregatedVertexBuffer, nullptr);
-    if (aggregatedVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), aggregatedVertexBufferMemory, nullptr);
-    if (aggregatedIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), aggregatedIndexBuffer, nullptr);
-    if (aggregatedIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), aggregatedIndexBufferMemory, nullptr);
-
-
+    // Destroy all per-chunk render data
+    destroyAllChunkRenderData();
     // Destroy synchronization objects
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         if (imageAvailableSemaphores.size() > i && imageAvailableSemaphores[i] != VK_NULL_HANDLE)
@@ -116,8 +116,7 @@ VulkanRenderer::~VulkanRenderer() {
     std::cout << "VulkanRenderer cleanup complete." << std::endl;
 }
 
-void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& worldRef) {
-    m_worldRef = &worldRef; // Store the reference to the world
+void VulkanRenderer::init(const BlockRegistry& blockRegistryRef) {
     std::cout << "Initializing VulkanRenderer..." << std::endl;
     // Initialize swap chain (creates chain and image views)
     swapChainManager->init();
@@ -268,59 +267,8 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef, const World& wo
     }
     std::cout << "Descriptor Sets updated." << std::endl;
 
-    // --- Generate and aggregate chunk meshes ---
-    std::vector<Vertex> allVertices;
-    std::vector<uint32_t> allIndices;
-    chunkDrawCommands.clear();
-
-    uint32_t currentIndexBase = 0; // Renamed from currentIndexOffset to avoid confusion with VkDrawIndexedIndirectCommand
-    int32_t currentVertexBase = 0;  // Renamed from currentVertexOffset
-
-    if (m_worldRef) {
-        // Assuming m_worldRef->getChunkMap() returns something like:
-        // const std::map<ChunkPosition, std::unique_ptr<Chunk>>& getChunkMap() const;
-        // (ChunkPosition would be a struct for map key)
-        for (const auto& chunkPair : m_worldRef->getChunkMap()) {
-            const Chunk& chunk = chunkPair.second; // chunkPair.second is already a Chunk object
-
-            ChunkMesher::MeshData meshData = ChunkMesher::generateMesh(chunk, *m_worldRef, *resourceManager);
-
-            if (meshData.indices.empty() || meshData.vertices.empty()) {
-                continue; // Skip empty meshes
-            }
-
-            ChunkDrawCommand cmd;
-            cmd.indexCount = static_cast<uint32_t>(meshData.indices.size());
-            cmd.firstIndex = currentIndexBase;
-            cmd.vertexOffset = currentVertexBase;
-            
-            glm::vec3 chunkWorldPosFloat = glm::vec3(chunk.getWorldPosition());
-            cmd.modelMatrix = glm::translate(glm::mat4(1.0f), chunkWorldPosFloat);
-            
-            chunkDrawCommands.push_back(cmd);
-
-            // Append vertices
-            allVertices.insert(allVertices.end(), meshData.vertices.begin(), meshData.vertices.end());
-            
-            // Append indices, adjusting them for the global vertex offset
-            for (uint32_t index : meshData.indices) {
-                allIndices.push_back(index + currentVertexBase);
-            }
-            
-            currentIndexBase += cmd.indexCount;
-            currentVertexBase += static_cast<int32_t>(meshData.vertices.size());
-        }
-    }
-    totalAggregatedIndices = static_cast<uint32_t>(allIndices.size());
-
-    if (!allVertices.empty() && !allIndices.empty()) {
-        bufferManager->createVertexBuffer(allVertices, aggregatedVertexBuffer, aggregatedVertexBufferMemory);
-        std::cout << "Aggregated Vertex Buffer created. Vertices: " << allVertices.size() << std::endl;
-        bufferManager->createIndexBuffer(allIndices, aggregatedIndexBuffer, aggregatedIndexBufferMemory);
-        std::cout << "Aggregated Index Buffer created. Indices: " << allIndices.size() << std::endl;
-    } else {
-        std::cout << "No chunk mesh data to create buffers from. Renderer will draw nothing." << std::endl;
-    }
+    // Process initial chunk changes (builds meshes for any existing/loaded chunks)
+    processChunkChanges(); // This will also clear changed chunks in the world
 
     createCommandBuffers();
     std::cout << "Command Buffers created." << std::endl;
@@ -499,34 +447,28 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Bind the pipeline
 
-    // Bind the aggregated vertex and index buffers if they exist and contain data
-    if (aggregatedVertexBuffer != VK_NULL_HANDLE && aggregatedIndexBuffer != VK_NULL_HANDLE && totalAggregatedIndices > 0) {
-        VkBuffer vertexBuffers[] = {aggregatedVertexBuffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, aggregatedIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    // Bind the main descriptor set (UBO + Atlas Texture) for the current frame
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+                            &descriptorSetManager->getDescriptorSets()[currentFrame], 0, nullptr);
 
-        // Bind the main descriptor set (UBO + Atlas Texture) for the current frame
-        // descriptorSetManager->getDescriptorSets() returns a vector indexed by frame-in-flight.
-        // 'currentFrame' (class member) is the correct index for UBOs and their descriptor sets.
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
-                                &descriptorSetManager->getDescriptorSets()[currentFrame], 0, nullptr);
+    // Iterate through chunk render data and draw each chunk
+    for (const auto& pair : m_chunkRenderData) {
+        const ChunkRenderData& chunkData = pair.second;
+        if (chunkData.vertexBuffer != VK_NULL_HANDLE && chunkData.indexBuffer != VK_NULL_HANDLE && chunkData.indexCount > 0) {
+            VkBuffer vertexBuffers[] = {chunkData.vertexBuffer};
+            VkDeviceSize offsets[] = {0};
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(commandBuffer, chunkData.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-        // Loop through pre-calculated chunk draw commands
-        for (const auto& cmd : chunkDrawCommands) {
             vkCmdPushConstants(
                 commandBuffer,
                 pipelineLayout,
                 VK_SHADER_STAGE_VERTEX_BIT,
                 0, // offset
                 sizeof(glm::mat4), // size
-                &cmd.modelMatrix); // Use pre-calculated model matrix for the chunk
-
-            vkCmdDrawIndexed(commandBuffer, cmd.indexCount, 1, cmd.firstIndex, cmd.vertexOffset, 0);
+                &chunkData.modelMatrix); // Use model matrix for this chunk
+            vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, 0, 0, 0); // firstIndex and vertexOffset are 0
         }
-    } else {
-        // Optionally, log that nothing is being drawn if buffers are not ready
-        // std::cout << "RecordCommandBuffer: No aggregated mesh data to draw." << std::endl;
     }
 
     vkCmdEndRenderPass(commandBuffer);
@@ -541,6 +483,8 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 void VulkanRenderer::drawFrame() {
     vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
     // Note: inFlightFences[currentFrame] is now signaled. It will be reset later before being used in vkQueueSubmit.
+    // Process any changes in chunks (new, modified, removed)
+    processChunkChanges();
 
     uint32_t imageIndex;
     VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
@@ -707,4 +651,85 @@ void VulkanRenderer::recreateSwapChainResources() {
     createSyncObjects(); // Recreate all sync objects, including presentationFinishedSemaphores
 
     std::cout << "Swap chain dependent resources fully recreated." << std::endl;
+}
+
+void VulkanRenderer::destroyChunkRenderData(ChunkRenderData& data) {
+    if (data.vertexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), data.vertexBuffer, nullptr);
+        data.vertexBuffer = VK_NULL_HANDLE;
+    }
+    if (data.vertexBufferMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), data.vertexBufferMemory, nullptr);
+        data.vertexBufferMemory = VK_NULL_HANDLE;
+    }
+    if (data.indexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), data.indexBuffer, nullptr);
+        data.indexBuffer = VK_NULL_HANDLE;
+    }
+    if (data.indexBufferMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), data.indexBufferMemory, nullptr);
+        data.indexBufferMemory = VK_NULL_HANDLE;
+    }
+    data.indexCount = 0;
+}
+
+void VulkanRenderer::destroyAllChunkRenderData() {
+    for (auto& pair : m_chunkRenderData) {
+        destroyChunkRenderData(pair.second);
+    }
+    m_chunkRenderData.clear();
+}
+
+void VulkanRenderer::createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk) {
+    if (!bufferManager || !resourceManager) {
+        std::cerr << "VulkanRenderer::createChunkRenderData: Missing bufferManager or resourceManager." << std::endl;
+        return;
+    }
+
+    ChunkMesher::MeshData meshData = ChunkMesher::generateMesh(chunk, m_world, *resourceManager);
+
+    // Ensure old data for this chunkCoord is cleaned up if it exists
+    auto it = m_chunkRenderData.find(chunkCoord);
+    if (it != m_chunkRenderData.end()) {
+        destroyChunkRenderData(it->second); // Clean up old buffers
+        // m_chunkRenderData.erase(it); // No, we'll overwrite or emplace
+    }
+
+    if (!meshData.vertices.empty() && !meshData.indices.empty()) {
+        ChunkRenderData& renderData = m_chunkRenderData[chunkCoord]; // Creates if not exists, or gets reference
+        bufferManager->createVertexBuffer(meshData.vertices, renderData.vertexBuffer, renderData.vertexBufferMemory);
+        bufferManager->createIndexBuffer(meshData.indices, renderData.indexBuffer, renderData.indexBufferMemory);
+        renderData.indexCount = static_cast<uint32_t>(meshData.indices.size());
+        renderData.modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(chunk.getWorldPosition()));
+        // std::cout << "Created render data for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " Indices: " << renderData.indexCount << std::endl;
+    } else {
+        // If mesh is empty, ensure no render data exists or it's cleared
+        if (it != m_chunkRenderData.end()) { // If it existed
+             m_chunkRenderData.erase(it); // Remove the entry as it's now empty
+        }
+        // std::cout << "No mesh data to create for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << std::endl;
+    }
+}
+
+void VulkanRenderer::processChunkChanges() {
+    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
+
+    const auto& changedChunks = m_world.getChangedChunks();
+    const auto& worldChunkMap = m_world.getChunkMap(); // Get the world's chunk map once
+
+    for (const glm::ivec3& chunkCoord : changedChunks) {
+        auto mapIterator = worldChunkMap.find(chunkCoord);
+        if (mapIterator != worldChunkMap.end()) { // Chunk exists in the world map (modified or newly loaded)
+            const Chunk& chunkRef = mapIterator->second;
+            createChunkRenderData(chunkCoord, chunkRef);
+        } else { // Chunk was unloaded (or in changedChunks but not in map, implying it was removed)
+            auto renderDataIt = m_chunkRenderData.find(chunkCoord);
+            if (renderDataIt != m_chunkRenderData.end()) {
+                destroyChunkRenderData(renderDataIt->second);
+                m_chunkRenderData.erase(renderDataIt);
+                // std::cout << "Destroyed render data for unloaded chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << std::endl;
+            }
+        }
+    }
+    m_world.clearChangedChunks();
 }

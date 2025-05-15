@@ -5,6 +5,8 @@
 #include <glm/vec3.hpp>
 #include <glm/gtc/type_ptr.hpp> // For glm::ivec3
 #include <memory> // For std::shared_ptr
+#include <set>    // To track changed chunks efficiently
+#include <queue> // For chunk loading/unloading queue
 #include "Chunk.hpp" // Include the Chunk definition
 
 // Forward declaration for Camera
@@ -50,9 +52,31 @@ public:
     // Provides access to the underlying chunk map for iteration (e.g., by the renderer)
     const std::map<glm::ivec3, Chunk, IVec3Comparator>& getChunkMap() const;
 
+    // Call this periodically to process loading/unloading
+    void update(float deltaTime);
+
+    const std::set<glm::ivec3, IVec3Comparator>& getChangedChunks() const; // IVec3Comparator for std::set
+    void clearChangedChunks();
+
 private:
+    // --- Constants for chunk management ---
+    static constexpr int LOAD_CHUNK_RADIUS = 2; // Radius in chunks around the camera to load chunks
+    static constexpr int UNLOAD_CHUNK_RADIUS = 3; // Radius in chunks beyond which to unload chunks
+    static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 2; // Max chunks to process from load queue per frame
+
     std::map<glm::ivec3, Chunk, IVec3Comparator> m_chunks;
-    std::shared_ptr<Camera> m_camera; // Store a pointer to the camera
+    std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    
+    std::set<glm::ivec3, IVec3Comparator> m_changedChunks; // Set of chunk coordinates that have been modified
+
+    // Queues for loading and unloading chunks.  They hold chunk coordinates.
+    std::queue<glm::ivec3> m_loadQueue;
+    std::queue<glm::ivec3> m_unloadQueue;
+
+    // Internal methods for managing chunk loading/unloading
+    void enqueueChunksNearCamera();
+    void enqueueChunksToUnload();
+    void processLoadQueue();
+    void processUnloadQueue();
 };
 
 #endif // WORLD_HPP
