@@ -1,5 +1,4 @@
 #include "ChunkMesher.hpp"
-#include "Chunk.hpp" // For CHUNK_WIDTH, etc., and Chunk class definition
 #include "World.hpp" // For World class definition (to query neighbors)
 #include "../resource/ResourceManager.hpp" // For ResourceManager definition
 #include "../block/Blocks.hpp" // For Blocks::AIR_ID
@@ -50,19 +49,34 @@ void addBlockModelToMeshData(MeshData& chunkMeshData,
     }
 }
 
-MeshData generateMesh(const Chunk& chunk, const World& world, const ResourceManager& resourceManager) {
+MeshData generateMesh(
+    glm::ivec3 chunkCoord, // Use passed chunkCoord
+    std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> blockDataSnapshot, // Use snapshot
+    bool isChunkAllAir,    // Use passed all-air status
+    const World& world, 
+    const ResourceManager& resourceManager) {
+
     MeshData meshData;
-    glm::ivec3 chunkWorldOrigin = chunk.getWorldPosition(); // Base world position of the chunk
+
+    if (isChunkAllAir || !blockDataSnapshot) {
+        return meshData; // Empty mesh for all-air or no data chunks
+    }
+
+    // Calculate chunk's world origin using its coordinates
+    glm::ivec3 chunkWorldOrigin = glm::ivec3(
+        chunkCoord.x * CHUNK_WIDTH,
+        chunkCoord.y * CHUNK_HEIGHT,
+        chunkCoord.z * CHUNK_DEPTH
+    );
 
     for (int i = 0; i < CHUNK_VOLUME; ++i) {
-        // Derive x, y, z from the single loop index i
-        // The order of derivation matches the original loop order: y (outer), z (middle), x (inner)
         int x = i % CHUNK_WIDTH;
         int z_temp = i / CHUNK_WIDTH;
         int z = z_temp % CHUNK_DEPTH;
         int y = z_temp / CHUNK_DEPTH;
 
-        uint16_t blockID = chunk.getBlock(x, y, z);
+        // Get block ID from the snapshot
+        uint16_t blockID = (*blockDataSnapshot)[Chunk::localToIndex(x, y, z)];
 
         if (blockID == Blocks::AIR_ID) {
             continue;
@@ -85,13 +99,23 @@ MeshData generateMesh(const Chunk& chunk, const World& world, const ResourceMana
 
         for (int neighborIndex = 0; neighborIndex < 6; ++neighborIndex) {
             glm::ivec3 neighborPos = currentBlockWorldPos + neighborOffsets[neighborIndex];
-            uint16_t neighborBlockID = world.getBlockID(neighborPos);
+            
+            // Determine if the face should be exposed based on the neighbor
+            bool isNeighborEffectivelyOpaque;
+            glm::ivec3 neighborChunkCoord = World::worldToChunkCoordinates(neighborPos); // Get chunk coords of neighbor
 
-            // For simplicity, assume neighbor is non-opaque if it's air.
-            // bool isNeighborOpaque = resourceManager.isBlockOpaque(neighborBlockID);
-            bool isNeighborOpaque = (neighborBlockID != Blocks::AIR_ID); // Placeholder
+            if (!world.isChunkLoaded(neighborChunkCoord)) {
+                // If the neighboring chunk is not loaded, treat it as opaque to cull this face.
+                isNeighborEffectivelyOpaque = true;
+            } else {
+                // Neighboring chunk is loaded, get the block ID and check its actual opacity.
+                uint16_t neighborBlockID = world.getBlockID(neighborPos);
+                // For simplicity, assume neighbor is non-opaque if it's air.
+                // bool isNeighborOpaque = resourceManager.isBlockOpaque(neighborBlockID); // Future improvement
+                isNeighborEffectivelyOpaque = (neighborBlockID != Blocks::AIR_ID); // Current placeholder
+            }
 
-            if (!isNeighborOpaque) {
+            if (!isNeighborEffectivelyOpaque) { // If neighbor is not effectively opaque (e.g., air in a loaded chunk)
                 isExposed = true;
                 break; // Found an exposed side, no need to check others
             }

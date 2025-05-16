@@ -19,6 +19,8 @@
 #include <array>    // For Vertex attributes
 #include <cstdint>  // Required for uint32_t
 
+#include <future>   // For std::future (asynchronous meshing)
+#include "../world/ChunkMesher.hpp" // For ChunkMesher::MeshData
 #include "../resource/ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
 #include "VulkanDescriptorSetManager.hpp" // Include the new manager
 
@@ -74,6 +76,7 @@ private:
     // --- Constants ---
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
     // MAX_REBASE_MESH_UPDATES_PER_FRAME is no longer needed as rebase only updates model matrices immediately.
+    static constexpr size_t MAX_CONCURRENT_MESHING_TASKS = 4; // Limit how many new tasks we launch per frame
 
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
@@ -115,6 +118,9 @@ private:
     };
     std::map<glm::ivec3, ChunkRenderData, struct IVec3Comparator> m_chunkRenderData; // Map chunk coordinates to render data
 
+    // For asynchronous chunk meshing
+    std::vector<std::future<std::pair<glm::ivec3, ChunkMesher::MeshData>>> m_pendingMeshFutures;
+
     // Helper to destroy chunk buffers
     void destroyChunkRenderData(ChunkRenderData& data);
     void destroyAllChunkRenderData();
@@ -148,7 +154,8 @@ private:
     void updateUniformBuffer(uint32_t currentImage);
     // Renamed and modified to process changes
     void processChunkChanges();
-    void createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk);
+    // void createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk); // Old synchronous version
+    void createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ChunkMesher::MeshData& meshData); // New version
 };
 
 #endif // VULKAN_RENDERER_HPP

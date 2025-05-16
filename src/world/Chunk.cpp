@@ -1,6 +1,8 @@
 #include "Chunk.hpp"
 #include <stdexcept> // For std::out_of_range (if strict bounds checking is added)
+#include <glm/gtc/noise.hpp> // For glm::perlin (already in hpp but good for explicitness)
 #include <iostream>  // For debugging (optional)
+#include "../block/Blocks.hpp" // For centralized block ID definitions
 
 Chunk::Chunk(glm::ivec3 chunkCoord)
     : m_chunkCoord(chunkCoord),
@@ -47,7 +49,7 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
 void Chunk::allocateBlockStorage() {
     if (!m_blocks) { // Only allocate if not already allocated
         m_blocks = std::make_unique<std::array<uint16_t, CHUNK_VOLUME>>();
-        m_blocks->fill(AIR_BLOCK_ID); // Initialize all new blocks to air
+        m_blocks->fill(Blocks::AIR_ID); // Initialize all new blocks to air
         m_isAllAir = false; // No longer all air once storage is allocated
     }
 }
@@ -59,12 +61,12 @@ uint16_t Chunk::getBlock(int localX, int localY, int localZ) const {
         // Potentially handle out-of-bounds access, e.g., by returning AIR_BLOCK_ID
         // or throwing an error. For now, let's assume valid local coordinates
         // or rely on the caller to ensure this.
-        // For world-level getBlock, this would query neighbor chunks.
-        return AIR_BLOCK_ID; // Or throw
+        // For world-level getBlock, this would query neighbor chunks.        
+        return Blocks::AIR_ID; // Or throw
     }
 
     if (m_isAllAir || !m_blocks) {
-        return AIR_BLOCK_ID;
+        return Blocks::AIR_ID;
     }
     return (*m_blocks)[localToIndex(localX, localY, localZ)];
 }
@@ -80,12 +82,12 @@ void Chunk::setBlock(int localX, int localY, int localZ, uint16_t blockID) {
         return;
     }
 
-    if (m_isAllAir && blockID == AIR_BLOCK_ID) {
+    if (m_isAllAir && blockID == Blocks::AIR_ID) {
         // Setting air in an all-air chunk, no change needed.
         return;
     }
 
-    if (m_isAllAir && blockID != AIR_BLOCK_ID) {
+    if (m_isAllAir && blockID != Blocks::AIR_ID) {
         // First non-air block being placed in an all-air chunk.
         allocateBlockStorage(); // This also sets m_isAllAir to false.
     }
@@ -111,3 +113,70 @@ glm::ivec3 Chunk::getWorldPosition() const {
 bool Chunk::isDirty() const { return m_isDirty; }
 void Chunk::setDirty(bool dirty) { m_isDirty = dirty; }
 bool Chunk::isAllAir() const { return m_isAllAir; }
+
+std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> Chunk::getBlockDataSnapshot() const {
+    if (m_isAllAir || !m_blocks) {
+        return nullptr; // Or return an empty (all-air) snapshot if preferred by mesher
+    }
+    // Create a copy of the block data
+    auto snapshot = std::make_unique<std::array<uint16_t, CHUNK_VOLUME>>(*m_blocks);
+    return snapshot;
+}
+
+void Chunk::generate() {
+    // Terrain generation parameters
+    const int baseSurfaceAbsoluteY = CHUNK_HEIGHT / 2; // An arbitrary "sea level" or average ground height in absolute Y.
+                                                // Adjust this if your world's "ground" is typically higher or lower.
+                                                // For chunks at y=0, this means surface is around local y=8.
+
+    glm::ivec3 chunkWorldOrigin = getWorldPosition(); // Absolute world coordinates of this chunk's origin (0,0,0 local)
+
+    // No need to call allocateBlockStorage() explicitly at the start.
+    // setBlock() will call it if a non-air block is placed in an all-air chunk.
+    // m_isAllAir is true by default for a new chunk.
+
+    for (int lx = 0; lx < CHUNK_WIDTH; ++lx) {
+        for (int lz = 0; lz < CHUNK_DEPTH; ++lz) {
+            // Calculate absolute world X and Z for the current block column
+            // Using double for precision with Perlin noise, especially with large coordinates
+            double absoluteWorldX = static_cast<double>(chunkWorldOrigin.x + lx);
+            double absoluteWorldZ = static_cast<double>(chunkWorldOrigin.z + lz);
+
+            // Generate Perlin noise value. glm::perlin for dvec2 returns double in [-1, 1]
+            double noiseValue = glm::perlin(glm::dvec2(absoluteWorldX * TERRAIN_FREQUENCY, absoluteWorldZ * TERRAIN_FREQUENCY));
+
+            // Calculate surface height for this column
+            // This is an absolute Y coordinate in the world
+            int surfaceTopAbsoluteY = baseSurfaceAbsoluteY + static_cast<int>(noiseValue * TERRAIN_AMPLITUDE);
+
+            for (int ly = 0; ly < CHUNK_HEIGHT; ++ly) {
+                int currentBlockAbsoluteY = chunkWorldOrigin.y + ly; // Absolute Y of the current block layer
+
+                if (currentBlockAbsoluteY < surfaceTopAbsoluteY) {
+                    setBlock(lx, ly, lz, Blocks::STONE_ID);
+                } else {
+                    setBlock(lx, ly, lz, Blocks::AIR_ID);
+                }
+            }
+        }
+    }
+
+    // After all blocks are set, accurately determine if the chunk is all air.
+    // This is important because setBlock(AIR_BLOCK_ID) in an all-air chunk doesn't allocate.
+    // If non-air blocks were placed, m_blocks would be allocated.
+    // If it was allocated then filled with air, we should deallocate.
+    bool finalIsAllAir = true;
+    if (m_blocks) { // Only check if m_blocks was ever allocated
+        for (const auto& blockID : *m_blocks) {
+            if (blockID != Blocks::AIR_ID) {
+                finalIsAllAir = false;
+                break;
+            }
+        }
+        if (finalIsAllAir) {
+            m_blocks.reset(); // Deallocate if it ended up all air
+        }
+    }
+    m_isAllAir = finalIsAllAir; // Set the final state
+    m_isDirty = true; // Mark the chunk as dirty so its mesh will be rebuilt.
+}

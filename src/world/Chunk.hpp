@@ -4,6 +4,7 @@
 #include <glm/vec3.hpp>
 #include <glm/gtc/type_ptr.hpp> // For glm::ivec3
 #include <array>
+#include <glm/gtc/noise.hpp> // For glm::perlin
 #include <vector>
 #include <cstdint> // For uint16_t
 #include <memory>  // For std::unique_ptr
@@ -20,7 +21,9 @@ constexpr int CHUNK_HEIGHT = 16;
 constexpr int CHUNK_DEPTH = 16;
 constexpr int CHUNK_VOLUME = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH; // 4096
 
-const uint16_t AIR_BLOCK_ID = 0; // Define a constant for air
+// Terrain generation parameters
+constexpr double TERRAIN_FREQUENCY = 0.01; // Controls the "zoom" of the noise. Smaller = larger features.
+constexpr double TERRAIN_AMPLITUDE = 20.0; // Controls the height variation of the terrain.
 
 class Chunk {
 public:
@@ -43,7 +46,20 @@ public:
     bool isDirty() const;
     void setDirty(bool dirty);
     bool isAllAir() const;
+    // Methods for thread-safe data access for meshing
+    glm::ivec3 getChunkCoord() const { return m_chunkCoord; }
+    std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> getBlockDataSnapshot() const;
+    void generate(); // New method for procedural generation
 
+    // Helper to convert 3D local coordinates to a 1D array index
+    // Made public static so it can be used by external functions like ChunkMesher
+    static inline size_t localToIndex(int x, int y, int z) {
+        // Add bounds checking or assertions if desired
+        // if (x < 0 || x >= CHUNK_WIDTH || y < 0 || y >= CHUNK_HEIGHT || z < 0 || z >= CHUNK_DEPTH) {
+        //     throw std::out_of_range("Block coordinates are out of chunk bounds");
+        // }
+        return static_cast<size_t>(x + y * CHUNK_WIDTH + z * CHUNK_WIDTH * CHUNK_HEIGHT);
+    }
     // Placeholder for Vulkan resources (to be implemented later)
     // VkBuffer m_vertexBuffer = nullptr; // VK_NULL_HANDLE
     // VkDeviceMemory m_vertexBufferMemory = nullptr; // VK_NULL_HANDLE
@@ -60,15 +76,6 @@ private:
 
     bool m_isAllAir; // True if the chunk contains only air blocks (m_blocks will be nullptr)
     bool m_isDirty;  // True if the chunk's geometry needs to be rebuilt
-
-    // Helper to convert 3D local coordinates to a 1D array index
-    static inline size_t localToIndex(int x, int y, int z) {
-        // Add bounds checking or assertions if desired
-        // if (x < 0 || x >= CHUNK_WIDTH || y < 0 || y >= CHUNK_HEIGHT || z < 0 || z >= CHUNK_DEPTH) {
-        //     throw std::out_of_range("Block coordinates are out of chunk bounds");
-        // }
-        return static_cast<size_t>(x + y * CHUNK_WIDTH + z * CHUNK_WIDTH * CHUNK_HEIGHT);
-    }
 
     void allocateBlockStorage();
 };

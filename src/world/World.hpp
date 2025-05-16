@@ -7,6 +7,7 @@
 #include <memory> // For std::shared_ptr
 #include <set>    // To track changed chunks efficiently
 #include <queue> // For chunk loading/unloading queue
+#include <shared_mutex> // For std::shared_mutex
 #include "Chunk.hpp" // Include the Chunk definition
 
 // Forward declaration for Camera
@@ -20,6 +21,14 @@ struct IVec3Comparator {
         return a.z < b.z;
     }
 };
+
+// Define neighbor offsets as a constant array
+constexpr glm::ivec3 NEIGHBOR_OFFSETS[] = {
+    {1, 0, 0}, {-1, 0, 0},
+    {0, 1, 0}, {0, -1, 0},
+    {0, 0, 1}, {0, 0, -1}
+};
+constexpr size_t NUM_NEIGHBORS = sizeof(NEIGHBOR_OFFSETS) / sizeof(NEIGHBOR_OFFSETS[0]);
 
 // Class to manage all blocks in the world
 class World {
@@ -44,6 +53,7 @@ public:
     // Retrieves a reference to a chunk at the given chunk coordinates.
     // If the chunk does not exist, it is created.
     Chunk& getOrCreateChunk(glm::ivec3 chunkCoord);
+    bool isChunkLoaded(glm::ivec3 chunkCoord) const; // New method
 
     // Helper to convert world coordinates to chunk coordinates
     static glm::ivec3 worldToChunkCoordinates(glm::ivec3 worldPosition);
@@ -80,6 +90,7 @@ private:
     // Queues for loading and unloading chunks.  They hold chunk coordinates.
     std::queue<glm::ivec3> m_loadQueue;
     std::queue<glm::ivec3> m_unloadQueue;
+    mutable std::shared_mutex m_chunks_mutex; // Mutex to protect m_chunks
 
     // Internal methods for managing chunk loading/unloading
     void enqueueChunksNearCamera();

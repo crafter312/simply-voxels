@@ -4,11 +4,12 @@
 #include <vector>
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <array>  // For std::array
 #include "../resource/ModelLoader.hpp" // Include for the Vertex struct
 
 // Forward declarations to avoid circular dependencies
-// These classes will need to be fully included in ChunkMesher.cpp
-class Chunk;
+// Chunk.hpp is now included directly for CHUNK_VOLUME
+#include "Chunk.hpp" // Include Chunk.hpp for CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH, CHUNK_VOLUME
 struct AtlasTextureInfo; // Forward declare from ResourceManager.hpp (or include ResourceManager.hpp if not too heavy)
 class World;
 class ResourceManager; // Assuming ResourceManager provides block properties and texture atlas info
@@ -27,17 +28,20 @@ struct MeshData {
  * This function iterates through the blocks in the chunk, performs face culling
  * against neighboring blocks (both within the chunk and in adjacent chunks via the World object),
  * and adds the model data for exposed blocks.
- *
- * It assumes that the ResourceManager can provide:
- * 1. Whether a block ID is considered "opaque" for culling purposes.
- * 2. The ModelData for any given block ID.
- *
- * @param chunk The Chunk object containing the block data to be meshed.
+ * 
+ * @param chunkCoord The coordinates of the chunk being meshed.
+ * @param blockDataSnapshot A snapshot of the chunk's block data.
+ * @param isChunkAllAir True if the chunk is known to be all air.
  * @param world The World object, used to query blocks in neighboring chunks for face culling.
  * @param resourceManager The ResourceManager, used to get block properties and texture information.
  * @return MeshData A struct containing the generated vertices and indices.
  */
-MeshData generateMesh(const Chunk& chunk, const World& world, const ResourceManager& resourceManager);
+MeshData generateMesh(
+    glm::ivec3 chunkCoord,
+    std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> blockDataSnapshot,
+    bool isChunkAllAir,
+    const World& world, 
+    const ResourceManager& resourceManager);
 
 // Function to add an entire block's model to the chunk's mesh data
 void addBlockModelToMeshData(MeshData& chunkMeshData,

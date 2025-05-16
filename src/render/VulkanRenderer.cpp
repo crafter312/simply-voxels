@@ -6,7 +6,6 @@
 // #include "../resource/VulkanTextureLoader.hpp" // ResourceManager handles this
 #include "../resource/ModelLoader.hpp"         // For ModelLoader::loadGltfModel and ModelData
 #include "../resource/ResourceManager.hpp"     // Include the ResourceManager
-#include "../world/ChunkMesher.hpp"            // For generating chunk meshes
 #include "../world/Chunk.hpp"                  // Include the Chunk class definition
 #include "../world/World.hpp"                        // Include the World class definition
 #include "../Camera.hpp"            // Include the Camera class definition
@@ -21,6 +20,7 @@
 #include <string>   // For shader file loading
 #include <fstream>  // For shader file loading
 #include <cstring> // For memcpy
+#include <chrono>   // For std::chrono::seconds in future.wait_for
 VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, std::shared_ptr<Camera> cameraPtr)
     : window(glfwWindow), // Initialized with a reference
       instanceRef(instance),
@@ -696,13 +696,14 @@ void VulkanRenderer::destroyAllChunkRenderData() {
     m_chunkRenderData.clear();
 }
 
-void VulkanRenderer::createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk) {
+// This function now takes MeshData directly, to be called when an async task completes.
+void VulkanRenderer::createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ChunkMesher::MeshData& meshData) {
     if (!bufferManager || !resourceManager) {
-        std::cerr << "VulkanRenderer::createChunkRenderData: Missing bufferManager or resourceManager." << std::endl;
+        std::cerr << "VulkanRenderer::createChunkRenderDataFromMeshData: Missing bufferManager or resourceManager." << std::endl;
         return;
     }
 
-    ChunkMesher::MeshData meshData = ChunkMesher::generateMesh(chunk, m_world, *resourceManager);
+    // MeshData is now passed in
 
     // Ensure old data for this chunkCoord is cleaned up if it exists
     auto it = m_chunkRenderData.find(chunkCoord);
@@ -735,28 +736,89 @@ void VulkanRenderer::createChunkRenderData(const glm::ivec3& chunkCoord, const C
 }
 
 void VulkanRenderer::processChunkChanges() {
-    // Wait for the device to be idle before destroying/creating buffers
-    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
+    // IMPORTANT: The vkDeviceWaitIdle() call here is a major performance bottleneck
+    // for frequent updates. Removing it requires a more sophisticated system for
+    // managing buffer lifetimes (e.g., deferred deletion queues for buffers that
+    // might still be in use by the GPU). For this optimization step, we are
+    // focusing on offloading CPU meshing work. The vkDeviceWaitIdle might still
+    // cause hitches if buffer creation/destruction is frequent.
+    // vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Kept for now for safety, but a target for future optimization.
 
-    // Process regular chunk changes (block edits, new chunks from loading)
+    // --- Stage 1: Check for completed mesh futures ---
+    // Iterate backwards to allow safe removal
+    for (auto i = m_pendingMeshFutures.size(); i-- > 0;) {
+        auto& future = m_pendingMeshFutures[i];
+        // Check if the future is ready without blocking
+        if (future.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            try {
+                std::pair<glm::ivec3, ChunkMesher::MeshData> result = future.get();
+                // GPU buffer operations must happen on the main thread
+                vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Wait before this specific buffer manipulation
+                createChunkRenderDataFromMeshData(result.first, result.second);
+                // std::cout << "Applied mesh for chunk: " << result.first.x << "," << result.first.y << "," << result.first.z << std::endl;
+            } catch (const std::exception& e) {
+                std::cerr << "Exception getting mesh future result: " << e.what() << std::endl;
+            }
+            // Remove the processed future
+            m_pendingMeshFutures.erase(m_pendingMeshFutures.begin() + i);
+        }
+    }
+
+    // --- Stage 2: Identify chunks needing meshing and launch new async tasks ---
     const auto& changedChunks = m_world.getChangedChunks();
-    const auto& worldChunkMap = m_world.getChunkMap(); // Get the world's chunk map once
+    std::set<glm::ivec3, IVec3Comparator> chunksToActuallyProcess = changedChunks; // Copy to iterate
 
-    // Use a temporary set to process changes to avoid modifying the world's set while iterating
-    std::set<glm::ivec3, IVec3Comparator> chunksToProcessRegular = changedChunks;
-    // It's important to clear the world's changed set *after* copying,
-    // but before processing the rebase queue, in case rebase processing adds to it (though unlikely with current logic).
-    // For safety, we clear it after both types of processing are done or right after copying.
-    // Let's clear it after copying for regular changes.
-    m_world.clearChangedChunks(); 
-    
-    for (const glm::ivec3& chunkCoord : chunksToProcessRegular) {
-        auto mapIterator = worldChunkMap.find(chunkCoord);
-        if (mapIterator != worldChunkMap.end()) { // Chunk exists in the world map (modified or newly loaded)
-            const Chunk& chunkRef = mapIterator->second;
-            // std::cout << "Processing regular change for chunk: " << glm::to_string(chunkCoord) << std::endl;
-            createChunkRenderData(chunkCoord, chunkRef);
-        } else { // Chunk was unloaded (or in changedChunks but not in map, implying it was removed)
+    for (const glm::ivec3& chunkCoord : chunksToActuallyProcess) {
+        Chunk* chunk = m_world.getChunk(chunkCoord); // Check if chunk still exists
+
+        if (chunk) { // Chunk exists: modified or newly loaded, needs meshing
+            if (m_pendingMeshFutures.size() < MAX_CONCURRENT_MESHING_TASKS) {
+                // Check if already being meshed (simple check, could be more robust)
+                bool alreadyPending = false;
+                for(const auto& fut : m_pendingMeshFutures) {
+                    // This check is tricky as futures don't easily expose their "task ID".
+                    // A more robust system would track submitted chunkCoords.
+                    // For now, we rely on MAX_CONCURRENT_MESHING_TASKS to limit.
+                }
+
+                if (!alreadyPending) { // Simplified: just launch if under limit
+                    // std::cout << "Requesting mesh for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << std::endl;
+                    auto snapshot = chunk->getBlockDataSnapshot();
+                    bool isAllAir = chunk->isAllAir(); // Get current all-air status
+                    glm::ivec3 coordForTask = chunk->getChunkCoord(); // Get coord from chunk
+
+                    // Launch async task. Pass world and resourceManager by const reference.
+                    // std::cref ensures they are passed as references to the async task.
+                    // Note: Accessing m_world from other threads needs careful consideration
+                    // for thread safety if m_world's internal state (like m_chunks map)
+                    // can be modified concurrently by the main thread. For now, we assume
+                    // World::getBlockID and World::isChunkLoaded are sufficiently thread-safe for reads.
+                    // The lambda captures necessary variables and returns the required pair.
+                    m_pendingMeshFutures.push_back(
+                        std::async(std::launch::async,
+                            // Lambda function that returns std::pair<glm::ivec3, ChunkMesher::MeshData>
+                            [capturedCoord = coordForTask, // Capture chunkCoord by value for the task
+                             capturedSnapshot = std::move(snapshot), // Move snapshot into the lambda
+                             capturedIsAllAir = isAllAir,           // Capture isAllAir by value
+                             &world_ref = m_world,                   // Capture world by reference
+                             &res_man_ref = *resourceManager         // Capture resourceManager by reference
+                            ]() mutable -> std::pair<glm::ivec3, ChunkMesher::MeshData> { // Added mutable
+                                // Call the original meshing function
+                                ChunkMesher::MeshData meshDataResult = ChunkMesher::generateMesh(
+                                    capturedCoord,
+                                    std::move(capturedSnapshot), // Pass the moved snapshot
+                                    capturedIsAllAir,
+                                    world_ref,
+                                    res_man_ref
+                                );
+                                // Return the pair
+                                return std::make_pair(capturedCoord, std::move(meshDataResult));
+                            })
+                    );
+                }
+            }
+        } else { // Chunk does not exist in world map: it was unloaded
+            vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Wait before this specific buffer manipulation
             auto renderDataIt = m_chunkRenderData.find(chunkCoord);
             if (renderDataIt != m_chunkRenderData.end()) {
                 destroyChunkRenderData(renderDataIt->second);
@@ -765,8 +827,5 @@ void VulkanRenderer::processChunkChanges() {
             }
         }
     }
-
-    // The m_rebaseMeshUpdateQueue and its processing loop are removed.
-    // Rebase now only triggers immediate model matrix updates.
-    // Actual mesh changes are handled by m_changedChunks.
+    m_world.clearChangedChunks(); // Clear the set in the world now that we've processed them
 }

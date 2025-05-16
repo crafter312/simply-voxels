@@ -1,8 +1,9 @@
 #include "World.hpp"
-#include <random> // For random number generation
 #include <cmath>  // For std::floor
 #include <iostream> // For debugging output (can be removed later)
 #include <algorithm> // For std::max
+#include <mutex> // For std::unique_lock
+#include <shared_mutex> // For std::shared_lock and std::unique_lock
 
 //#define GLM_ENABLE_EXPERIMENTAL
 //#include <glm/gtx/string_cast.hpp> // For glm::to_string
@@ -11,10 +12,6 @@
 
 World::World(std::shared_ptr<Camera> camera)
     : m_camera(camera) {
-    // Initialize a random number generator
-    std::random_device rd;  // Obtain a random number from hardware
-    std::mt19937 gen(rd()); // Seed the generator
-    std::uniform_int_distribution<> block_type_distrib(0, 1); // For choosing between dirt and stone
     
     // Initially, enqueue chunks around the starting camera position (which is relative to the initial rebase origin 0,0,0)
     enqueueChunksNearCamera();
@@ -38,6 +35,7 @@ glm::ivec3 World::worldToLocalCoordinates(glm::ivec3 worldPosition, glm::ivec3 c
 
 uint16_t World::getBlockID(glm::ivec3 worldPosition) const {
     glm::ivec3 chunkCoord = worldToChunkCoordinates(worldPosition);
+    std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
     auto it = m_chunks.find(chunkCoord);
     if (it != m_chunks.end()) {
         const Chunk& chunk = it->second;
@@ -49,13 +47,43 @@ uint16_t World::getBlockID(glm::ivec3 worldPosition) const {
 
 void World::setBlockID(glm::ivec3 worldPosition, uint16_t blockID) {
     glm::ivec3 chunkCoord = worldToChunkCoordinates(worldPosition);
+    // getOrCreateChunk handles its own unique lock for potential modification of m_chunks
     Chunk& chunk = getOrCreateChunk(chunkCoord);
     glm::ivec3 localPos = worldToLocalCoordinates(worldPosition, chunkCoord);
     chunk.setBlock(localPos.x, localPos.y, localPos.z, blockID); // This will call markModified on the chunk
+
+    // If the modified block is on a boundary, mark the adjacent neighbor chunk(s) as dirty too.
+    // This ensures the neighbor rebuilds its mesh considering the change.
+    // The neighbor checks need a read lock.
+    {
+        std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock for neighbor checks
+        if (localPos.x == 0) {
+            glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[1]; // -X
+            if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
+        } else if (localPos.x == CHUNK_WIDTH - 1) {
+            glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[0]; // +X
+            if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
+        }
+        if (localPos.y == 0) {
+            glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[3]; // -Y
+            if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
+        } else if (localPos.y == CHUNK_HEIGHT - 1) {
+            glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[2]; // +Y
+            if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
+        }
+        if (localPos.z == 0) {
+            glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[5]; // -Z
+            if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
+        } else if (localPos.z == CHUNK_DEPTH - 1) {
+            glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[4]; // +Z
+            if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
+        }
+    }
     m_changedChunks.insert(chunkCoord); // Mark this chunk as changed
 }
 
 Chunk* World::getChunk(glm::ivec3 chunkCoord) {
+    std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
     auto it = m_chunks.find(chunkCoord);
     if (it != m_chunks.end()) {
         return &it->second;
@@ -64,6 +92,7 @@ Chunk* World::getChunk(glm::ivec3 chunkCoord) {
 }
 
 const Chunk* World::getChunk(glm::ivec3 chunkCoord) const {
+    std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
     auto it = m_chunks.find(chunkCoord);
     if (it != m_chunks.end()) {
         return &it->second;
@@ -72,6 +101,7 @@ const Chunk* World::getChunk(glm::ivec3 chunkCoord) const {
 }
 
 Chunk& World::getOrCreateChunk(glm::ivec3 chunkCoord) {
+    std::unique_lock<std::shared_mutex> lock(m_chunks_mutex); // Write lock for potential emplace
     auto it = m_chunks.find(chunkCoord);
     if (it == m_chunks.end()) {
         // Chunk does not exist, create it and emplace it into the map
@@ -84,7 +114,17 @@ Chunk& World::getOrCreateChunk(glm::ivec3 chunkCoord) {
     return it->second;
 }
 
+bool World::isChunkLoaded(glm::ivec3 chunkCoord) const {
+    std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
+    return m_chunks.count(chunkCoord) > 0;
+}
+
 const std::map<glm::ivec3, Chunk, IVec3Comparator>& World::getChunkMap() const {
+    // Note: Returning a reference to the map itself is tricky for thread safety
+    // if the caller iterates it without holding a lock.
+    // For now, assume callers (like VulkanRenderer::drawFrame) are on the main thread
+    // or handle locking externally if this method is used by other threads.
+    // A shared_lock here would only protect the immediate return, not subsequent use.
     return m_chunks;
 }
 
@@ -107,12 +147,15 @@ void World::enqueueChunksNearCamera() {
     glm::ivec3 minChunk = cameraChunkPos - glm::ivec3(LOAD_CHUNK_RADIUS);
     glm::ivec3 maxChunk = cameraChunkPos + glm::ivec3(LOAD_CHUNK_RADIUS);
 
-    // Iterate through all chunks in the cubic region using a single loop
-    for (int x = minChunk.x; x <= maxChunk.x; ++x) {
-        for (int y = minChunk.y; y <= maxChunk.y; ++y) {
-            for (int z = minChunk.z; z <= maxChunk.z; ++z) {
-                glm::ivec3 chunkCoord(x, y, z);
-                if (m_chunks.find(chunkCoord) == m_chunks.end()) m_loadQueue.push(chunkCoord);
+    // The m_chunks.find() needs a read lock.
+    {
+        std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
+        for (int x = minChunk.x; x <= maxChunk.x; ++x) {
+            for (int y = minChunk.y; y <= maxChunk.y; ++y) {
+                for (int z = minChunk.z; z <= maxChunk.z; ++z) {
+                    glm::ivec3 chunkCoord(x, y, z);
+                    if (m_chunks.find(chunkCoord) == m_chunks.end()) m_loadQueue.push(chunkCoord);
+              }
           }
         }
     }
@@ -125,20 +168,25 @@ void World::enqueueChunksToUnload() {
     glm::ivec3 cameraChunkPos = m_camera->getAbsoluteChunkPos();
 
     // Iterate through existing chunks and unload those outside the radius
-    for (auto it = m_chunks.begin(); it != m_chunks.end(); ++it) {
-        glm::ivec3 chunkCoord = it->first;
+    // Iterating m_chunks needs a read lock.
+    {
+        std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
+        for (auto it = m_chunks.begin(); it != m_chunks.end(); ++it) {
+            glm::ivec3 chunkCoord = it->first;
 
-        // Calculate distance in chunk coordinates (Chebyshev distance for a cubic region)
-        int dx = std::abs(chunkCoord.x - cameraChunkPos.x);
-        int dy = std::abs(chunkCoord.y - cameraChunkPos.y);
-        int dz = std::abs(chunkCoord.z - cameraChunkPos.z);
+            // Calculate distance in chunk coordinates (Chebyshev distance for a cubic region)
+            int dx = std::abs(chunkCoord.x - cameraChunkPos.x);
+            int dy = std::abs(chunkCoord.y - cameraChunkPos.y);
+            int dz = std::abs(chunkCoord.z - cameraChunkPos.z);
 
-        if (dx > UNLOAD_CHUNK_RADIUS || dy > UNLOAD_CHUNK_RADIUS || dz > UNLOAD_CHUNK_RADIUS) {
-            m_unloadQueue.push(chunkCoord);
-            // std::cout << "Enqueueing chunk to unload: " << glm::to_string(chunkCoord) << std::endl;
+            if (dx > UNLOAD_CHUNK_RADIUS || dy > UNLOAD_CHUNK_RADIUS || dz > UNLOAD_CHUNK_RADIUS) {
+                m_unloadQueue.push(chunkCoord);
+                // std::cout << "Enqueueing chunk to unload: " << glm::to_string(chunkCoord) << std::endl;
+            }
         }
     }
 }
+
 
 void World::processLoadQueue() {
     int loadedCount = 0;
@@ -148,22 +196,30 @@ void World::processLoadQueue() {
         m_loadQueue.pop();
 
         // Check if the chunk is already loaded (shouldn't be, but double-check)
-        if (m_chunks.find(chunkCoord) == m_chunks.end()) {
-            // Create and load the chunk data here (replace with actual loading logic)
-            // For now, simulate with random blocks like in the constructor, but in the new chunk
+        bool needsLoading;
+        {
+            std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock for find
+            needsLoading = (m_chunks.find(chunkCoord) == m_chunks.end());
+        }
+
+        if (needsLoading) {
+            // getOrCreateChunk handles its own unique lock for potential emplace
             Chunk& newChunk = getOrCreateChunk(chunkCoord);
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            std::uniform_int_distribution<> block_type_distrib(0, 1);
-            std::uniform_int_distribution<> x_distrib(0, CHUNK_WIDTH - 1);
-            std::uniform_int_distribution<> y_distrib(0, CHUNK_HEIGHT - 1);
-            std::uniform_int_distribution<> z_distrib(0, CHUNK_DEPTH - 1);
-            for (int i = 0; i < 100; ++i) { // Generate some random blocks
-                glm::ivec3 blockPos(x_distrib(gen), y_distrib(gen), z_distrib(gen));
-                uint16_t blockID = (block_type_distrib(gen) == 0) ? Blocks::DIRT_ID : Blocks::STONE_ID;
-                newChunk.setBlock(blockPos.x, blockPos.y, blockPos.z, blockID);
-            }
+            newChunk.generate(); // Generate terrain for the new chunk (this also marks it dirty via constructor/setBlock)
             // std::cout << "Loaded chunk: " << glm::to_string(chunkCoord) << std::endl;
+
+            // Mark its 6 direct neighbors as dirty so they can update their meshes
+            // relative to this newly generated and loaded chunk.
+            { // Scope for neighbor check lock
+                std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock for neighbor checks
+                for (size_t i = 0; i < NUM_NEIGHBORS; ++i) {
+                    glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[i];
+                    if (m_chunks.count(neighborCoord)) { // Check if the neighbor exists (is loaded)
+                        m_changedChunks.insert(neighborCoord);
+                    }
+                }
+            }
+
             loadedCount++; 
             // m_changedChunks is already updated by getOrCreateChunk if it's new
         }
@@ -174,9 +230,23 @@ void World::processUnloadQueue() {
     while (!m_unloadQueue.empty()) {
         glm::ivec3 chunkCoord = m_unloadQueue.front();
         m_unloadQueue.pop();
-        // std::cout << "Unloading chunk: " << glm::to_string(chunkCoord) << std::endl;
-        m_changedChunks.insert(chunkCoord); // Mark this chunk as changed (it's being removed)
-        m_chunks.erase(chunkCoord);
+        
+        // Operations on m_chunks (reading for neighbors, then erasing) need to be atomic
+        // with respect to other accesses to m_chunks.
+        {
+            std::unique_lock<std::shared_mutex> lock(m_chunks_mutex); // Write lock for erase and consistent neighbor check
+            // Before erasing the chunk, mark its 6 direct neighbors as dirty.
+            // This allows them to rebuild their meshes now that this chunk will be gone (effectively air).
+            for (size_t i = 0; i < NUM_NEIGHBORS; ++i) {
+                glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[i];
+                if (m_chunks.count(neighborCoord)) { // Check if the neighbor exists
+                    m_changedChunks.insert(neighborCoord);
+                }
+            }
+            // std::cout << "Unloading chunk: " << glm::to_string(chunkCoord) << std::endl;
+            m_changedChunks.insert(chunkCoord); // Mark this chunk as changed (it's being removed)
+            m_chunks.erase(chunkCoord);
+        }
     }
 }
 
@@ -190,8 +260,11 @@ void World::clearChangedChunks() {
 void World::markAllChunksDirty() {
     // This function is now for general "all chunks need mesh update" scenarios,
     // not specifically for rebase model matrix updates.
-    for (const auto& pair : m_chunks) {
-        m_changedChunks.insert(pair.first); // Add to regular changed chunks for mesh processing
+    {
+        std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock for iterating m_chunks
+        for (const auto& pair : m_chunks) {
+            m_changedChunks.insert(pair.first); // Add to regular changed chunks for mesh processing
+        }
     }
     std::cout << "Marked all " << m_chunks.size() << " chunks as dirty." << std::endl;
 }
