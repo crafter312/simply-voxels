@@ -67,7 +67,7 @@ public:
 private:
     // --- Constants for chunk management ---
     static constexpr int LOAD_CHUNK_RADIUS = 2; // Radius in chunks around the camera to load chunks
-    static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 8; // Radius in chunks from rebase origin to trigger a rebase
+    static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase
     static constexpr int UNLOAD_CHUNK_RADIUS = 3; // Radius in chunks beyond which to unload chunks
     static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 2; // Max chunks to process from load queue per frame
 
