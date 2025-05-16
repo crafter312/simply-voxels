@@ -35,13 +35,23 @@ glm::ivec3 World::worldToLocalCoordinates(glm::ivec3 worldPosition, glm::ivec3 c
 
 uint16_t World::getBlockID(glm::ivec3 worldPosition) const {
     glm::ivec3 chunkCoord = worldToChunkCoordinates(worldPosition);
+    // std::cout << "World::getBlockID: Query for worldPos [" << worldPosition.x << "," << worldPosition.y << "," << worldPosition.z << "] -> chunkCoord [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "]" << std::endl;
     std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
     auto it = m_chunks.find(chunkCoord);
     if (it != m_chunks.end()) {
         const Chunk& chunk = it->second;
+        bool genStatus = chunk.isGenerated(); // Call it once
+        // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] FOUND. isGenerated: " << genStatus << std::endl;
+        if (!genStatus) { // If the queried chunk hasn't finished its generation
+            // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] NOT YET GENERATED. Returning AIR." << std::endl;
+            return Blocks::AIR_ID;    // Treat it as air to avoid using incomplete data
+        }
         glm::ivec3 localPos = worldToLocalCoordinates(worldPosition, chunkCoord);
-        return chunk.getBlock(localPos.x, localPos.y, localPos.z);
+        uint16_t blockId = chunk.getBlock(localPos.x, localPos.y, localPos.z);
+        // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] GENERATED. LocalPos [" << localPos.x << "," << localPos.y << "," << localPos.z << "] -> BlockID: " << blockId << std::endl;
+        return blockId;
     }
+    // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] NOT FOUND. Returning AIR." << std::endl;
     return Blocks::AIR_ID; // Chunk doesn't exist, so it's air. Using Blocks::AIR_ID for consistency.
 }
 
@@ -253,8 +263,8 @@ void World::processUnloadQueue() {
 const std::set<glm::ivec3, IVec3Comparator>& World::getChangedChunks() const {
     return m_changedChunks;
 }
-void World::clearChangedChunks() {
-    m_changedChunks.clear();
+void World::acknowledgeChunkChangeProcessed(const glm::ivec3& chunkCoord) {
+    m_changedChunks.erase(chunkCoord);
 }
 
 void World::markAllChunksDirty() {
@@ -291,4 +301,18 @@ void World::checkAndRebase() {
 
 bool World::rebaseOccurredLastFrame() const {
     return m_rebaseOccurredThisFrame;
+}
+
+World::ChunkGenStatus World::getChunkGeneratedStatus(glm::ivec3 chunkCoord) const {
+    std::shared_lock<std::shared_mutex> lock(m_chunks_mutex);
+    auto it = m_chunks.find(chunkCoord);
+    if (it == m_chunks.end()) {
+        return ChunkGenStatus::NOT_FOUND;
+    }
+    // Chunk exists, check its generation status
+    // The isGenerated() method on Chunk is atomic and safe to call here.
+    if (!it->second.isGenerated()) {
+        return ChunkGenStatus::LOADED_NOT_GENERATED;
+    }
+    return ChunkGenStatus::LOADED_AND_GENERATED;
 }

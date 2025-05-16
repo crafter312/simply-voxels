@@ -12,6 +12,7 @@
 #include <vector>
 #include <memory>   // For std::unique_ptr
 #include <optional>
+#include <set>      // For tracking pending mesh tasks
 #include <map> // To store per-chunk render data
 #include <stdexcept>
 #include <string>   // For shader file loading
@@ -19,6 +20,8 @@
 #include <array>    // For Vertex attributes
 #include <cstdint>  // Required for uint32_t
 
+#include <thread>   // For std::thread::hardware_concurrency()
+#include <algorithm> // For std::max
 #include <future>   // For std::future (asynchronous meshing)
 #include "../world/ChunkMesher.hpp" // For ChunkMesher::MeshData
 #include "../resource/ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
@@ -76,7 +79,8 @@ private:
     // --- Constants ---
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
     // MAX_REBASE_MESH_UPDATES_PER_FRAME is no longer needed as rebase only updates model matrices immediately.
-    static constexpr size_t MAX_CONCURRENT_MESHING_TASKS = 4; // Limit how many new tasks we launch per frame
+    // Value determined at runtime based on hardware_concurrency.
+    static const size_t MAX_CONCURRENT_MESHING_TASKS;
 
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
@@ -119,7 +123,9 @@ private:
     std::map<glm::ivec3, ChunkRenderData, struct IVec3Comparator> m_chunkRenderData; // Map chunk coordinates to render data
 
     // For asynchronous chunk meshing
-    std::vector<std::future<std::pair<glm::ivec3, ChunkMesher::MeshData>>> m_pendingMeshFutures;
+    // Store chunkCoord with the future to correctly manage m_submittedMeshTasks on exception
+    std::vector<std::pair<glm::ivec3, std::future<ChunkMesher::MeshData>>> m_pendingMeshFutures;
+    std::set<glm::ivec3, IVec3Comparator> m_submittedMeshTasks; // Chunks for which a mesh task has been launched
 
     // Helper to destroy chunk buffers
     void destroyChunkRenderData(ChunkRenderData& data);

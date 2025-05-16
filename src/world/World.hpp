@@ -33,6 +33,9 @@ constexpr size_t NUM_NEIGHBORS = sizeof(NEIGHBOR_OFFSETS) / sizeof(NEIGHBOR_OFFS
 // Class to manage all blocks in the world
 class World {
 public:
+    // Enum to describe the generation status of a chunk for meshing decisions
+    enum class ChunkGenStatus { NOT_FOUND, LOADED_NOT_GENERATED, LOADED_AND_GENERATED };
+
     // Constructor now accepts a shared pointer to the Camera
     World(std::shared_ptr<Camera> camera);
 
@@ -70,16 +73,17 @@ public:
     glm::ivec3 getRebaseOriginChunkCoord() const { return m_rebaseOriginChunkCoord; }
 
     const std::set<glm::ivec3, IVec3Comparator>& getChangedChunks() const; // IVec3Comparator for std::set
-    void clearChangedChunks();
+    void acknowledgeChunkChangeProcessed(const glm::ivec3& chunkCoord); // New method
     void markAllChunksDirty(); // Mark all loaded chunks for mesh regeneration (e.g., texture change)
+    ChunkGenStatus getChunkGeneratedStatus(glm::ivec3 chunkCoord) const;
     bool rebaseOccurredLastFrame() const; // Check if a rebase happened
 
 private:
     // --- Constants for chunk management ---
     static constexpr int LOAD_CHUNK_RADIUS = 2; // Radius in chunks around the camera to load chunks
-    static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase
-    static constexpr int UNLOAD_CHUNK_RADIUS = 3; // Radius in chunks beyond which to unload chunks
-    static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 2; // Max chunks to process from load queue per frame
+    static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase (remains large)
+    static constexpr int UNLOAD_CHUNK_RADIUS = LOAD_CHUNK_RADIUS + 3; // Increased: Radius in chunks beyond which to unload chunks (was 3)
+    static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 4; // Increased: Max chunks to process from load queue per frame (was 2)
 
     std::map<glm::ivec3, Chunk, IVec3Comparator> m_chunks;
     std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    

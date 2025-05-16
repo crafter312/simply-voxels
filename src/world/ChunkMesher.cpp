@@ -70,13 +70,17 @@ MeshData generateMesh(
     );
 
     for (int i = 0; i < CHUNK_VOLUME; ++i) {
+        // Reconstruct local x, y, z from the 1D index 'i'.
+        // The order of operations here must correctly invert the Chunk::localToIndex formula:
+        // index = x + y * CHUNK_WIDTH + z * CHUNK_WIDTH * CHUNK_HEIGHT
         int x = i % CHUNK_WIDTH;
-        int z_temp = i / CHUNK_WIDTH;
-        int z = z_temp % CHUNK_DEPTH;
-        int y = z_temp / CHUNK_DEPTH;
+        int temp_yz_plane_index = i / CHUNK_WIDTH; // This intermediate value is (y + z * CHUNK_HEIGHT)
+        int y = temp_yz_plane_index % CHUNK_HEIGHT;
+        int z = temp_yz_plane_index / CHUNK_HEIGHT;
 
-        // Get block ID from the snapshot
-        uint16_t blockID = (*blockDataSnapshot)[Chunk::localToIndex(x, y, z)];
+        // Get block ID directly using 'i', as it's the correct flattened index for the snapshot array.
+        // The x, y, z above are reconstructed to know the 3D position of the block at index 'i'.
+        uint16_t blockID = (*blockDataSnapshot)[i];
 
         if (blockID == Blocks::AIR_ID) {
             continue;
@@ -87,6 +91,7 @@ MeshData generateMesh(
         // bool isCurrentBlockOpaque = resourceManager.isBlockOpaque(blockID);
         // if (!isCurrentBlockOpaque) { /* Potentially handle transparent blocks differently or always add them */ }
 
+        // Now, currentBlockLocalPos_ivec and currentBlockLocalPos_vec3 use the correctly reconstructed x, y, z
         glm::ivec3 currentBlockLocalPos_ivec(x, y, z);
         glm::vec3 currentBlockLocalPos_vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
         glm::ivec3 currentBlockWorldPos = chunkWorldOrigin + currentBlockLocalPos_ivec;
@@ -96,27 +101,34 @@ MeshData generateMesh(
         glm::ivec3 neighborOffsets[] = {
             {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}
         };
+        // Use NEIGHBOR_OFFSETS from World.hpp for consistency with the array index
+        // Ensure NEIGHBOR_OFFSETS is accessible here, or copy it.
+        // Assuming NEIGHBOR_OFFSETS is globally accessible or included via World.hpp
 
         for (int neighborIndex = 0; neighborIndex < 6; ++neighborIndex) {
-            glm::ivec3 neighborPos = currentBlockWorldPos + neighborOffsets[neighborIndex];
-            
-            // Determine if the face should be exposed based on the neighbor
+            glm::ivec3 neighborPos = currentBlockWorldPos + neighborOffsets[neighborIndex];            
             bool isNeighborEffectivelyOpaque;
             glm::ivec3 neighborChunkCoord = World::worldToChunkCoordinates(neighborPos); // Get chunk coords of neighbor
 
-            if (!world.isChunkLoaded(neighborChunkCoord)) {
-                // If the neighboring chunk is not loaded, treat it as opaque to cull this face.
+            World::ChunkGenStatus neighborStatus = world.getChunkGeneratedStatus(neighborChunkCoord);
+
+            if (neighborStatus == World::ChunkGenStatus::NOT_FOUND ||
+                neighborStatus == World::ChunkGenStatus::LOADED_NOT_GENERATED) {
+                // Treat as opaque if neighbor chunk is not found,
+                // or if it's found but not yet fully generated.
+                // This prevents rendering faces against chunks whose state is unknown or incomplete.
                 isNeighborEffectivelyOpaque = true;
-            } else {
-                // Neighboring chunk is loaded, get the block ID and check its actual opacity.
-                uint16_t neighborBlockID = world.getBlockID(neighborPos);
+            } else { // Neighbor is LOADED_AND_GENERATED
+                uint16_t neighborBlockID = world.getBlockID(neighborPos); // This is now safe and will get the real ID
                 // For simplicity, assume neighbor is non-opaque if it's air.
                 // bool isNeighborOpaque = resourceManager.isBlockOpaque(neighborBlockID); // Future improvement
                 isNeighborEffectivelyOpaque = (neighborBlockID != Blocks::AIR_ID); // Current placeholder
             }
 
-            if (!isNeighborEffectivelyOpaque) { // If neighbor is not effectively opaque (e.g., air in a loaded chunk)
+            if (!isNeighborEffectivelyOpaque) { 
                 isExposed = true;
+                // The detailed logging for exposed faces can be updated if needed.
+                // For example, to confirm the neighborStatus was LOADED_AND_GENERATED and neighborBlockID was AIR.
                 break; // Found an exposed side, no need to check others
             }
         }

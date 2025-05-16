@@ -6,8 +6,11 @@
 #include <array>
 #include <glm/gtc/noise.hpp> // For glm::perlin
 #include <vector>
+#include <iostream> // For std::cout in logging
+#include <atomic>  // For std::atomic
 #include <cstdint> // For uint16_t
 #include <memory>  // For std::unique_ptr
+#include <shared_mutex> // For std::shared_mutex
 
 // Vulkan forward declarations (actual resources will be added later)
 struct VkBuffer_T;
@@ -50,6 +53,14 @@ public:
     glm::ivec3 getChunkCoord() const { return m_chunkCoord; }
     std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> getBlockDataSnapshot() const;
     void generate(); // New method for procedural generation
+    bool isGenerated() const { 
+        bool genStatus = m_isGenerated.load(std::memory_order_acquire); 
+        // std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] isGenerated() called, returning: " << genStatus << std::endl; // Can be very verbose
+        return genStatus; 
+    } // Check if initial generation is complete
+    void markGenerated() { 
+        //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] markGenerated() called." << std::endl;
+        m_isGenerated.store(true, std::memory_order_release); }   // Called at the end of generate()
 
     // Helper to convert 3D local coordinates to a 1D array index
     // Made public static so it can be used by external functions like ChunkMesher
@@ -76,8 +87,11 @@ private:
 
     bool m_isAllAir; // True if the chunk contains only air blocks (m_blocks will be nullptr)
     bool m_isDirty;  // True if the chunk's geometry needs to be rebuilt
+    std::atomic<bool> m_isGenerated; // True if the chunk has completed its initial procedural generation
+    mutable std::shared_mutex m_data_mutex; // To protect m_blocks, m_isAllAir, and m_isDirty
 
     void allocateBlockStorage();
+
 };
 
 #endif // CHUNK_HPP
