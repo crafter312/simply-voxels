@@ -153,9 +153,11 @@ void World::enqueueChunksNearCamera() {
     // Get camera's absolute chunk position
     glm::ivec3 cameraChunkPos = m_camera->getAbsoluteChunkPos();
 
-    // Calculate the bounds of the cubic region in chunk coordinates
+    // Iterate over a cubic bounding box that encompasses the sphere
     glm::ivec3 minChunk = cameraChunkPos - glm::ivec3(LOAD_CHUNK_RADIUS);
     glm::ivec3 maxChunk = cameraChunkPos + glm::ivec3(LOAD_CHUNK_RADIUS);
+
+    float loadRadiusSquared = static_cast<float>(LOAD_CHUNK_RADIUS * LOAD_CHUNK_RADIUS);
 
     // The m_chunks.find() needs a read lock.
     {
@@ -164,7 +166,13 @@ void World::enqueueChunksNearCamera() {
             for (int y = minChunk.y; y <= maxChunk.y; ++y) {
                 for (int z = minChunk.z; z <= maxChunk.z; ++z) {
                     glm::ivec3 chunkCoord(x, y, z);
-                    if (m_chunks.find(chunkCoord) == m_chunks.end()) m_loadQueue.push(chunkCoord);
+                    // Check Euclidean distance for spherical loading
+                    glm::ivec3 diff = chunkCoord - cameraChunkPos;
+                    float distSq = static_cast<float>(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
+
+                    if (distSq <= loadRadiusSquared) {
+                        if (m_chunks.find(chunkCoord) == m_chunks.end()) m_loadQueue.push(chunkCoord);
+                    }
               }
           }
         }
@@ -177,19 +185,19 @@ void World::enqueueChunksToUnload() {
     // Get camera's absolute chunk position
     glm::ivec3 cameraChunkPos = m_camera->getAbsoluteChunkPos();
 
+    float unloadRadiusSquared = static_cast<float>(UNLOAD_CHUNK_RADIUS * UNLOAD_CHUNK_RADIUS);
+
     // Iterate through existing chunks and unload those outside the radius
     // Iterating m_chunks needs a read lock.
     {
         std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
         for (auto it = m_chunks.begin(); it != m_chunks.end(); ++it) {
             glm::ivec3 chunkCoord = it->first;
+            glm::ivec3 diff = chunkCoord - cameraChunkPos;
+            float distSq = static_cast<float>(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
 
-            // Calculate distance in chunk coordinates (Chebyshev distance for a cubic region)
-            int dx = std::abs(chunkCoord.x - cameraChunkPos.x);
-            int dy = std::abs(chunkCoord.y - cameraChunkPos.y);
-            int dz = std::abs(chunkCoord.z - cameraChunkPos.z);
-
-            if (dx > UNLOAD_CHUNK_RADIUS || dy > UNLOAD_CHUNK_RADIUS || dz > UNLOAD_CHUNK_RADIUS) {
+            // If chunk is outside the spherical unload radius
+            if (distSq > unloadRadiusSquared) {
                 m_unloadQueue.push(chunkCoord);
                 // std::cout << "Enqueueing chunk to unload: " << glm::to_string(chunkCoord) << std::endl;
             }

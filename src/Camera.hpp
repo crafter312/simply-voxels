@@ -83,8 +83,9 @@ public: // Making constants public for potential external reference, or move to 
     );
 
     // Calculate far plane distance to encompass the furthest unloadable chunk diagonally
+    // For spherical loading, this is roughly (Radius in Chunks + Diagonal of one Chunk) * Chunk Dimension
     static constexpr float FAR_PLANE_DISTANCE =
-        (static_cast<float>(UNLOAD_CHUNK_RADIUS) + 1.0f) * MAX_CHUNK_DIM * SQRT3_APPROX;
+        (static_cast<float>(UNLOAD_CHUNK_RADIUS) + SQRT3_APPROX) * MAX_CHUNK_DIM;
 };
 
 #endif // CAMERA_HPP
