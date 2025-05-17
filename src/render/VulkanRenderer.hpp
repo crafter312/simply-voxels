@@ -57,11 +57,11 @@ class VulkanSwapChain;
 
 class VulkanRenderer {
 public:
-    VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, std::shared_ptr<Camera> cameraPtr);
+    VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, BlockRegistry& blockRegistryRef, std::shared_ptr<Camera> cameraPtr);
     ~VulkanRenderer(); // Use destructor for cleanup
 
     // Call this after constructor to create pipeline resources
-    void init(const BlockRegistry& blockRegistryRef);
+    void init();
 
     // Main drawing function
     void drawFrame();
@@ -89,6 +89,7 @@ private:
     // std::unique_ptr<VulkanTextureLoader> textureLoader; // Replaced by ResourceManager
     std::unique_ptr<ResourceManager> resourceManager; // Manages models and textures
     std::shared_ptr<Camera> m_camera; // Store the camera
+    BlockRegistry& m_blockRegistryRef; // Reference to the block registry
     World& m_world; // Reference to the world data
 
     // --- Depth Buffer Resources ---

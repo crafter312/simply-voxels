@@ -128,9 +128,10 @@ void HelloVulkanApp::initVulkan() {
         surface,
         *vulkanDevice, // Pass the VulkanDevice object
         *world,        // Pass the World object by reference
+        *blockRegistry, // Pass the BlockRegistry object by reference
         camera
     );
-    renderer->init(*blockRegistry); // Pass BlockRegistry to init()
+    renderer->init(); // init no longer takes BlockRegistry
                                     // --- End Renderer Init ---
 
     std::cout << "Vulkan initialization complete." << std::endl;

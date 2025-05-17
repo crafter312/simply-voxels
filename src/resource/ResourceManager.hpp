@@ -7,6 +7,8 @@
 #include <memory>
 #include <set> // For std::set in buildTextureAtlas implementation details
 #include <vulkan/vulkan.h> // For Vulkan types needed by VulkanTextureLoader
+#include <mutex>        // For std::unique_lock
+#include <shared_mutex> // For std::shared_mutex
 
 #include "ModelLoader.hpp"         // For ModelData
 #include "VulkanTextureLoader.hpp" // For VulkanTextureLoader
@@ -38,7 +40,7 @@ public:
     ResourceManager& operator=(ResourceManager&&) = delete;
 
     // Processes block definitions from the registry, stores their asset paths, and optionally pre-loads assets.
-    void loadAssetsFromRegistry(const BlockRegistry& registry, bool preLoadAll = true);
+    void loadAssetsFromRegistry(BlockRegistry& registry, bool preLoadAll = true); // Now takes non-const BlockRegistry
 
     // Builds the texture atlas from all loaded unique block textures.
     // Should be called after all individual textures are loaded (e.g., at the end of loadAssetsFromRegistry).
@@ -60,10 +62,11 @@ private:
     VkPhysicalDevice physicalDevice_;
     VkDevice device_;
     VkCommandPool commandPool_;
-    VkQueue graphicsQueue_;
+    VkQueue graphicsQueue_; // Added this member
 
-    mutable std::map<std::string, std::shared_ptr<ModelData>> loadedModels_; // Cache for CPU-side model data
-    mutable std::map<std::string, std::shared_ptr<VulkanTextureLoader>> loadedTextures_; // Cache for textures
+    mutable std::map<std::string, std::shared_ptr<ModelData>> loadedModels_; // Cache, mutable for const methods
+    mutable std::map<std::string, std::shared_ptr<VulkanTextureLoader>> loadedTextures_; // Cache, mutable for const methods
+    mutable std::shared_mutex m_cache_mutex; // Mutex to protect loadedModels_ and loadedTextures_
     std::map<uint16_t, ResolvedBlockAssets> m_resolvedBlockAssets; // Stores resolved asset pointers keyed by block ID
 
     std::string defaultModelPath_;
@@ -71,6 +74,15 @@ private:
 
     std::shared_ptr<ModelData> internalLoadModel(const std::string& path, bool isFallbackAttempt = false) const;
     std::shared_ptr<VulkanTextureLoader> internalLoadTexture(const std::string& path, bool isFallbackAttempt = false) const;
+
+    // Helper to analyze a model and set block properties
+    void analyzeModelAndSetProperties(Block& blockDef, const ModelData& modelData) const;
+
+    // Constants for model analysis
+    static constexpr float MODEL_ANALYSIS_EPSILON = 1e-4f;
+    static constexpr float MODEL_ANALYSIS_MIN_EXTENT = -0.5f;
+    static constexpr float MODEL_ANALYSIS_MAX_EXTENT = 0.5f;
+    static constexpr float MODEL_ANALYSIS_PLANE_DISTANCE = 0.5f;
 
     // Texture Atlas specific members
     std::unique_ptr<VulkanTextureLoader> m_textureAtlas; // Will hold the VkImage, VkImageView, VkSampler for the atlas

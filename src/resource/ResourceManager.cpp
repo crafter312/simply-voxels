@@ -4,12 +4,14 @@
 #include <set>      // For std::set to collect unique texture paths
 #include <cmath>    // For ceil/sqrt in atlas dimension calculation
 #include <algorithm> // For std::max
+#include <limits>    // For std::numeric_limits in model analysis
 // Block.hpp and BlockRegistry.hpp are included via ResourceManager.hpp
 // #include "../Block.hpp"
 // #include "../BlockRegistry.hpp"
 
 ResourceManager::ResourceManager(VkPhysicalDevice physicalDevice, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue)
-    : physicalDevice_(physicalDevice), device_(device), commandPool_(commandPool), graphicsQueue_(graphicsQueue),
+    : physicalDevice_(physicalDevice), device_(device), commandPool_(commandPool), 
+      graphicsQueue_(graphicsQueue), // Initialize the new member
       defaultModelPath_(""), defaultTexturePath_("") {
     if (physicalDevice_ == VK_NULL_HANDLE || device_ == VK_NULL_HANDLE || commandPool_ == VK_NULL_HANDLE || graphicsQueue_ == VK_NULL_HANDLE) {
         throw std::runtime_error("ResourceManager received null Vulkan handles during construction!");
@@ -25,7 +27,7 @@ ResourceManager::~ResourceManager() {
     std::cout << "ResourceManager destroyed." << std::endl;
 }
 
-void ResourceManager::loadAssetsFromRegistry(const BlockRegistry& registry, bool preLoadAll) {
+void ResourceManager::loadAssetsFromRegistry(BlockRegistry& registry, bool preLoadAll) { // Takes non-const registry
     std::cout << "ResourceManager: Loading assets from block registry..." << std::endl;
     const auto& allDefinitions = registry.getAllBlockDefinitions();
     m_resolvedBlockAssets.clear(); // Clear any previously resolved assets
@@ -42,6 +44,15 @@ void ResourceManager::loadAssetsFromRegistry(const BlockRegistry& registry, bool
         std::string modelPathToLoad = !blockDef.getModelPath().empty() ? blockDef.getModelPath() : defaultModelPath_;
         if (!modelPathToLoad.empty()) {
             resolved.modelData = internalLoadModel(modelPathToLoad);
+            // If model loaded successfully, analyze it and set properties on the block definition
+            if (resolved.modelData) {
+                Block* modifiableBlockDef = registry.getBlockDefinitionForModification(blockID);
+                if (modifiableBlockDef) {
+                    this->analyzeModelAndSetProperties(*modifiableBlockDef, *resolved.modelData);
+                } else {
+                    std::cerr << "ResourceManager Error: Could not get modifiable block definition for ID " << blockID << " for model analysis." << std::endl;
+                }
+            }
         } else if (blockDef.getModelPath().empty()) { // Only log if specific block had no path and no default
             std::cout << "ResourceManager: Block ID " << blockID << " has no model path, using default: " << defaultModelPath_ << std::endl;
         }
@@ -83,13 +94,18 @@ std::shared_ptr<ModelData> ResourceManager::internalLoadModel(const std::string&
         throw std::runtime_error("ResourceManager: Attempted to load model with an empty path.");
     }
 
-    auto it = loadedModels_.find(path);
-    if (it != loadedModels_.end()) {
-        return it->second;
+    // Attempt to find with a shared lock first
+    {
+        std::shared_lock<std::shared_mutex> lock(m_cache_mutex);
+        auto it = loadedModels_.find(path);
+        if (it != loadedModels_.end()) {
+            return it->second;
+        }
     }
 
     std::cout << "ResourceManager: Loading model: " << path << std::endl;
     auto newModelDataPtr = std::make_shared<ModelData>();
+    // Actual file loading is done outside the unique lock to avoid holding it for long
     if (!ModelLoader::loadGltfModel(path, *newModelDataPtr)) {
         std::cerr << "ResourceManager Error: Failed to load model: " << path << std::endl;
         if (!isFallbackAttempt && !defaultModelPath_.empty() && path != defaultModelPath_) {
@@ -99,8 +115,18 @@ std::shared_ptr<ModelData> ResourceManager::internalLoadModel(const std::string&
         // Return nullptr if critical failure and no fallback, or fallback also failed
         return nullptr;
     }
-    loadedModels_[path] = newModelDataPtr;
-    return newModelDataPtr;
+
+    // Acquire unique lock to insert into the cache
+    {
+        std::unique_lock<std::shared_mutex> lock(m_cache_mutex);
+        // Re-check in case another thread loaded and inserted it while we were loading
+        auto it = loadedModels_.find(path);
+        if (it != loadedModels_.end()) {
+            return it->second; // Return already cached item
+        }
+        loadedModels_[path] = newModelDataPtr;
+        return newModelDataPtr;
+    }
 }
 
 std::shared_ptr<VulkanTextureLoader> ResourceManager::internalLoadTexture(const std::string& path, bool isFallbackAttempt) const {
@@ -108,16 +134,20 @@ std::shared_ptr<VulkanTextureLoader> ResourceManager::internalLoadTexture(const 
         throw std::runtime_error("ResourceManager: Attempted to load texture with an empty path.");
     }
 
-    auto it = loadedTextures_.find(path);
-    if (it != loadedTextures_.end()) {
-        return it->second;
+    // Attempt to find with a shared lock first
+    {
+        std::shared_lock<std::shared_mutex> lock(m_cache_mutex);
+        auto it = loadedTextures_.find(path);
+        if (it != loadedTextures_.end()) {
+            return it->second;
+        }
     }
 
     std::cout << "ResourceManager: Loading texture: " << path << std::endl;
+    std::shared_ptr<VulkanTextureLoader> newTextureLoader;
     try {
-        auto newTextureLoader = std::make_shared<VulkanTextureLoader>(physicalDevice_, device_, commandPool_, graphicsQueue_, path);
-        loadedTextures_[path] = newTextureLoader;
-        return newTextureLoader;
+        // Actual texture loading (file I/O, Vulkan calls) done outside unique lock
+        newTextureLoader = std::make_shared<VulkanTextureLoader>(physicalDevice_, device_, commandPool_, graphicsQueue_, path);
     } catch (const std::runtime_error& e) {
         std::cerr << "ResourceManager Error: Failed to load texture '" << path << "': " << e.what() << std::endl;
         if (!isFallbackAttempt && !defaultTexturePath_.empty() && path != defaultTexturePath_) {
@@ -126,6 +156,18 @@ std::shared_ptr<VulkanTextureLoader> ResourceManager::internalLoadTexture(const 
         }
         // Return nullptr if critical failure and no fallback, or fallback also failed
         return nullptr;
+    }
+
+    // Acquire unique lock to insert into the cache
+    {
+        std::unique_lock<std::shared_mutex> lock(m_cache_mutex);
+        // Re-check in case another thread loaded and inserted it
+        auto it = loadedTextures_.find(path);
+        if (it != loadedTextures_.end()) {
+            return it->second; // Return already cached item
+        }
+        loadedTextures_[path] = newTextureLoader;
+        return newTextureLoader;
     }
 }
 
@@ -170,6 +212,55 @@ std::shared_ptr<VulkanTextureLoader> ResourceManager::getTextureForBlockType(uin
     throw std::runtime_error("ResourceManager Critical Error: Could not load texture for block ID " + std::to_string(blockID) +
                              " and default texture ('" + defaultTexturePath_ + "') is either not set or failed to load.");
 }
+
+void ResourceManager::analyzeModelAndSetProperties(Block& blockDef, const ModelData& modelData) const {
+    if (modelData.vertices.empty()) {
+        // Defaults are already set in Block constructor (no full faces, FULL_MODEL_IF_ANY_EXPOSED strategy)
+        return;
+    }
+
+    std::array<bool, 6> detectedFullFaces{};
+
+    for (int i = 0; i < 6; ++i) {
+        FaceDirection currentFaceDir = static_cast<FaceDirection>(i);
+        
+        float minU_coord = std::numeric_limits<float>::max();
+        float maxU_coord = std::numeric_limits<float>::lowest();
+        float minV_coord = std::numeric_limits<float>::max();
+        float maxV_coord = std::numeric_limits<float>::lowest();
+        bool foundVerticesOnPlane = false;
+
+        for (const auto& vertex : modelData.vertices) {
+            float primaryCoord;
+            float uCoord, vCoord;
+
+            if (i == 0 || i == 1) { // +/- X faces (normal along X)
+                primaryCoord = vertex.pos.x; uCoord = vertex.pos.y; vCoord = vertex.pos.z;
+            } else if (i == 2 || i == 3) { // +/- Y faces (normal along Y)
+                primaryCoord = vertex.pos.y; uCoord = vertex.pos.x; vCoord = vertex.pos.z;
+            } else { // +/- Z faces (normal along Z)
+                primaryCoord = vertex.pos.z; uCoord = vertex.pos.x; vCoord = vertex.pos.y;
+            }
+
+            float expectedPrimaryCoord = (i % 2 == 0) ? MODEL_ANALYSIS_PLANE_DISTANCE : -MODEL_ANALYSIS_PLANE_DISTANCE;
+            if (std::abs(primaryCoord - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON) {
+                foundVerticesOnPlane = true;
+                minU_coord = std::min(minU_coord, uCoord);
+                maxU_coord = std::max(maxU_coord, uCoord);
+                minV_coord = std::min(minV_coord, vCoord);
+                maxV_coord = std::max(maxV_coord, vCoord);
+            }
+        }
+
+        if (foundVerticesOnPlane &&
+            std::abs(minU_coord - MODEL_ANALYSIS_MIN_EXTENT) < MODEL_ANALYSIS_EPSILON && std::abs(maxU_coord - MODEL_ANALYSIS_MAX_EXTENT) < MODEL_ANALYSIS_EPSILON &&
+            std::abs(minV_coord - MODEL_ANALYSIS_MIN_EXTENT) < MODEL_ANALYSIS_EPSILON && std::abs(maxV_coord - MODEL_ANALYSIS_MAX_EXTENT) < MODEL_ANALYSIS_EPSILON) {
+            detectedFullFaces[i] = true;
+        }
+        blockDef.setFullOccludingFace(currentFaceDir, detectedFullFaces[i]);
+    }
+}
+
 
 namespace { // Anonymous namespace for helper functions
 

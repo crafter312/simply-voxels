@@ -26,6 +26,14 @@ const Block* BlockRegistry::getBlockDefinition(uint16_t id) const {
     return nullptr; // Return nullptr if not found
 }
 
+Block* BlockRegistry::getBlockDefinitionForModification(uint16_t id) {
+    auto it = m_blockDefinitions.find(id);
+    if (it != m_blockDefinitions.end()) {
+        return &it->second; // Return a pointer to the modifiable Block object
+    }
+    return nullptr; // Return nullptr if not found
+}
+
 const std::map<uint16_t, Block>& BlockRegistry::getAllBlockDefinitions() const {
     return m_blockDefinitions;
 }

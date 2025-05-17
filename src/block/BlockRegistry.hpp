@@ -21,6 +21,7 @@ public:
 
     void registerBlockType(uint16_t id, const std::string& modelPath, const std::string& texturePath);
     const Block* getBlockDefinition(uint16_t id) const;
+    Block* getBlockDefinitionForModification(uint16_t id); // Added this line
     const std::map<uint16_t, Block>& getAllBlockDefinitions() const;
 
 private:

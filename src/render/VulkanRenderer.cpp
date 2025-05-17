@@ -34,11 +34,12 @@ const size_t VulkanRenderer::MAX_CONCURRENT_MESHING_TASKS = []() {
     return std::max(1u, num_cores - 1); // Use num_cores - 1, but at least 1
 }();
 
-VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, std::shared_ptr<Camera> cameraPtr)
+VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, BlockRegistry& blockRegistryRef, std::shared_ptr<Camera> cameraPtr)
     : window(glfwWindow), // Initialized with a reference
       instanceRef(instance),
       surfaceRef(surface),
       m_vulkanDeviceRef(vulkanDevice),
+      m_blockRegistryRef(blockRegistryRef), // Initialize block registry reference
       m_world(worldRef), // Initialize world reference
       m_camera(cameraPtr)
 {
@@ -149,7 +150,7 @@ VulkanRenderer::~VulkanRenderer() {
     std::cout << "VulkanRenderer cleanup complete." << std::endl;
 }
 
-void VulkanRenderer::init(const BlockRegistry& blockRegistryRef) {
+void VulkanRenderer::init() {
     std::cout << "Initializing VulkanRenderer..." << std::endl;
     // Initialize swap chain (creates chain and image views)
     swapChainManager->init();
@@ -161,10 +162,10 @@ void VulkanRenderer::init(const BlockRegistry& blockRegistryRef) {
     // --- Initialize ResourceManager ---
     resourceManager = std::make_unique<ResourceManager>(m_vulkanDeviceRef.getPhysicalDevice(), m_vulkanDeviceRef.getLogicalDevice(), commandPool, m_vulkanDeviceRef.getGraphicsQueue());
     resourceManager->setDefaultModelPath("../resources/models/cube.glb"); // Default cube
-    resourceManager->setDefaultTexturePath("../resources/textures/default_error.png"); // Default error texture    
-    resourceManager->loadAssetsFromRegistry(blockRegistryRef, true); // Load assets using the passed BlockRegistry reference
+    resourceManager->setDefaultTexturePath("../resources/textures/default_error.png"); // Default error texture
+    resourceManager->loadAssetsFromRegistry(m_blockRegistryRef, true); // Load assets using the member BlockRegistry reference
     // Build the texture atlas.
-    resourceManager->buildTextureAtlas(blockRegistryRef);
+    resourceManager->buildTextureAtlas(m_blockRegistryRef);
     std::cout << "Assets loaded by ResourceManager." << std::endl;
     // Create buffer manager now that command pool and graphics queue exist
     // This needs to be created before depth resources and render pass if render pass depends on depth format
