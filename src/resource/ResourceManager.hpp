@@ -17,7 +17,8 @@
 
 // It's assumed glm/glm.hpp or equivalent is included for glm::vec2
 struct ResolvedBlockAssets {
-    std::shared_ptr<const ModelData> modelData = nullptr; // Model data is typically read-only after loading
+    // std::shared_ptr<const ModelData> modelData = nullptr; // Old: raw model data
+    std::shared_ptr<const SeparableModelData> separableModelData = nullptr; // New: processed model data
     std::shared_ptr<VulkanTextureLoader> textureLoader = nullptr;    std::string texturePathKey; // The actual path (original or default) used for this block's texture
     // You could add other frequently accessed block properties here if needed (e.g., isSolid)
 };
@@ -46,7 +47,7 @@ public:
     // Should be called after all individual textures are loaded (e.g., at the end of loadAssetsFromRegistry).
     void buildTextureAtlas(const BlockRegistry& registry);
 
-    std::shared_ptr<const ModelData> getModelForBlockType(uint16_t blockID) const;
+    std::shared_ptr<const SeparableModelData> getModelForBlockType(uint16_t blockID) const;
     std::shared_ptr<VulkanTextureLoader> getTextureForBlockType(uint16_t blockID) const;
 
     void setDefaultModelPath(const std::string& path);
@@ -76,13 +77,12 @@ private:
     std::shared_ptr<VulkanTextureLoader> internalLoadTexture(const std::string& path, bool isFallbackAttempt = false) const;
 
     // Helper to analyze a model and set block properties
-    void analyzeModelAndSetProperties(Block& blockDef, const ModelData& modelData) const;
+    std::shared_ptr<SeparableModelData> analyzeModelAndSetProperties(Block& blockDef, const ModelData& rawModelData) const;
 
     // Constants for model analysis
     static constexpr float MODEL_ANALYSIS_EPSILON = 1e-4f;
-    static constexpr float MODEL_ANALYSIS_MIN_EXTENT = -0.5f;
-    static constexpr float MODEL_ANALYSIS_MAX_EXTENT = 0.5f;
-    static constexpr float MODEL_ANALYSIS_PLANE_DISTANCE = 0.5f;
+    static constexpr float MODEL_ANALYSIS_MIN_EXTENT = 0.0f; // Changed for 0-1 range
+    static constexpr float MODEL_ANALYSIS_MAX_EXTENT = 1.0f; // Changed for 0-1 range
 
     // Texture Atlas specific members
     std::unique_ptr<VulkanTextureLoader> m_textureAtlas; // Will hold the VkImage, VkImageView, VkSampler for the atlas

@@ -2,6 +2,7 @@
 #include "World.hpp" // For World class definition (to query neighbors)
 #include "../resource/ResourceManager.hpp" // For ResourceManager definition
 #include "../block/Blocks.hpp" // For Blocks::AIR_ID
+#include "../block/BlockRegistry.hpp" // Include for BlockRegistry type
 
 #include <array>
 #include <iostream> // For debugging
@@ -60,8 +61,9 @@ MeshData generateMesh(
     glm::ivec3 chunkCoord, // Use passed chunkCoord
     std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> currentChunkBlockDataSnapshot, // Renamed for clarity
     bool isCurrentChunkAllAir,    // Renamed for clarity
-    const World& world, 
-    const ResourceManager& resourceManager) {
+    const World& world,
+    const ResourceManager& resourceManager,
+    const BlockRegistry& blockRegistry) { // Added blockRegistry
 
     MeshData meshData;
 
@@ -109,15 +111,16 @@ MeshData generateMesh(
                 }
 
                 glm::ivec3 currentBlockLocalPos_ivec(x, y, z);
-                bool isExposed = false;
+                
+                bool cellFaceIsActuallyExposed[6] = {false}; // True if this cell face is open to air/non-occluding neighbor
+                bool anyCellFaceIsActuallyExposed = false;
 
-                // 3. Check 6 faces for exposure
+                // 3. Determine exposure status for all 6 conceptual cell faces
                 for (int faceIndex = 0; faceIndex < 6; ++faceIndex) { // Iterate 6 faces
                     glm::ivec3 neighborOffset = NEIGHBOR_OFFSETS[faceIndex];
                     glm::ivec3 neighborLocalPosRelativeToCurrentChunk = currentBlockLocalPos_ivec + neighborOffset;
-
                     uint16_t neighborBlockID_val;
-                    bool neighborIsOpaque;
+                    bool neighborOccludesThisFace = true; // Assume occluded by default
 
                     // Check if neighbor is within the current chunk
                     if (neighborLocalPosRelativeToCurrentChunk.x >= 0 && neighborLocalPosRelativeToCurrentChunk.x < CHUNK_WIDTH &&
@@ -130,18 +133,26 @@ MeshData generateMesh(
                             neighborLocalPosRelativeToCurrentChunk.z
                         );
                         neighborBlockID_val = (*currentChunkBlockDataSnapshot)[neighborIdxInSnapshot];
-                        // Basic opacity: non-air is opaque. Extend with resourceManager.isBlockOpaque(neighborBlockID_val) if needed.
-                        neighborIsOpaque = (neighborBlockID_val != Blocks::AIR_ID);
+                        
+                        if (neighborBlockID_val == Blocks::AIR_ID) {
+                            neighborOccludesThisFace = false;
+                        } else {
+                            // Check if the solid neighbor has a full face pointing back at us
+                            neighborOccludesThisFace = blockRegistry.isBlockFaceFull(neighborBlockID_val, Block::getOppositeFace(static_cast<FaceDirection>(faceIndex)));
+                        }
                     } else {
                         // Neighbor is in an adjacent chunk, use the cache
                         const CachedNeighborData& cachedNeighbor = neighborCache[faceIndex];
 
                         if (!cachedNeighbor.isGeneratedAndExists) {
-                            neighborIsOpaque = true; // Treat as opaque if neighbor chunk is not ready/non-existent
+                            neighborOccludesThisFace = true; // Treat as occluded if neighbor chunk not ready/non-existent
                         } else {
                             if (cachedNeighbor.isAllAir) {
                                 neighborBlockID_val = Blocks::AIR_ID;
+                                neighborOccludesThisFace = false;
                             } else {
+                                // Neighbor chunk exists, is generated, and not all air. Get its block ID.
+                                // This part assumes blockDataSnapshot is valid if not allAir.
                                 // Calculate local coordinates within the *neighbor* chunk
                                 // (coord + CHUNK_DIM) % CHUNK_DIM handles negative results from subtraction correctly for modulo.
                                 glm::ivec3 localPosInNeighborChunk(
@@ -156,34 +167,61 @@ MeshData generateMesh(
                                         localPosInNeighborChunk.y,
                                         localPosInNeighborChunk.z
                                     )];
+                                    if (neighborBlockID_val == Blocks::AIR_ID) { // Should be rare if not isAllAir
+                                        neighborOccludesThisFace = false;
+                                    } else {
+                                        neighborOccludesThisFace = blockRegistry.isBlockFaceFull(neighborBlockID_val, Block::getOppositeFace(static_cast<FaceDirection>(faceIndex)));
+                                    }
                                 } else {
                                     // Should be caught by isAllAir, but as a fallback:
-                                    neighborBlockID_val = Blocks::AIR_ID; 
+                                    neighborBlockID_val = Blocks::AIR_ID;
+                                    neighborOccludesThisFace = false; // Effectively air
                                 }
                             }
-                            neighborIsOpaque = (neighborBlockID_val != Blocks::AIR_ID);
                         }
                     }
 
-                    if (!neighborIsOpaque) {
-                        isExposed = true;
-                        break; // Found an exposed face, no need to check other faces for this block
+                    if (!neighborOccludesThisFace) {
+                        cellFaceIsActuallyExposed[faceIndex] = true;
+                        anyCellFaceIsActuallyExposed = true;
+                        // DO NOT break; we need to check all 6 faces.
                     }
                 } // End face check loop
 
-                if (isExposed) {
-                    std::shared_ptr<const ModelData> modelDataPtr = resourceManager.getModelForBlockType(blockID);
+                if (anyCellFaceIsActuallyExposed) {
+                    // Get the SeparableModelData
+                    std::shared_ptr<const SeparableModelData> separableModelDataPtr = resourceManager.getModelForBlockType(blockID);
                     AtlasTextureInfo atlasInfo = resourceManager.getBlockAtlasInfo(blockID); // Get atlas info
-                    if (modelDataPtr) { // Check if the model data was successfully loaded
+                    const Block* blockDef = blockRegistry.getBlockDefinition(blockID); // Get block definition
+
+                    if (separableModelDataPtr && blockDef) { // Check if the model data and block def were successfully loaded
                         // Convert ivec3 to vec3 for addBlockModelToMeshData
                         glm::vec3 currentBlockLocalPos_vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
-                        addBlockModelToMeshData(meshData, *modelDataPtr, currentBlockLocalPos_vec3, atlasInfo); // Pass atlas info
+
+                        // 1. Add specific "full" canonical faces if they are defined for the block AND the cell face is exposed
+                        for (int faceIdx = 0; faceIdx < 6; ++faceIdx) {
+                            if (cellFaceIsActuallyExposed[faceIdx]) { // If this specific cell face is open
+                                FaceDirection currentBlockDir = static_cast<FaceDirection>(faceIdx);
+                                // And if the current block *has* a defined canonical face for this direction
+                                if (blockDef->hasFullOccludingFace(currentBlockDir)) { 
+                                    const ModelData& faceGeom = separableModelDataPtr->canonicalFaces[faceIdx];
+                                    if (!faceGeom.vertices.empty()) {
+                                        addBlockModelToMeshData(meshData, faceGeom, currentBlockLocalPos_vec3, atlasInfo);
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. Add the "remaining" geometry (non-canonical parts, or whole model if no full faces)
+                        //    This part is added if *any* cell face was exposed.
+                        if (!separableModelDataPtr->remainingGeometry.vertices.empty()) {
+                            addBlockModelToMeshData(meshData, separableModelDataPtr->remainingGeometry, currentBlockLocalPos_vec3, atlasInfo);
+                        }
                     }
                 }
             }
         } // End y loop
     } // End z loop
-
     return meshData;
 }
 

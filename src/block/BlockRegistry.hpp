@@ -24,6 +24,9 @@ public:
     Block* getBlockDefinitionForModification(uint16_t id); // Added this line
     const std::map<uint16_t, Block>& getAllBlockDefinitions() const;
 
+    // New method to efficiently query face properties
+    bool isBlockFaceFull(uint16_t blockID, FaceDirection dir) const;
+
 private:
     std::map<uint16_t, Block> m_blockDefinitions; // Stores Block objects, keyed by their uint16_t ID
 };

@@ -37,3 +37,13 @@ Block* BlockRegistry::getBlockDefinitionForModification(uint16_t id) {
 const std::map<uint16_t, Block>& BlockRegistry::getAllBlockDefinitions() const {
     return m_blockDefinitions;
 }
+
+bool BlockRegistry::isBlockFaceFull(uint16_t blockID, FaceDirection dir) const {
+    const Block* blockDef = getBlockDefinition(blockID);
+    if (blockDef) {
+        return blockDef->hasFullOccludingFace(dir);
+    }
+    // If block ID is not found (e.g., it's implicitly air or an undefined block),
+    // it does not have a full occluding face.
+    return false;
+}

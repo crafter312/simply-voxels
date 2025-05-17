@@ -13,6 +13,7 @@
 struct AtlasTextureInfo; // Forward declare from ResourceManager.hpp (or include ResourceManager.hpp if not too heavy)
 class World;
 class ResourceManager; // Assuming ResourceManager provides block properties and texture atlas info
+class BlockRegistry;   // Forward declare BlockRegistry
 struct ModelData;      // Forward declaration for ModelData
 
 namespace ChunkMesher {
@@ -34,14 +35,16 @@ struct MeshData {
  * @param isChunkAllAir True if the chunk is known to be all air.
  * @param world The World object, used to query blocks in neighboring chunks for face culling.
  * @param resourceManager The ResourceManager, used to get block properties and texture information.
+ * @param blockRegistry The BlockRegistry, used to query block face properties.
  * @return MeshData A struct containing the generated vertices and indices.
  */
 MeshData generateMesh(
     glm::ivec3 chunkCoord,
     std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> blockDataSnapshot,
     bool isChunkAllAir,
-    const World& world, 
-    const ResourceManager& resourceManager);
+    const World& world,
+    const ResourceManager& resourceManager,
+    const BlockRegistry& blockRegistry); // Added blockRegistry
 
 // Function to add an entire block's model to the chunk's mesh data
 void addBlockModelToMeshData(MeshData& chunkMeshData,

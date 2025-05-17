@@ -779,9 +779,6 @@ void VulkanRenderer::processChunkChanges() {
     // vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Kept for now for safety, but a target for future optimization.
 
     // --- Stage 1: Check for completed mesh futures ---
-    if (!m_pendingMeshFutures.empty()) { // Only log if there are pending futures
-        std::cout << "VulkanRenderer::processChunkChanges: Checking for completed mesh futures. Pending: " << m_pendingMeshFutures.size() << std::endl;
-    }
     bool gpu_waited_this_frame_stage1 = false; // Track if we've waited for GPU idle in this stage
     // Iterate backwards to allow safe removal
     for (auto i = m_pendingMeshFutures.size(); i-- > 0;) {
@@ -813,10 +810,6 @@ void VulkanRenderer::processChunkChanges() {
 
     // --- Stage 2: Identify chunks needing meshing and launch new async tasks ---
     const auto& changedChunks = m_world.getChangedChunks();
-    if (!changedChunks.empty()) { // Only log if there are changed chunks
-        std::cout << "VulkanRenderer::processChunkChanges: Identifying chunks needing meshing." << std::endl;
-        std::cout << "  Changed chunks reported by World: " << changedChunks.size() << std::endl;
-    }
     std::set<glm::ivec3, IVec3Comparator> chunksToActuallyProcess = changedChunks; // Copy to iterate
     // Commented out the general "Changed chunks reported by World" as it's now conditional
 
@@ -824,32 +817,11 @@ void VulkanRenderer::processChunkChanges() {
         Chunk* chunk = m_world.getChunk(chunkCoord); // Check if chunk still exists
 
         if (chunk) { // Chunk exists: modified or newly loaded, needs meshing
-            std::cout << "  Processing changed chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "]. Exists." << std::endl;
             if (m_pendingMeshFutures.size() < MAX_CONCURRENT_MESHING_TASKS) {
                 // Only launch a new task if one isn't already submitted for this chunk
                 if (m_submittedMeshTasks.find(chunkCoord) == m_submittedMeshTasks.end()) {
-                    std::cout << "    No pending task. Launching new mesh task." << std::endl;
-
-                    // --- Added Detailed Logging (Keep this for now) ---
                     auto snapshot = chunk->getBlockDataSnapshot();
                     bool isAllAir = chunk->isAllAir(); // Get current all-air status
-                    
-                    
-                    if (snapshot) {
-                        int solidBlocksInSnapshot = 0;
-                        for(const auto& block_id_in_snapshot : *snapshot) { // Renamed to avoid conflict
-                            if (block_id_in_snapshot != Blocks::AIR_ID) solidBlocksInSnapshot++;
-                        }                        
-                        // Log details regardless of solid count, but maybe less verbosely
-                        // std::cout << "VulkanRenderer: CONSIDERING mesh task for chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "]." << std::endl;
-                        // std::cout << "  Is chunk generated? " << chunk->isGenerated() << std::endl;
-                            std::cout << "  Chunk.isAllAir() for mesher: " << isAllAir << std::endl;
-                            std::cout << "  Chunk.getBlockDataSnapshot() is null: " << (snapshot == nullptr) << std::endl;
-                            std::cout << "  Solid blocks in snapshot: " << solidBlocksInSnapshot << std::endl;
-                    }
-                    // --- End of Added Logging ---
-                    //std::cout << "VulkanRenderer: LAUNCHING mesh task for chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "]." << std::endl;
-
                     glm::ivec3 coordForTask = chunk->getChunkCoord(); // Get coord from chunk
 
                     // Launch async task. Pass world and resourceManager by const reference.
@@ -865,8 +837,9 @@ void VulkanRenderer::processChunkChanges() {
                             [ capturedCoord = coordForTask, // Capture chunkCoord by value for the task
                               capturedSnapshot = std::move(snapshot), // Move chunk's own snapshot
                               capturedIsAllAir = isAllAir,           // Capture isAllAir by value
-                              &world_ref = m_world,
-                              &res_man_ref = *resourceManager         // Capture resourceManager by reference
+                              &world_ref = m_world,                  // Capture world by reference
+                              &res_man_ref = *resourceManager,       // Capture resourceManager by reference
+                              &block_reg_ref = m_blockRegistryRef    // Capture blockRegistry by reference
                             ]() mutable -> ChunkMesher::MeshData { // Added mutable, returns MeshData
                                 // Call the meshing function with neighbor snapshots
                                 ChunkMesher::MeshData meshDataResult = ChunkMesher::generateMesh(
@@ -874,7 +847,8 @@ void VulkanRenderer::processChunkChanges() {
                                     std::move(capturedSnapshot), // Pass the moved snapshot
                                     capturedIsAllAir,
                                     world_ref,
-                                    res_man_ref
+                                    res_man_ref,
+                                    block_reg_ref // Pass blockRegistry
                                 );
                                 // Return the pair
                                 return meshDataResult; // No longer returning pair
@@ -883,11 +857,8 @@ void VulkanRenderer::processChunkChanges() {
                         m_world.acknowledgeChunkChangeProcessed(coordForTask); // Mark as processed by launching a task
                         m_submittedMeshTasks.insert(coordForTask); // Mark as submitted
                 }
-                else { std::cout << "    Skipping. Task already pending." << std::endl; }
             }
-            else { std::cout << "    Skipping. Max concurrent tasks reached." << std::endl; }
         } else { // Chunk does not exist in world map: it was unloaded
-            std::cout << "  Processing changed chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "]. Does NOT exist (unloaded)." << std::endl;
             vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Wait before this specific buffer manipulation
             auto renderDataIt = m_chunkRenderData.find(chunkCoord);
             // If it was unloaded, it might have had a pending mesh task or existing render data.
@@ -895,13 +866,9 @@ void VulkanRenderer::processChunkChanges() {
             if (renderDataIt != m_chunkRenderData.end()) {
                 destroyChunkRenderData(renderDataIt->second);
                 m_chunkRenderData.erase(renderDataIt);
-                // std::cout << "Destroyed render data for unloaded chunk: " << glm::to_string(chunkCoord) << std::endl;
             }
             m_world.acknowledgeChunkChangeProcessed(chunkCoord); // Mark as processed (unloaded)
         }
-    }
-    if (!changedChunks.empty()) { // Only log if there were changed chunks to process
-        std::cout << "VulkanRenderer::processChunkChanges: Finished processing changed chunks." << std::endl;
     }
     // m_world.clearChangedChunks(); // REMOVED: Now handled by acknowledgeChunkChangeProcessed
 }

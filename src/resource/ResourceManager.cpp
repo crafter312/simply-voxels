@@ -42,15 +42,17 @@ void ResourceManager::loadAssetsFromRegistry(BlockRegistry& registry, bool preLo
         // The internalLoadModel/Texture calls will load from disk if not already cached,
         // effectively handling the preLoadAll intention.
         std::string modelPathToLoad = !blockDef.getModelPath().empty() ? blockDef.getModelPath() : defaultModelPath_;
+        std::shared_ptr<ModelData> rawModelData = nullptr; // Store raw model data temporarily
         if (!modelPathToLoad.empty()) {
-            resolved.modelData = internalLoadModel(modelPathToLoad);
+            rawModelData = internalLoadModel(modelPathToLoad); // Load raw model
             // If model loaded successfully, analyze it and set properties on the block definition
-            if (resolved.modelData) {
+            if (rawModelData) {
                 Block* modifiableBlockDef = registry.getBlockDefinitionForModification(blockID);
                 if (modifiableBlockDef) {
-                    this->analyzeModelAndSetProperties(*modifiableBlockDef, *resolved.modelData);
+                    // Analyze properties and get the separated model data
+                    resolved.separableModelData = this->analyzeModelAndSetProperties(*modifiableBlockDef, *rawModelData);
                 } else {
-                    std::cerr << "ResourceManager Error: Could not get modifiable block definition for ID " << blockID << " for model analysis." << std::endl;
+                    std::cerr << "ResourceManager Error: Could not get modifiable block definition for ID " << blockID << " for model analysis and separation." << std::endl;
                 }
             }
         } else if (blockDef.getModelPath().empty()) { // Only log if specific block had no path and no default
@@ -171,16 +173,16 @@ std::shared_ptr<VulkanTextureLoader> ResourceManager::internalLoadTexture(const 
     }
 }
 
-std::shared_ptr<const ModelData> ResourceManager::getModelForBlockType(uint16_t blockID) const {
+std::shared_ptr<const SeparableModelData> ResourceManager::getModelForBlockType(uint16_t blockID) const {
     auto it = m_resolvedBlockAssets.find(blockID);
-    if (it != m_resolvedBlockAssets.end() && it->second.modelData) {
-        return it->second.modelData;
+    if (it != m_resolvedBlockAssets.end() && it->second.separableModelData) {
+        return it->second.separableModelData;
     }
 
     // If not found in resolved assets or modelData is null, try default
     std::cerr << "ResourceManager Warning: No resolved model for block ID " << blockID 
               << ". Attempting to use default model: " << defaultModelPath_ << std::endl;
-    if (!defaultModelPath_.empty()) {
+    /*if (!defaultModelPath_.empty()) { // Default model would also need to be separable, this logic needs adjustment
         auto defaultModel = internalLoadModel(defaultModelPath_, true);
         if (defaultModel) {
             return defaultModel;
@@ -188,7 +190,8 @@ std::shared_ptr<const ModelData> ResourceManager::getModelForBlockType(uint16_t 
         // If defaultModel is nullptr here, internalLoadModel failed to load the default
     }
     // If we reach here, either no default path was set, or loading the default model failed.
-    throw std::runtime_error("ResourceManager Critical Error: Could not load model for block ID " + std::to_string(blockID) +
+    */ // TODO: Handle default separable model loading if needed. For now, throw if specific not found.
+    throw std::runtime_error("ResourceManager Critical Error: Could not load separable model for block ID " + std::to_string(blockID) +
                              " and default model ('" + defaultModelPath_ + "') is either not set or failed to load.");
 }
 
@@ -213,12 +216,36 @@ std::shared_ptr<VulkanTextureLoader> ResourceManager::getTextureForBlockType(uin
                              " and default texture ('" + defaultTexturePath_ + "') is either not set or failed to load.");
 }
 
-void ResourceManager::analyzeModelAndSetProperties(Block& blockDef, const ModelData& modelData) const {
-    if (modelData.vertices.empty()) {
+std::shared_ptr<SeparableModelData> ResourceManager::analyzeModelAndSetProperties(Block& blockDef, const ModelData& rawModelData) const {
+    auto separableData = std::make_shared<SeparableModelData>();
+
+    std::cout << "ResourceManager: Analyzing model for Block ID: " << blockDef.getID() << " (Model Path: " << blockDef.getModelPath() << ")" << std::endl;
+
+    if (rawModelData.vertices.empty()) {
         // Defaults are already set in Block constructor (no full faces, FULL_MODEL_IF_ANY_EXPOSED strategy)
-        return;
+        // Return an empty SeparableModelData
+        std::cout << "  Block ID " << blockDef.getID() << ": Raw model data is empty. Returning empty SeparableModelData." << std::endl;
+        return separableData;
     }
 
+    // DIAGNOSTIC: Print AABB of rawModelData
+    if (!rawModelData.vertices.empty()) {
+        glm::vec3 minBound(std::numeric_limits<float>::max());
+        glm::vec3 maxBound(std::numeric_limits<float>::lowest());
+        for (const auto& v_diag : rawModelData.vertices) { // Renamed v_diag to avoid conflict
+            minBound.x = std::min(minBound.x, v_diag.pos.x);
+            minBound.y = std::min(minBound.y, v_diag.pos.y);
+            minBound.z = std::min(minBound.z, v_diag.pos.z);
+            maxBound.x = std::max(maxBound.x, v_diag.pos.x);
+            maxBound.y = std::max(maxBound.y, v_diag.pos.y);
+            maxBound.z = std::max(maxBound.z, v_diag.pos.z);
+        }
+        std::cout << "  Block ID " << blockDef.getID() << ": Raw Model AABB Min: (" << minBound.x << "," << minBound.y << "," << minBound.z 
+                  << "), Max: (" << maxBound.x << "," << maxBound.y << "," << maxBound.z << ")" << std::endl;
+    }
+    // END DIAGNOSTIC
+
+    // --- 1. Analyze and set full face properties on blockDef (existing logic) ---
     std::array<bool, 6> detectedFullFaces{};
 
     for (int i = 0; i < 6; ++i) {
@@ -230,7 +257,7 @@ void ResourceManager::analyzeModelAndSetProperties(Block& blockDef, const ModelD
         float maxV_coord = std::numeric_limits<float>::lowest();
         bool foundVerticesOnPlane = false;
 
-        for (const auto& vertex : modelData.vertices) {
+        for (const auto& vertex : rawModelData.vertices) {
             float primaryCoord;
             float uCoord, vCoord;
 
@@ -242,7 +269,8 @@ void ResourceManager::analyzeModelAndSetProperties(Block& blockDef, const ModelD
                 primaryCoord = vertex.pos.z; uCoord = vertex.pos.x; vCoord = vertex.pos.y;
             }
 
-            float expectedPrimaryCoord = (i % 2 == 0) ? MODEL_ANALYSIS_PLANE_DISTANCE : -MODEL_ANALYSIS_PLANE_DISTANCE;
+            // Adjust for 0-1 range: POS faces are at MAX_EXTENT, NEG faces are at MIN_EXTENT
+            float expectedPrimaryCoord = (i % 2 == 0) ? MODEL_ANALYSIS_MAX_EXTENT : MODEL_ANALYSIS_MIN_EXTENT;
             if (std::abs(primaryCoord - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON) {
                 foundVerticesOnPlane = true;
                 minU_coord = std::min(minU_coord, uCoord);
@@ -257,8 +285,83 @@ void ResourceManager::analyzeModelAndSetProperties(Block& blockDef, const ModelD
             std::abs(minV_coord - MODEL_ANALYSIS_MIN_EXTENT) < MODEL_ANALYSIS_EPSILON && std::abs(maxV_coord - MODEL_ANALYSIS_MAX_EXTENT) < MODEL_ANALYSIS_EPSILON) {
             detectedFullFaces[i] = true;
         }
+        std::cout << "  Block ID " << blockDef.getID() << ": FaceDirection " << i << " - Detected as full by geometry: " << detectedFullFaces[i] << std::endl;
         blockDef.setFullOccludingFace(currentFaceDir, detectedFullFaces[i]);
     }
+
+    std::cout << "  Block ID " << blockDef.getID() << ": Starting geometry splitting..." << std::endl;
+    // --- 2. Split geometry into SeparableModelData ---
+    std::vector<bool> rawTriangleProcessed(rawModelData.indices.size() / 3, false);
+
+    for (int faceIdx = 0; faceIdx < 6; ++faceIdx) {
+        FaceDirection currentDir = static_cast<FaceDirection>(faceIdx);
+        ModelData& currentFaceModelData = separableData->canonicalFaces[faceIdx];
+
+        if (!blockDef.hasFullOccludingFace(currentDir)) {
+            // std::cout << "    Face " << faceIdx << ": BlockDef says not a full occluding face. Skipping extraction." << std::endl;
+            continue; // This canonical face isn't "full", so don't try to extract specific geometry for it.
+        }
+
+        // Adjust for 0-1 range
+        float expectedPrimaryCoord = (faceIdx % 2 == 0) ? MODEL_ANALYSIS_MAX_EXTENT : MODEL_ANALYSIS_MIN_EXTENT;
+
+        for (size_t i = 0; i < rawModelData.indices.size(); i += 3) {
+            size_t triIndex = i / 3;
+            if (rawTriangleProcessed[triIndex]) continue;
+
+            const Vertex& v0 = rawModelData.vertices[rawModelData.indices[i]];
+            const Vertex& v1 = rawModelData.vertices[rawModelData.indices[i+1]];
+            const Vertex& v2 = rawModelData.vertices[rawModelData.indices[i+2]];
+
+            // Check if all vertices of the triangle are on the current canonical plane
+            bool onPlane = false;
+            if (faceIdx == 0 || faceIdx == 1) { // +/- X
+                onPlane = std::abs(v0.pos.x - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON &&
+                          std::abs(v1.pos.x - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON &&
+                          std::abs(v2.pos.x - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON;
+            } else if (faceIdx == 2 || faceIdx == 3) { // +/- Y
+                onPlane = std::abs(v0.pos.y - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON &&
+                          std::abs(v1.pos.y - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON &&
+                          std::abs(v2.pos.y - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON;
+            } else { // +/- Z
+                onPlane = std::abs(v0.pos.z - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON &&
+                          std::abs(v1.pos.z - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON &&
+                          std::abs(v2.pos.z - expectedPrimaryCoord) < MODEL_ANALYSIS_EPSILON;
+            }
+
+            if (onPlane) {
+                // Basic check: if on plane and this face is considered "full" by blockDef, add it.
+                // More advanced: check triangle normal alignment. For now, this is simpler.
+                uint32_t baseIdx = static_cast<uint32_t>(currentFaceModelData.vertices.size());
+                currentFaceModelData.vertices.push_back(v0);
+                currentFaceModelData.vertices.push_back(v1);
+                currentFaceModelData.vertices.push_back(v2);
+                currentFaceModelData.indices.push_back(baseIdx);
+                currentFaceModelData.indices.push_back(baseIdx + 1);
+                currentFaceModelData.indices.push_back(baseIdx + 2);
+                rawTriangleProcessed[triIndex] = true;
+            }
+        }
+        std::cout << "    Face " << faceIdx << " (BlockDef full: " << blockDef.hasFullOccludingFace(currentDir) << "): Extracted "
+                  << currentFaceModelData.vertices.size() << " verts, " << currentFaceModelData.indices.size() << " indices." << std::endl;
+    }
+
+    // Add all unprocessed triangles to remainingGeometry
+    for (size_t i = 0; i < rawModelData.indices.size(); i += 3) {
+        size_t triIndex = i / 3;
+        if (!rawTriangleProcessed[triIndex]) {
+            uint32_t baseIdx = static_cast<uint32_t>(separableData->remainingGeometry.vertices.size());
+            separableData->remainingGeometry.vertices.push_back(rawModelData.vertices[rawModelData.indices[i]]);
+            separableData->remainingGeometry.vertices.push_back(rawModelData.vertices[rawModelData.indices[i+1]]);
+            separableData->remainingGeometry.vertices.push_back(rawModelData.vertices[rawModelData.indices[i+2]]);
+            separableData->remainingGeometry.indices.push_back(baseIdx);
+            separableData->remainingGeometry.indices.push_back(baseIdx + 1);
+            separableData->remainingGeometry.indices.push_back(baseIdx + 2);
+        }
+    }
+    std::cout << "  Block ID " << blockDef.getID() << ": Remaining geometry: "
+              << separableData->remainingGeometry.vertices.size() << " verts, " << separableData->remainingGeometry.indices.size() << " indices." << std::endl;
+    return separableData;
 }
 
 

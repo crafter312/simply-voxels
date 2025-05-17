@@ -59,6 +59,17 @@ struct ModelData {
     std::vector<uint32_t> indices; // Using uint32_t for indices from GLTF
 };
 
+// Holds the potentially separated geometry for a block model.
+struct SeparableModelData {
+    // Geometry for the 6 canonical faces of the block's 1x1x1 cell.
+    // If a block doesn't have a distinct, "full" geometric face for a direction,
+    // the corresponding ModelData (vertices/indices) can be empty.
+    std::array<ModelData, 6> canonicalFaces; // Indexed by FaceDirection enum (enum defined in Block.hpp)
+
+    // Geometry for everything else that isn't part of one of the canonicalFaces.
+    ModelData remainingGeometry;
+};
+
 namespace ModelLoader {
 
 /**
