@@ -37,11 +37,14 @@ public:
     uint32_t getWidth() const { return texWidth_; }
     uint32_t getHeight() const { return texHeight_; }
     uint32_t getMipLevels() const { return mipLevels_; } // New getter
+    VkFormat getFormat() const { return imageFormat_; } // Getter for image format
     std::string getPath() const { return texturePath_; } // Returns path if loaded from file, empty otherwise
 
     // Command buffer utilities (made static and public)
     static VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
     static void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkCommandBuffer commandBuffer);
+    void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
+    void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t baseMipLevel, uint32_t levelCount);
 
 private:
     VkPhysicalDevice physicalDevice_;
@@ -59,7 +62,7 @@ private:
     std::string texturePath_; // Store the path of the loaded texture
     VkFormat imageFormat_; // Store the format of the texture image
 
-    uint32_t mipLevels_ = 1; // For now, we'll stick to 1 mip level
+    uint32_t mipLevels_; // Calculated based on image dimensions
 
     void loadImageFromFile(const std::string& path, 
                            int& texWidth, 

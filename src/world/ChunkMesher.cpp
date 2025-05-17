@@ -19,10 +19,9 @@ namespace ChunkMesher {
  * @param blockModelData The pre-loaded model data (vertices, indices, normals, UVs) for the block type.
  * @param blockLocalOffset The integer local coordinates (e.g., 0-15) of this block within the chunk.
  */
-void addBlockModelToMeshData(MeshData& chunkMeshData,
+void addBlockModelToMeshData(ModelData& chunkMeshData,
                              const ModelData& blockModelData,
-                             const glm::vec3& blockLocalOffset,
-                             const AtlasTextureInfo& atlasInfo) { // Added atlasInfo parameter
+                             const glm::vec3& blockLocalOffset) { // Removed atlasInfo parameter
     if (blockModelData.vertices.empty()) { // No need to check indices if no vertices
         // std::cout << "Debug: Block model has no vertices. Skipping." << std::endl;
         return; 
@@ -34,14 +33,22 @@ void addBlockModelToMeshData(MeshData& chunkMeshData,
 
     uint32_t baseVertexIndex = static_cast<uint32_t>(chunkMeshData.vertices.size());
 
-    for (const auto& modelVertex : blockModelData.vertices) {
+    for (size_t i = 0; i < blockModelData.vertices.size(); ++i) {
+        const auto& modelVertex = blockModelData.vertices[i];
+        // const auto& modelAtlasInfo = blockModelData.atlasTextureInfos[i]; // This line is no longer needed as ModelData doesn't have this vector
+
         Vertex chunkVertex;
         // Offset the model's vertex positions by the block's local position in the chunk
         chunkVertex.pos = modelVertex.pos + blockLocalOffset;
         chunkVertex.normal = modelVertex.normal;     // Use normals from the model
-        // Transform texture coordinates to use the atlas
-        chunkVertex.texCoord.x = modelVertex.texCoord.x * atlasInfo.uvScale.x + atlasInfo.uvOffset.x;
-        chunkVertex.texCoord.y = modelVertex.texCoord.y * atlasInfo.uvScale.y + atlasInfo.uvOffset.y;
+        // Store the original local [0,1] texture coordinates.
+        // The transformation using atlas offset/scale will happen in the shader via per-vertex AtlasTextureInfo.
+        chunkVertex.texCoord = modelVertex.texCoord;
+        // The atlasUvOffset and atlasUvScale are now part of modelVertex itself,
+        // so they are implicitly copied when modelVertex is used to construct/assign to chunkVertex,
+        // or explicitly copied if needed (as shown below, which is good for clarity).
+        chunkVertex.atlasUvOffset = modelVertex.atlasUvOffset;
+        chunkVertex.atlasUvScale = modelVertex.atlasUvScale;
         chunkMeshData.vertices.push_back(chunkVertex);
     }
 
@@ -56,16 +63,14 @@ struct CachedNeighborData {
     bool isAllAir = true; // Default to true, meaning if not found or not generated, effectively air for culling
     bool isGeneratedAndExists = false; // True if the chunk exists and has finished generation
 };
-
-MeshData generateMesh(
+ModelData generateMesh(
     glm::ivec3 chunkCoord, // Use passed chunkCoord
     std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> currentChunkBlockDataSnapshot, // Renamed for clarity
     bool isCurrentChunkAllAir,    // Renamed for clarity
     const World& world,
     const ResourceManager& resourceManager,
     const BlockRegistry& blockRegistry) { // Added blockRegistry
-
-    MeshData meshData;
+    ModelData meshData;
 
     if (isCurrentChunkAllAir || !currentChunkBlockDataSnapshot) {
         return meshData; // Empty mesh for all-air or no data chunks
@@ -191,7 +196,7 @@ MeshData generateMesh(
                 if (anyCellFaceIsActuallyExposed) {
                     // Get the SeparableModelData
                     std::shared_ptr<const SeparableModelData> separableModelDataPtr = resourceManager.getModelForBlockType(blockID);
-                    AtlasTextureInfo atlasInfo = resourceManager.getBlockAtlasInfo(blockID); // Get atlas info
+                    // AtlasTextureInfo atlasInfo = resourceManager.getBlockAtlasInfo(blockID); // No longer needed here
                     const Block* blockDef = blockRegistry.getBlockDefinition(blockID); // Get block definition
 
                     if (separableModelDataPtr && blockDef) { // Check if the model data and block def were successfully loaded
@@ -205,18 +210,16 @@ MeshData generateMesh(
                                 // And if the current block *has* a defined canonical face for this direction
                                 if (blockDef->hasFullOccludingFace(currentBlockDir)) { 
                                     const ModelData& faceGeom = separableModelDataPtr->canonicalFaces[faceIdx];
-                                    if (!faceGeom.vertices.empty()) {
-                                        addBlockModelToMeshData(meshData, faceGeom, currentBlockLocalPos_vec3, atlasInfo);
-                                    }
+                                    // The faceGeom.atlasTextureInfos should be populated by ResourceManager
+                                    addBlockModelToMeshData(meshData, faceGeom, currentBlockLocalPos_vec3);
                                 }
                             }
                         }
 
                         // 2. Add the "remaining" geometry (non-canonical parts, or whole model if no full faces)
                         //    This part is added if *any* cell face was exposed.
-                        if (!separableModelDataPtr->remainingGeometry.vertices.empty()) {
-                            addBlockModelToMeshData(meshData, separableModelDataPtr->remainingGeometry, currentBlockLocalPos_vec3, atlasInfo);
-                        }
+                        // The remainingGeometry.atlasTextureInfos should be populated by ResourceManager
+                        addBlockModelToMeshData(meshData, separableModelDataPtr->remainingGeometry, currentBlockLocalPos_vec3);
                     }
                 }
             }

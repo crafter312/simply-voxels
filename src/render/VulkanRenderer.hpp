@@ -125,7 +125,7 @@ private:
 
     // For asynchronous chunk meshing
     // Store chunkCoord with the future to correctly manage m_submittedMeshTasks on exception
-    std::vector<std::pair<glm::ivec3, std::future<ChunkMesher::MeshData>>> m_pendingMeshFutures;
+    std::vector<std::pair<glm::ivec3, std::future<ModelData>>> m_pendingMeshFutures;
     std::set<glm::ivec3, IVec3Comparator> m_submittedMeshTasks; // Chunks for which a mesh task has been launched
 
     // Helper to destroy chunk buffers
@@ -162,7 +162,7 @@ private:
     // Renamed and modified to process changes
     void processChunkChanges();
     // void createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk); // Old synchronous version
-    void createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ChunkMesher::MeshData& meshData); // New version
+    void createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ModelData& meshData); // New version
 };
 
 #endif // VULKAN_RENDERER_HPP

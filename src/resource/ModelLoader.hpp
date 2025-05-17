@@ -17,6 +17,10 @@ struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;   // Normal vector
     glm::vec2 texCoord; // Texture coordinates (UVs)
+    // New attributes for per-vertex atlas info
+    glm::vec2 atlasUvOffset;
+    glm::vec2 atlasUvScale;
+
 
     // Describe how to pass this vertex data to the vertex shader
     static VkVertexInputBindingDescription getBindingDescription() {
@@ -28,8 +32,8 @@ struct Vertex {
     }
 
     // Describe how to handle vertex input attributes
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescription() {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+    static std::array<VkVertexInputAttributeDescription, 5> getAttributeDescription() {
+        std::array<VkVertexInputAttributeDescription, 5> attributeDescriptions{};
 
         // Position attribute: location 0, binding 0
         attributeDescriptions[0].location = 0;
@@ -48,6 +52,19 @@ struct Vertex {
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
+        // Atlas UV Offset attribute: location 3, binding 0
+        attributeDescriptions[3].location = 3;
+        attributeDescriptions[3].binding = 0;
+        attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT; // vec2
+        attributeDescriptions[3].offset = offsetof(Vertex, atlasUvOffset);
+
+        // Atlas UV Scale attribute: location 4, binding 0
+        attributeDescriptions[4].location = 4;
+        attributeDescriptions[4].binding = 0;
+        attributeDescriptions[4].format = VK_FORMAT_R32G32_SFLOAT; // vec2
+        attributeDescriptions[4].offset = offsetof(Vertex, atlasUvScale);
+
 
         return attributeDescriptions;
     }

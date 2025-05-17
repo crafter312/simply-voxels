@@ -81,6 +81,9 @@ void ResourceManager::loadAssetsFromRegistry(BlockRegistry& registry, bool preLo
                   << "', Texture Path Used: '" << (!texturePathToLoad.empty() ? texturePathToLoad : "None")
                   << "')" << std::endl;
     }
+    // After processing all blocks and potentially loading assets, build the atlas
+    buildTextureAtlas(registry);
+    finalizeSeparableModelAtlasInfos(); // New step: Populate atlas infos in separable models
     std::cout << "ResourceManager: Finished loading assets from block registry." << std::endl;
 }
 
@@ -347,6 +350,7 @@ std::shared_ptr<SeparableModelData> ResourceManager::analyzeModelAndSetPropertie
         }
         std::cout << "    Face " << faceIdx << " (BlockDef full: " << blockDef.hasFullOccludingFace(currentDir) << "): Extracted "
                   << currentFaceModelData.vertices.size() << " verts, " << currentFaceModelData.indices.size() << " indices." << std::endl;
+        // No longer need to resize a separate atlasTextureInfos vector
     }
 
     // Add all unprocessed triangles to remainingGeometry
@@ -362,17 +366,63 @@ std::shared_ptr<SeparableModelData> ResourceManager::analyzeModelAndSetPropertie
             separableData->remainingGeometry.indices.push_back(baseIdx + 2);
         }
     }
+    // No longer need to resize a separate atlasTextureInfos vector
     std::cout << "  Block ID " << blockDef.getID() << ": Remaining geometry: "
               << separableData->remainingGeometry.vertices.size() << " verts, " << separableData->remainingGeometry.indices.size() << " indices." << std::endl;
     return separableData;
 }
 
+void ResourceManager::finalizeSeparableModelAtlasInfos() {
+    std::cout << "ResourceManager: Finalizing AtlasTextureInfo for separable models..." << std::endl;
+    if (m_texturePathToAtlasInfoMap.empty()) {
+        std::cerr << "ResourceManager Warning: Texture atlas map is empty. Cannot finalize AtlasTextureInfo for models." << std::endl;
+        return;
+    }
+
+    for (auto& pair : m_resolvedBlockAssets) {
+        // uint16_t blockID = pair.first; // Not directly needed here
+        ResolvedBlockAssets& resolvedAsset = pair.second; // Get a non-const reference
+
+        if (!resolvedAsset.separableModelData) {
+            continue; // No model data to process
+        }
+
+        // Determine the AtlasTextureInfo to use for this block's model parts
+        AtlasTextureInfo specificAtlasInfo = m_defaultAtlasTextureInfo; // Start with default
+        if (!resolvedAsset.texturePathKey.empty()) {
+            auto atlasInfoIt = m_texturePathToAtlasInfoMap.find(resolvedAsset.texturePathKey);
+            if (atlasInfoIt != m_texturePathToAtlasInfoMap.end()) {
+                specificAtlasInfo = atlasInfoIt->second;
+            } else {
+                std::cerr << "ResourceManager Warning: Texture path '" << resolvedAsset.texturePathKey 
+                          << "' not found in atlas map during finalization. Using default atlas info for block ID " << pair.first << std::endl;
+            }
+        }
+
+        // Populate for canonical faces
+        for (int i = 0; i < 6; ++i) {
+            ModelData& faceModel = resolvedAsset.separableModelData->canonicalFaces[i];
+            for (Vertex& vertex : faceModel.vertices) {
+                vertex.atlasUvOffset = specificAtlasInfo.uvOffset;
+                vertex.atlasUvScale = specificAtlasInfo.uvScale;
+            }
+        }
+
+        // Populate for remaining geometry
+        ModelData& remainingModel = resolvedAsset.separableModelData->remainingGeometry;
+        for (Vertex& vertex : remainingModel.vertices) {
+            vertex.atlasUvOffset = specificAtlasInfo.uvOffset;
+            vertex.atlasUvScale = specificAtlasInfo.uvScale;
+        }
+    }
+    std::cout << "ResourceManager: AtlasTextureInfo finalization complete." << std::endl;
+}
 
 namespace { // Anonymous namespace for helper functions
 
 void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, 
-                           VkImageLayout oldLayout, VkImageLayout newLayout, 
-                           uint32_t mipLevels = 1, uint32_t layerCount = 1) {
+                           VkImageLayout oldLayout, VkImageLayout newLayout,
+                           uint32_t baseMipLevel, uint32_t numMipLevels, uint32_t baseArrayLayer = 0, uint32_t numArrayLayers = 1) {
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = oldLayout;
@@ -390,10 +440,10 @@ void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkForma
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     }
     
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = mipLevels;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = layerCount;
+    barrier.subresourceRange.baseMipLevel = baseMipLevel;
+    barrier.subresourceRange.levelCount = numMipLevels;
+    barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
+    barrier.subresourceRange.layerCount = numArrayLayers;
 
     VkPipelineStageFlags sourceStage;
     VkPipelineStageFlags destinationStage;
@@ -437,10 +487,10 @@ void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkForma
 void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
     std::cout << "ResourceManager: Building texture atlas..." << std::endl;
     // PADDING constant is now ResourceManager::ATLAS_PADDING
-
     m_texturePathToAtlasInfoMap.clear();
 
     std::set<std::string> uniqueTexturePaths;
+    // Default texture is still important to ensure it's loaded if used by any block.
     if (!defaultTexturePath_.empty()) {
         // Ensure default texture is loaded and add its path
         auto defaultTexLoader = internalLoadTexture(defaultTexturePath_);
@@ -451,7 +501,7 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
             // Potentially throw here, or try to continue without a default.
         }
     }
-
+    
     const auto& allDefinitions = registry.getAllBlockDefinitions();
     for (const auto& pair : allDefinitions) {
         const Block& blockDef = pair.second;
@@ -476,167 +526,279 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
     }
 
     // Determine the largest texture dimension among the unique textures
-    int32_t contentTileSize = 0; // Changed to int32_t
+    // This will be the size of each cell in the atlas at mip level 0.
+    // All source textures will be blitted (potentially scaled) into a cell of this size.
+    uint32_t maxContentTileSizeMip0 = 0; 
     for (const std::string& texturePath : uniqueTexturePaths) {
         auto it = loadedTextures_.find(texturePath);
         if (it != loadedTextures_.end() && it->second) {
-            contentTileSize = std::max({contentTileSize, static_cast<int32_t>(it->second->getWidth()), static_cast<int32_t>(it->second->getHeight())});
+            maxContentTileSizeMip0 = std::max({maxContentTileSizeMip0, it->second->getWidth(), it->second->getHeight()});
         }
     }
 
-    if (contentTileSize == 0) {
+    if (maxContentTileSizeMip0 == 0) {
          std::cerr << "ResourceManager Critical Error: Could not determine largest texture size. No valid textures loaded for atlas." << std::endl;
          m_defaultAtlasTextureInfo = {{0.0f, 0.0f}, {1.0f, 1.0f}}; // Full UVs for a non-existent atlas
          m_textureAtlas = nullptr; // Ensure atlas is null
          return;
     }
 
-    int32_t paddedTileSize = contentTileSize + 2 * ATLAS_PADDING; 
+    // Calculate atlas dimensions based on content size at mip 0 plus padding at mip 0
+    uint32_t paddedCellSizeMip0 = maxContentTileSizeMip0 + 2 * ATLAS_PADDING_MIP0;
 
     uint32_t numUniqueTextures = static_cast<uint32_t>(uniqueTexturePaths.size());
     uint32_t atlasDimInTiles = static_cast<uint32_t>(ceil(sqrt(static_cast<float>(numUniqueTextures))));
-    uint32_t atlasPixelWidth = atlasDimInTiles * paddedTileSize;
-    uint32_t atlasPixelHeight = atlasDimInTiles * paddedTileSize;
-    // uint32_t tileTextureSize = contentTileSize; // Renamed for clarity
+    
+    // Calculate initial atlas dimensions
+    uint32_t initialAtlasPixelWidth = atlasDimInTiles * paddedCellSizeMip0;
+    uint32_t initialAtlasPixelHeight = atlasDimInTiles * paddedCellSizeMip0;
+
+    // Determine atlasTotalMipLevels based on initial dimensions
+    // This is the number of mips the atlas itself will have.
+    uint32_t atlasTotalMipLevelsForSizing = 1;
+    if (initialAtlasPixelWidth > 0 && initialAtlasPixelHeight > 0) { // Ensure non-zero dimensions
+        atlasTotalMipLevelsForSizing = static_cast<uint32_t>(std::floor(std::log2(std::max(initialAtlasPixelWidth, initialAtlasPixelHeight)))) + 1;
+    }
+
+    // Adjust atlas dimensions to be mip-friendly
+    uint32_t divisor = (atlasTotalMipLevelsForSizing > 1) ? (1u << (atlasTotalMipLevelsForSizing - 1)) : 1u;
+    uint32_t atlasPixelWidth = ((initialAtlasPixelWidth + divisor - 1) / divisor) * divisor; // Round up to nearest multiple of divisor
+    uint32_t atlasPixelHeight = ((initialAtlasPixelHeight + divisor - 1) / divisor) * divisor; // Round up
 
     std::cout << "ResourceManager: Atlas: " << numUniqueTextures << " unique textures. Dimensions: " << atlasPixelWidth << "x" << atlasPixelHeight
               << " (" << atlasDimInTiles << "x" << atlasDimInTiles << " tiles of " 
-              << paddedTileSize << "x" << paddedTileSize << " with " << contentTileSize << "x" << contentTileSize << " content)" << std::endl;
+              << paddedCellSizeMip0 << "x" << paddedCellSizeMip0 << " (padded cell size at mip0). Content area at mip0: " 
+              << maxContentTileSizeMip0 << "x" << maxContentTileSizeMip0 << ")" << std::endl;
 
-    // Use the new VulkanTextureLoader constructor for an empty texture
-    // And that it creates a sampler if the last bool is true.
-    // And that its image is initially in VK_IMAGE_LAYOUT_UNDEFINED or VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL.
     m_textureAtlas = std::make_unique<VulkanTextureLoader>(
         physicalDevice_, device_, commandPool_, graphicsQueue_,
         atlasPixelWidth, atlasPixelHeight, VK_FORMAT_R8G8B8A8_SRGB, /* Assumed format */
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // SRC might be useful if we ever blit from atlas, DST is key.
         VK_IMAGE_TILING_OPTIMAL, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         true // Create a sampler for the atlas
     );
 
     VkCommandBuffer commandBuffer = VulkanTextureLoader::beginSingleTimeCommands(device_, commandPool_); // Use static method
 
-    // Transition atlas image to TRANSFER_DST_OPTIMAL
-    // m_textureAtlas->getImage() now exists.
-    // Initial layout is VK_IMAGE_LAYOUT_UNDEFINED from the new VTL constructor.
-    transitionImageLayout(commandBuffer, m_textureAtlas->getImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    int32_t currentTileX = 0; // Changed to int32_t
-    int32_t currentTileY = 0; // Changed to int32_t
-    for (const std::string& texturePath : uniqueTexturePaths) {
-        auto it = loadedTextures_.find(texturePath);
-        if (it == loadedTextures_.end() || !it->second) { // Should not happen if logic above is correct
-            std::cerr << "ResourceManager Error: Texture '" << texturePath << "' missing from cache during atlas copy." << std::endl;
-            continue;
-        }
-        std::shared_ptr<VulkanTextureLoader> sourceTextureLoader = it->second;
-
-        transitionImageLayout(commandBuffer, sourceTextureLoader->getImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-        // --- Blit main content and padding ---
-        int32_t srcW = static_cast<int32_t>(sourceTextureLoader->getWidth());
-        int32_t srcH = static_cast<int32_t>(sourceTextureLoader->getHeight());
-
-        int32_t dstTileOriginX = currentTileX * paddedTileSize; // Now int32_t * int32_t
-        int32_t dstTileOriginY = currentTileY * paddedTileSize; // Now int32_t * int32_t
-
-        VkImageBlit blit{};
-        blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-
-        // 1. Main content
-        blit.srcOffsets[0] = {0, 0, 0};
-        blit.srcOffsets[1] = {srcW, srcH, 1};
-        blit.dstOffsets[0] = {dstTileOriginX + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING + contentTileSize, dstTileOriginY + ATLAS_PADDING + contentTileSize, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 2. Top border (stretch top row of source)
-        blit.srcOffsets[0] = {0, 0, 0};            blit.srcOffsets[1] = {srcW, 1, 1};
-        blit.dstOffsets[0] = {dstTileOriginX + ATLAS_PADDING, dstTileOriginY, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING + contentTileSize, dstTileOriginY + ATLAS_PADDING, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 3. Bottom border (stretch bottom row of source)
-        blit.srcOffsets[0] = {0, srcH - 1, 0};    blit.srcOffsets[1] = {srcW, srcH, 1};
-        blit.dstOffsets[0] = {dstTileOriginX + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING + contentTileSize, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING + contentTileSize, dstTileOriginY + ATLAS_PADDING + contentTileSize + ATLAS_PADDING, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 4. Left border (stretch left column of source)
-        blit.srcOffsets[0] = {0, 0, 0};            blit.srcOffsets[1] = {1, srcH, 1};
-        blit.dstOffsets[0] = {dstTileOriginX, dstTileOriginY + ATLAS_PADDING, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING + contentTileSize, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 5. Right border (stretch right column of source)
-        blit.srcOffsets[0] = {srcW - 1, 0, 0};    blit.srcOffsets[1] = {srcW, srcH, 1};
-        blit.dstOffsets[0] = {dstTileOriginX + ATLAS_PADDING + contentTileSize, dstTileOriginY + ATLAS_PADDING, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING + contentTileSize + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING + contentTileSize, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 6. Top-Left Corner (stretch top-left pixel of source)
-        blit.srcOffsets[0] = {0, 0, 0};            blit.srcOffsets[1] = {1, 1, 1};
-        blit.dstOffsets[0] = {dstTileOriginX, dstTileOriginY, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 7. Top-Right Corner
-        blit.srcOffsets[0] = {srcW - 1, 0, 0};    blit.srcOffsets[1] = {srcW, 1, 1};
-        blit.dstOffsets[0] = {dstTileOriginX + ATLAS_PADDING + contentTileSize, dstTileOriginY, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING + contentTileSize + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 8. Bottom-Left Corner
-        blit.srcOffsets[0] = {0, srcH - 1, 0};    blit.srcOffsets[1] = {1, srcH, 1};
-        blit.dstOffsets[0] = {dstTileOriginX, dstTileOriginY + ATLAS_PADDING + contentTileSize, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING + contentTileSize + ATLAS_PADDING, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        // 9. Bottom-Right Corner
-        blit.srcOffsets[0] = {srcW - 1, srcH - 1, 0}; blit.srcOffsets[1] = {srcW, srcH, 1};
-        blit.dstOffsets[0] = {dstTileOriginX + ATLAS_PADDING + contentTileSize, dstTileOriginY + ATLAS_PADDING + contentTileSize, 0};
-        blit.dstOffsets[1] = {dstTileOriginX + ATLAS_PADDING + contentTileSize + ATLAS_PADDING, dstTileOriginY + ATLAS_PADDING + contentTileSize + ATLAS_PADDING, 1};
-        vkCmdBlitImage(commandBuffer, sourceTextureLoader->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-
-        transitionImageLayout(commandBuffer, sourceTextureLoader->getImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        AtlasTextureInfo info;
-        // UVs now point to the content area within the padded tile
-
-        // Calculate a small inset in UV space (e.g., half an atlas pixel)
-        // This helps prevent sampling the very edge pixels that might be affected by mipmap filtering
-        // when viewing at extreme angles or distances.
-        float uvPixelXDim = 1.0f / static_cast<float>(atlasPixelWidth);
-        float uvPixelYDim = 1.0f / static_cast<float>(atlasPixelHeight);
-        // Calculate the number of atlas pixels for the inset based on a percentage of contentTileSize
-        float inset_atlas_pixels = static_cast<float>(contentTileSize) * ATLAS_UV_INSET_FACTOR_OF_CONTENT;
-        float uInset = uvPixelXDim * inset_atlas_pixels;
-        float vInset = uvPixelYDim * inset_atlas_pixels;
-
-        info.uvOffset = {
-            (static_cast<float>(dstTileOriginX + ATLAS_PADDING) / atlasPixelWidth) + uInset,
-            (static_cast<float>(dstTileOriginY + ATLAS_PADDING) / atlasPixelHeight) + vInset
-        };
-        info.uvScale = {
-            (static_cast<float>(contentTileSize) / atlasPixelWidth) - (2.0f * uInset),
-            (static_cast<float>(contentTileSize) / atlasPixelHeight) - (2.0f * vInset)
-        };
-        m_texturePathToAtlasInfoMap[texturePath] = info;
-
-        if (texturePath == defaultTexturePath_) {
-            m_defaultAtlasTextureInfo = info;
-        }
-        
-        currentTileX++;
-        if (currentTileX >= atlasDimInTiles) {
-            currentTileX = 0;
-            currentTileY++;
-        }
+    // Determine the maximum number of mip levels any source texture has.
+    // The atlas will have mip levels based on its own dimensions.
+    uint32_t atlasTotalMipLevels = 1;
+    if (m_textureAtlas) { // m_textureAtlas->getMipLevels() is based on atlas dimensions
+        atlasTotalMipLevels = m_textureAtlas->getMipLevels();
     }
 
-    transitionImageLayout(commandBuffer, m_textureAtlas->getImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    for (uint32_t mipLevel = 0; mipLevel < atlasTotalMipLevels; ++mipLevel) {
+        // Transition current atlas mip level to TRANSFER_DST_OPTIMAL
+        // It's initially UNDEFINED for all mips.
+        ::transitionImageLayout(commandBuffer, m_textureAtlas->getImage(), VK_FORMAT_R8G8B8A8_SRGB,
+                                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                mipLevel, 1, 0, 1); // baseMip, numMips, baseLayer, numLayers
+
+        uint32_t currentTileX = 0;
+        uint32_t currentTileY = 0;
+
+        uint32_t currentMipPadding = std::max(1u, ATLAS_PADDING_MIP0 >> mipLevel);
+        uint32_t dstContentSizeThisMip = std::max(1u, maxContentTileSizeMip0 >> mipLevel);
+        uint32_t dstPaddedCellSizeThisMip = dstContentSizeThisMip + 2 * currentMipPadding;
+
+        // Get actual atlas mip dimensions for this specific mipLevel
+        // These are the true boundaries we cannot exceed.
+        const uint32_t actualAtlasMipWidth = std::max(1u, m_textureAtlas->getWidth() >> mipLevel);
+        const uint32_t actualAtlasMipHeight = std::max(1u, m_textureAtlas->getHeight() >> mipLevel);
+
+        auto performClampedBlit = 
+            [&](VkImageBlit& currentBlit, VkFilter filter, VkImage srcImage) { // Pass srcImage
+
+            // Check if the start of the blit is already out of bounds
+            if (currentBlit.dstOffsets[0].x >= static_cast<int32_t>(actualAtlasMipWidth) ||
+                currentBlit.dstOffsets[0].y >= static_cast<int32_t>(actualAtlasMipHeight)) {
+                return; // Skip blit, it's entirely outside
+            }
+
+            // Clamp the end of the blit region to the actual atlas mip dimensions
+            currentBlit.dstOffsets[1].x = std::min(currentBlit.dstOffsets[1].x, static_cast<int32_t>(actualAtlasMipWidth));
+            currentBlit.dstOffsets[1].y = std::min(currentBlit.dstOffsets[1].y, static_cast<int32_t>(actualAtlasMipHeight));
+            
+            // Ensure start is not past the (potentially clamped) end.
+            // This handles cases where dstOffsets[0] was valid but dstOffsets[1] got clamped to be <= dstOffsets[0].
+            currentBlit.dstOffsets[0].x = std::min(currentBlit.dstOffsets[0].x, currentBlit.dstOffsets[1].x);
+            currentBlit.dstOffsets[0].y = std::min(currentBlit.dstOffsets[0].y, currentBlit.dstOffsets[1].y);
+
+            // If clamping made width or height non-positive, skip
+            if (currentBlit.dstOffsets[1].x > currentBlit.dstOffsets[0].x && 
+                currentBlit.dstOffsets[1].y > currentBlit.dstOffsets[0].y) {
+                
+                vkCmdBlitImage(commandBuffer, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               m_textureAtlas->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1, &currentBlit, filter);
+            }
+        };
+
+        for (const std::string& texturePath : uniqueTexturePaths) {
+            auto it = loadedTextures_.find(texturePath);
+            if (it == loadedTextures_.end() || !it->second) {
+                std::cerr << "ResourceManager Error: Texture '" << texturePath << "' missing from cache during atlas mip " << mipLevel << " copy." << std::endl;
+                currentTileX++; // Still advance tile position
+                if (currentTileX >= atlasDimInTiles) {
+                    currentTileX = 0;
+                    currentTileY++;
+                }
+                continue;
+            }
+            std::shared_ptr<VulkanTextureLoader> sourceTextureLoader = it->second;
+
+            if (mipLevel < sourceTextureLoader->getMipLevels()) {
+                // Transition source texture's current mip level to TRANSFER_SRC_OPTIMAL
+                // Source textures are loaded with all mips in SHADER_READ_ONLY_OPTIMAL
+                ::transitionImageLayout(commandBuffer, sourceTextureLoader->getImage(), sourceTextureLoader->getFormat(),
+                                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                           mipLevel, 1, 0, 1);
+
+                uint32_t srcMipWidth = std::max(1u, sourceTextureLoader->getWidth() >> mipLevel);
+                uint32_t srcMipHeight = std::max(1u, sourceTextureLoader->getHeight() >> mipLevel);
+
+                uint32_t dstCellOriginX_atlas_mip = currentTileX * dstPaddedCellSizeThisMip;
+                uint32_t dstCellOriginY_atlas_mip = currentTileY * dstPaddedCellSizeThisMip;
+
+                VkImageBlit blit{};
+                blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mipLevel, 0, 1};
+                blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mipLevel, 0, 1};
+
+                // 1. Blit Main Content (scales source mip to fit content area of atlas cell)
+                blit.srcOffsets[0] = {0, 0, 0}; 
+                blit.srcOffsets[1] = {static_cast<int32_t>(srcMipWidth), static_cast<int32_t>(srcMipHeight), 1};
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding), static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding), 0};
+                blit.dstOffsets[1] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding + dstContentSizeThisMip), static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding + dstContentSizeThisMip), 1};
+                performClampedBlit(blit, VK_FILTER_LINEAR, sourceTextureLoader->getImage());
+
+                // --- Blit Padding (stretch/clamp edges of source mip) ---
+                // Top border
+                blit.srcOffsets[0] = {0, 0, 0}; blit.srcOffsets[1] = {static_cast<int32_t>(srcMipWidth), 1, 1}; // Top row of src mip
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip), 0};
+                blit.dstOffsets[1] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding + dstContentSizeThisMip), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+
+                // Bottom border
+                blit.srcOffsets[0] = {0, static_cast<int32_t>(srcMipHeight - 1), 0}; blit.srcOffsets[1] = {static_cast<int32_t>(srcMipWidth), static_cast<int32_t>(srcMipHeight), 1}; // Bottom row
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding + dstContentSizeThisMip), 0};
+                // If this is a bottom-most tile, extend padding to actualAtlasMipHeight
+                uint32_t bottomPaddingEndY = (currentTileY == atlasDimInTiles - 1) ? 
+                                             actualAtlasMipHeight : 
+                                             static_cast<uint32_t>(dstCellOriginY_atlas_mip + currentMipPadding + dstContentSizeThisMip + currentMipPadding);
+                blit.dstOffsets[1] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding + dstContentSizeThisMip), 
+                                      static_cast<int32_t>(bottomPaddingEndY), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+
+                // Left border
+                blit.srcOffsets[0] = {0, 0, 0}; blit.srcOffsets[1] = {1, static_cast<int32_t>(srcMipHeight), 1}; // Left column
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding), 0};
+                blit.dstOffsets[1] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding + dstContentSizeThisMip), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+
+                // Right border
+                blit.srcOffsets[0] = {static_cast<int32_t>(srcMipWidth - 1), 0, 0}; blit.srcOffsets[1] = {static_cast<int32_t>(srcMipWidth), static_cast<int32_t>(srcMipHeight), 1}; // Right column
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding + dstContentSizeThisMip), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding), 0};
+                // If this is a right-most tile, extend padding to actualAtlasMipWidth
+                uint32_t rightPaddingEndX = (currentTileX == atlasDimInTiles - 1) ? 
+                                            actualAtlasMipWidth : 
+                                            static_cast<uint32_t>(dstCellOriginX_atlas_mip + currentMipPadding + dstContentSizeThisMip + currentMipPadding);
+                blit.dstOffsets[1] = {static_cast<int32_t>(rightPaddingEndX), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding + dstContentSizeThisMip), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+
+                // Top-Left Corner
+                blit.srcOffsets[0] = {0,0,0}; blit.srcOffsets[1] = {1,1,1}; // Top-left pixel
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip), 0};
+                blit.dstOffsets[1] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+
+                // Top-Right Corner
+                blit.srcOffsets[0] = {static_cast<int32_t>(srcMipWidth-1),0,0}; blit.srcOffsets[1] = {static_cast<int32_t>(srcMipWidth),1,1}; // Top-right pixel
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding + dstContentSizeThisMip), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip), 0};
+                // Use rightPaddingEndX for the x-component of dstOffsets[1]
+                blit.dstOffsets[1] = {static_cast<int32_t>(rightPaddingEndX), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+
+                // Bottom-Left Corner
+                blit.srcOffsets[0] = {0,static_cast<int32_t>(srcMipHeight-1),0}; blit.srcOffsets[1] = {1,static_cast<int32_t>(srcMipHeight),1}; // Bottom-left pixel
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding + dstContentSizeThisMip), 0};
+                // Use bottomPaddingEndY for the y-component of dstOffsets[1]
+                blit.dstOffsets[1] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding), 
+                                      static_cast<int32_t>(bottomPaddingEndY), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+
+                // Bottom-Right Corner
+                blit.srcOffsets[0] = {static_cast<int32_t>(srcMipWidth-1),static_cast<int32_t>(srcMipHeight-1),0}; blit.srcOffsets[1] = {static_cast<int32_t>(srcMipWidth),static_cast<int32_t>(srcMipHeight),1}; // Bottom-right pixel
+                blit.dstOffsets[0] = {static_cast<int32_t>(dstCellOriginX_atlas_mip + currentMipPadding + dstContentSizeThisMip), 
+                                      static_cast<int32_t>(dstCellOriginY_atlas_mip + currentMipPadding + dstContentSizeThisMip), 0};
+                // Use rightPaddingEndX for x and bottomPaddingEndY for y
+                blit.dstOffsets[1] = {static_cast<int32_t>(rightPaddingEndX), 
+                                      static_cast<int32_t>(bottomPaddingEndY), 1};
+                performClampedBlit(blit, VK_FILTER_NEAREST, sourceTextureLoader->getImage());
+                // --- End Padding Blits ---
+
+                // Transition source texture's current mip level back to SHADER_READ_ONLY_OPTIMAL
+                ::transitionImageLayout(commandBuffer, sourceTextureLoader->getImage(), sourceTextureLoader->getFormat(),
+                                                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                                           mipLevel, 1, 0, 1);
+            }
+            // else: source texture doesn't have this many mip levels. Its slot in the atlas for this mip level
+            // will remain as it was after the initial transition to TRANSFER_DST_OPTIMAL (likely undefined content).
+
+            // Store/Update AtlasTextureInfo for mip 0 only, as UVs are for the base image.
+            if (mipLevel == 0) {
+                AtlasTextureInfo info;
+                // UVs point to the content area within the padded cell at mip 0.
+                // atlasPixelWidth/Height are based on paddedCellSizeMip0.
+                float contentOriginU_norm = (static_cast<float>(currentTileX * paddedCellSizeMip0 + ATLAS_PADDING_MIP0) / atlasPixelWidth);
+                float contentOriginV_norm = (static_cast<float>(currentTileY * paddedCellSizeMip0 + ATLAS_PADDING_MIP0) / atlasPixelHeight);
+                float contentSizeU_norm = (static_cast<float>(maxContentTileSizeMip0) / atlasPixelWidth);
+                float contentSizeV_norm = (static_cast<float>(maxContentTileSizeMip0) / atlasPixelHeight);
+                
+                info.uvOffset = {
+                    contentOriginU_norm,
+                    contentOriginV_norm
+                };
+                info.uvScale = {
+                    contentSizeU_norm,
+                    contentSizeV_norm
+                };
+                m_texturePathToAtlasInfoMap[texturePath] = info;
+
+                if (texturePath == defaultTexturePath_) {
+                    m_defaultAtlasTextureInfo = info;
+                }
+            }
+
+            currentTileX++;
+            if (currentTileX >= atlasDimInTiles) {
+                currentTileX = 0;
+                currentTileY++;
+            }
+        }
+
+        // After processing all textures for this mipLevel, transition this atlas mip to SHADER_READ_ONLY_OPTIMAL
+        ::transitionImageLayout(commandBuffer, m_textureAtlas->getImage(), VK_FORMAT_R8G8B8A8_SRGB,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                mipLevel, 1, 0, 1);
+    }
+
     VulkanTextureLoader::endSingleTimeCommands(device_, commandPool_, graphicsQueue_, commandBuffer); // Use static method
+
+    // The call to m_textureAtlas->generateMipmaps() is REMOVED.
+    // All atlas mips are now individually constructed and in SHADER_READ_ONLY_OPTIMAL.
+
 
     // Create a custom sampler for the atlas with LOD clamping
     if (m_textureAtlas && m_textureAtlas->getImage() != VK_NULL_HANDLE) {
@@ -657,14 +819,12 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR; // Linear for smoother mip transitions
         samplerInfo.minLod = 0.0f;
-        
-        uint32_t totalMipLevels = m_textureAtlas->getMipLevels(); // Assuming VulkanTextureLoader has this
-        float calculatedMaxLod = static_cast<float>(totalMipLevels - 1); // Default max LOD is the highest mip index
-
-        if (totalMipLevels > ATLAS_CLAMP_LOWEST_MIP_LEVELS) {
-            calculatedMaxLod = static_cast<float>(totalMipLevels - 1 - ATLAS_CLAMP_LOWEST_MIP_LEVELS);
+        // atlasTotalMipLevels was calculated earlier
+        float maxLodValue = static_cast<float>(atlasTotalMipLevels - 1);
+        if (atlasTotalMipLevels > ATLAS_CLAMP_LOWEST_MIP_LEVELS) { // Ensure we don't underflow
+            maxLodValue = static_cast<float>(atlasTotalMipLevels - 1 - ATLAS_CLAMP_LOWEST_MIP_LEVELS);
         }
-        samplerInfo.maxLod = std::max(0.0f, calculatedMaxLod); // Ensure maxLod is not less than minLod (0.0)
+        samplerInfo.maxLod = std::max(0.0f, maxLodValue); // Clamp if ATLAS_CLAMP_LOWEST_MIP_LEVELS is large
         // std::cout << "Atlas Sampler: Total Mips: " << totalMipLevels << ", Clamping: " << ATLAS_CLAMP_LOWEST_MIP_LEVELS << ", MaxLOD set to: " << samplerInfo.maxLod << std::endl;
 
         if (vkCreateSampler(device_, &samplerInfo, nullptr, &m_customAtlasSampler) != VK_SUCCESS) {
@@ -683,6 +843,11 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
     }
     std::cout << "ResourceManager: Texture atlas built successfully." << std::endl;
 }
+
+// In ResourceManager.hpp, you might need to add getFormat() to VulkanTextureLoader if it's not there
+// and ensure imageFormat_ is correctly set/accessible.
+// For the anonymous transitionImageLayout, it uses VK_FORMAT_R8G8B8A8_SRGB. If source textures
+// can have different formats, this needs to be handled (e.g., by passing sourceTextureLoader->getFormat()).
 
 VkImageView ResourceManager::getAtlasImageView() const {
     if (!m_textureAtlas) {

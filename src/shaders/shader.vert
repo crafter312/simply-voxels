@@ -4,6 +4,8 @@
 layout(location = 0) in vec3 inPosition; // Position attribute
 layout(location = 1) in vec3 inNormal;   // Normal attribute
 layout(location = 2) in vec2 inTexCoord; // Texture coordinates
+layout(location = 3) in vec2 inAtlasUvOffset; // New input
+layout(location = 4) in vec2 inAtlasUvScale;  // New input
 
 // Uniform Buffer Object containing transformation matrices
 // The model matrix is now handled by push constants
@@ -21,6 +23,8 @@ layout(push_constant) uniform PushConstants {
 // Output texture coordinates to the fragment shader
 layout(location = 0) out vec2 fragTexCoord; // Was location 1
 layout(location = 1) out vec3 fragNormal;   // Output normal to fragment shader (world space)
+layout(location = 2) out vec2 fragAtlasUvOffset; // New output
+layout(location = 3) out vec2 fragAtlasUvScale;  // New output
 
 void main() {
     // Calculate final position in clip space using Model-View-Projection matrices
@@ -30,4 +34,7 @@ void main() {
     // Transform normal to world space and pass to fragment shader
     // For non-uniform scaling, use mat3(transpose(inverse(pushConstants.model))) * inNormal
     fragNormal = normalize(mat3(pushConstants.model) * inNormal);
+
+    fragAtlasUvOffset = inAtlasUvOffset; // Pass through atlas offset
+    fragAtlasUvScale = inAtlasUvScale;   // Pass through atlas scale
 }

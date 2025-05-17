@@ -18,7 +18,7 @@
 // It's assumed glm/glm.hpp or equivalent is included for glm::vec2
 struct ResolvedBlockAssets {
     // std::shared_ptr<const ModelData> modelData = nullptr; // Old: raw model data
-    std::shared_ptr<const SeparableModelData> separableModelData = nullptr; // New: processed model data
+    std::shared_ptr<SeparableModelData> separableModelData = nullptr; // Made non-const
     std::shared_ptr<VulkanTextureLoader> textureLoader = nullptr;    std::string texturePathKey; // The actual path (original or default) used for this block's texture
     // You could add other frequently accessed block properties here if needed (e.g., isSolid)
 };
@@ -78,16 +78,14 @@ private:
 
     // Helper to analyze a model and set block properties
     std::shared_ptr<SeparableModelData> analyzeModelAndSetProperties(Block& blockDef, const ModelData& rawModelData) const;
+    void finalizeSeparableModelAtlasInfos(); // New method
 
     // Constants for model analysis
     static constexpr float MODEL_ANALYSIS_EPSILON = 1e-4f;
     static constexpr float MODEL_ANALYSIS_MIN_EXTENT = 0.0f; // Changed for 0-1 range
     static constexpr float MODEL_ANALYSIS_MAX_EXTENT = 1.0f; // Changed for 0-1 range
-    static constexpr int32_t ATLAS_PADDING = 2; // Padding around each texture in the atlas
-    // This factor, when multiplied by contentTileSize, gives the number of *atlas pixels*
-    // to use for the UV inset on each side. E.g., 0.005f means 0.5% of contentTileSize.
-    static constexpr float ATLAS_UV_INSET_FACTOR_OF_CONTENT = 0.005f; // e.g., 0.5% of content size for inset
-    static constexpr uint32_t ATLAS_CLAMP_LOWEST_MIP_LEVELS = 1; // Number of lowest mip levels to avoid sampling
+    static constexpr uint32_t ATLAS_PADDING_MIP0 = 2; // Padding pixels at mip level 0 on each side    
+    static constexpr uint32_t ATLAS_CLAMP_LOWEST_MIP_LEVELS = 2; // Or try 2 if 1 is not enough
 
     // Texture Atlas specific members
     std::unique_ptr<VulkanTextureLoader> m_textureAtlas; // Will hold the VkImage, VkImageView, VkSampler for the atlas

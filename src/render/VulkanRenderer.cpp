@@ -495,14 +495,16 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
             vkCmdBindIndexBuffer(commandBuffer, chunkData.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
+            
+            // Push model matrix for vertex shader
             vkCmdPushConstants(
                 commandBuffer,
                 pipelineLayout,
                 VK_SHADER_STAGE_VERTEX_BIT,
                 0, // offset
                 sizeof(glm::mat4), // size
-                &chunkData.modelMatrix); // Use model matrix for this chunk
+                &chunkData.modelMatrix
+            );
             vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, 0, 0, 0); // firstIndex and vertexOffset are 0
         }
     }
@@ -667,13 +669,12 @@ void VulkanRenderer::recreateSwapChainResources() {
     createRenderPass();
     std::cout << "Render pass recreated." << std::endl;
 
-    // 7. Recreate graphics pipeline (depends on new render pass)
+    // 7. Recreate graphics pipeline (depends on new render pass and existing push constant setup)
     // Define the push constant range again, as it's needed for pipeline recreation
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(glm::mat4);
-
     if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline, &pushConstantRange)) {
         throw std::runtime_error("Failed to recreate graphics pipeline using factory!");
     }
@@ -731,7 +732,7 @@ void VulkanRenderer::destroyAllChunkRenderData() {
 }
 
 // This function now takes MeshData directly, to be called when an async task completes.
-void VulkanRenderer::createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ChunkMesher::MeshData& meshData) {
+void VulkanRenderer::createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ModelData& meshData) {
     if (!bufferManager || !resourceManager) {
         std::cerr << "VulkanRenderer::createChunkRenderDataFromMeshData: Missing bufferManager or resourceManager." << std::endl;
         return;
@@ -784,12 +785,12 @@ void VulkanRenderer::processChunkChanges() {
     for (auto i = m_pendingMeshFutures.size(); i-- > 0;) {
         auto& future_entry = m_pendingMeshFutures[i];
         const glm::ivec3& future_chunk_coord = future_entry.first;
-        std::future<ChunkMesher::MeshData>& future_obj = future_entry.second;
+        std::future<ModelData>& future_obj = future_entry.second;
 
         // Check if the future is ready without blocking
         if (future_obj.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            try {
-                ChunkMesher::MeshData mesh_data_result = future_obj.get();
+            try {                
+                ModelData mesh_data_result = future_obj.get();
                 // GPU buffer operations must happen on the main thread.
                 // Wait for GPU to be idle ONCE if we have results to process.
                 if (!gpu_waited_this_frame_stage1) {
@@ -830,19 +831,18 @@ void VulkanRenderer::processChunkChanges() {
                     // for thread safety if m_world's internal state (like m_chunks map)
                     // can be modified concurrently by the main thread. For now, we assume
                     // World::getBlockID and World::isChunkLoaded are sufficiently thread-safe for reads.
-                    // The lambda captures necessary variables and returns MeshData.
+                    // The lambda captures necessary variables and returns ModelData.
                     auto mesh_future =
                         std::async(std::launch::async,
-                            // Lambda function that returns ChunkMesher::MeshData
-                            [ capturedCoord = coordForTask, // Capture chunkCoord by value for the task
+                            // Lambda function that returns ModelData
+                            [ capturedCoord = coordForTask,          // Capture chunkCoord by value for the task
                               capturedSnapshot = std::move(snapshot), // Move chunk's own snapshot
                               capturedIsAllAir = isAllAir,           // Capture isAllAir by value
                               &world_ref = m_world,                  // Capture world by reference
                               &res_man_ref = *resourceManager,       // Capture resourceManager by reference
                               &block_reg_ref = m_blockRegistryRef    // Capture blockRegistry by reference
-                            ]() mutable -> ChunkMesher::MeshData { // Added mutable, returns MeshData
-                                // Call the meshing function with neighbor snapshots
-                                ChunkMesher::MeshData meshDataResult = ChunkMesher::generateMesh(
+                            ]() mutable -> ModelData { // Changed return type to ModelData
+                                ModelData meshDataResult = ChunkMesher::generateMesh(
                                     capturedCoord,
                                     std::move(capturedSnapshot), // Pass the moved snapshot
                                     capturedIsAllAir,
