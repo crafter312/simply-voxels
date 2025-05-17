@@ -802,6 +802,12 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
 
     // Create a custom sampler for the atlas with LOD clamping
     if (m_textureAtlas && m_textureAtlas->getImage() != VK_NULL_HANDLE) {
+        // Destroy the old custom sampler if it exists, before creating a new one
+        if (m_customAtlasSampler != VK_NULL_HANDLE) {
+            vkDestroySampler(device_, m_customAtlasSampler, nullptr);
+            m_customAtlasSampler = VK_NULL_HANDLE; // Good practice to nullify after destruction
+        }
+
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_NEAREST; // Or VK_FILTER_NEAREST for pixelated look
