@@ -36,6 +36,7 @@ public:
     VkImage getImage() const { return textureImage_; }
     uint32_t getWidth() const { return texWidth_; }
     uint32_t getHeight() const { return texHeight_; }
+    uint32_t getMipLevels() const { return mipLevels_; } // New getter
     std::string getPath() const { return texturePath_; } // Returns path if loaded from file, empty otherwise
 
     // Command buffer utilities (made static and public)

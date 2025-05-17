@@ -83,6 +83,11 @@ private:
     static constexpr float MODEL_ANALYSIS_EPSILON = 1e-4f;
     static constexpr float MODEL_ANALYSIS_MIN_EXTENT = 0.0f; // Changed for 0-1 range
     static constexpr float MODEL_ANALYSIS_MAX_EXTENT = 1.0f; // Changed for 0-1 range
+    static constexpr int32_t ATLAS_PADDING = 2; // Padding around each texture in the atlas
+    // This factor, when multiplied by contentTileSize, gives the number of *atlas pixels*
+    // to use for the UV inset on each side. E.g., 0.005f means 0.5% of contentTileSize.
+    static constexpr float ATLAS_UV_INSET_FACTOR_OF_CONTENT = 0.005f; // e.g., 0.5% of content size for inset
+    static constexpr uint32_t ATLAS_CLAMP_LOWEST_MIP_LEVELS = 1; // Number of lowest mip levels to avoid sampling
 
     // Texture Atlas specific members
     std::unique_ptr<VulkanTextureLoader> m_textureAtlas; // Will hold the VkImage, VkImageView, VkSampler for the atlas
@@ -90,6 +95,7 @@ private:
     std::map<std::string, AtlasTextureInfo> m_texturePathToAtlasInfoMap; // Maps original texture path to its atlas UV info
                                                                          // The key is the path used for loading (could be default path)
     AtlasTextureInfo m_defaultAtlasTextureInfo; // Atlas info for the default/error texture
+    VkSampler m_customAtlasSampler = VK_NULL_HANDLE; // Custom sampler for the atlas with LOD clamping
 };
 
 #endif // RESOURCE_MANAGER_HPP
