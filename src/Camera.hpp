@@ -3,7 +3,12 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <memory> // Required for std::shared_ptr
+#include <memory>    // Required for std::shared_ptr
+#include <algorithm> // For std::max
+
+// Include for constants needed for FAR_PLANE_DISTANCE calculation
+#include "world/Chunk.hpp" // For CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH
+#include "world/World.hpp"   // For World::UNLOAD_CHUNK_RADIUS
 
 // Forward declaration for InputManager
 class InputManager;
@@ -66,6 +71,20 @@ private:
 public: // Making constants public for potential external reference, or move to private if only internal
     static const float BASE_MOVE_SPEED;
     static const float SPRINT_MULTIPLIER;
+
+    // Constants for projection matrix
+    static constexpr float NEAR_PLANE_DISTANCE = 0.1f;
+    static constexpr float SQRT3_APPROX = 1.73205081f; // sqrt(3)
+
+    // Calculate the maximum dimension of a chunk (assuming CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH are available from Chunk.hpp)
+    // std::max with an initializer_list is constexpr since C++14
+    static constexpr float MAX_CHUNK_DIM = static_cast<float>(
+        std::max({CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH})
+    );
+
+    // Calculate far plane distance to encompass the furthest unloadable chunk diagonally
+    static constexpr float FAR_PLANE_DISTANCE =
+        (static_cast<float>(UNLOAD_CHUNK_RADIUS) + 1.0f) * MAX_CHUNK_DIM * SQRT3_APPROX;
 };
 
 #endif // CAMERA_HPP

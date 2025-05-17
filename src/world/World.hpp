@@ -30,6 +30,12 @@ constexpr glm::ivec3 NEIGHBOR_OFFSETS[] = {
 };
 constexpr size_t NUM_NEIGHBORS = sizeof(NEIGHBOR_OFFSETS) / sizeof(NEIGHBOR_OFFSETS[0]);
 
+// --- Constants for chunk management ---
+static constexpr int LOAD_CHUNK_RADIUS = 8; // Radius in chunks around the camera to load chunks
+static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase (remains large)
+static constexpr int UNLOAD_CHUNK_RADIUS = LOAD_CHUNK_RADIUS + 2; // Increased: Radius in chunks beyond which to unload chunks (was 3)
+static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 4; // Increased: Max chunks to process from load queue per frame (was 2)
+
 // Class to manage all blocks in the world
 class World {
 public:
@@ -79,12 +85,6 @@ public:
     bool rebaseOccurredLastFrame() const; // Check if a rebase happened
 
 private:
-    // --- Constants for chunk management ---
-    static constexpr int LOAD_CHUNK_RADIUS = 2; // Radius in chunks around the camera to load chunks
-    static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase (remains large)
-    static constexpr int UNLOAD_CHUNK_RADIUS = LOAD_CHUNK_RADIUS + 3; // Increased: Radius in chunks beyond which to unload chunks (was 3)
-    static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 4; // Increased: Max chunks to process from load queue per frame (was 2)
-
     std::map<glm::ivec3, Chunk, IVec3Comparator> m_chunks;
     std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    
     std::set<glm::ivec3, IVec3Comparator> m_changedChunks; // Set of chunk coordinates that have been modified

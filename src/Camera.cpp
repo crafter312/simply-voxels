@@ -175,7 +175,11 @@ glm::mat4 Camera::getViewMatrix(glm::ivec3 rebaseOriginChunkCoord) const {
 
 glm::mat4 Camera::getProjectionMatrix(float aspectRatio) const {
     float currentFov = glm::clamp(m_fov, 1.0f, 120.0f);
-    glm::mat4 proj = glm::perspective(glm::radians(currentFov), aspectRatio, 0.1f, 100.0f); // Near/Far planes
+    // Use the constexpr near and far plane distances defined in Camera.hpp
+    glm::mat4 proj = glm::perspective(glm::radians(currentFov), 
+                                      aspectRatio, 
+                                      Camera::NEAR_PLANE_DISTANCE, 
+                                      Camera::FAR_PLANE_DISTANCE);
     proj[1][1] *= -1; // GLM is designed for OpenGL; Vulkan's Y-coordinate in clip space is inverted.
     return proj;
 }
