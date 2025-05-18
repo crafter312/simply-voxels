@@ -2,7 +2,7 @@
 #include <stdexcept> // For std::out_of_range
 
 Block::Block(uint16_t id, const std::string& modelPath, const std::string& texturePath)
-    : m_id(id), m_modelPath(modelPath), m_texturePath(texturePath),
+    : m_id(id), m_modelPath(modelPath), m_texturePath(texturePath), customShape(std::nullopt),
       m_fullOccludingFaces{} { // Initialize all faces to false (not full) by default
     // Constructor initializes member variables
 }
@@ -41,4 +41,12 @@ FaceDirection Block::getOppositeFace(FaceDirection dir) {
     // e.g., POS_X (0) XOR 1 = NEG_X (1)
     //       NEG_X (1) XOR 1 = POS_X (0)
     return static_cast<FaceDirection>(static_cast<uint8_t>(dir) ^ 1);
+}
+
+void Block::setCustomShape(const Physics::VoxelShape& shape) {
+    customShape.emplace(shape); // Use emplace to construct the VoxelShape in place
+}
+
+const std::optional<Physics::VoxelShape>& Block::getCustomShape() const {
+    return customShape;
 }

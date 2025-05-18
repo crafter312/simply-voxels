@@ -4,8 +4,9 @@
 #include <glm/glm.hpp>
 // #include <optional> // Not used with the current RaycastResult struct design
 
-// Forward declare World to avoid full include if only its interface is needed by Raycaster's declaration
+// Forward declarations
 class World; 
+class BlockRegistry;
 
 struct RaycastResult {
     bool hit = false;
@@ -26,6 +27,7 @@ constexpr float MAX_RAY_DISTANCE = 8.0f; // Player's reach for interaction
 namespace VoxelRaycaster {
     RaycastResult castRay(
         const World& world,          // To query block IDs
+        const BlockRegistry& blockRegistry, // To query block type properties
         glm::ivec3 originChunkPos,    // Absolute chunk coordinate of the ray's origin
         glm::vec3 originLocalPos,     // Ray's origin position within its chunk [0, CHUNK_DIMENSION)
         glm::vec3 rayDirection       // Normalized direction vector

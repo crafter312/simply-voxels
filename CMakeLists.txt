@@ -135,6 +135,7 @@ add_executable(SimpleVulkanWindow
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
     src/world/RegionManager.cpp          # Add RegionManager class
     src/util/Raycaster.cpp               # Add the new Raycaster source file
+    src/physics/VoxelShape.cpp           # Add the new VoxelShape source file
 )
 
 # Add compile definitions for tinygltf configuration to the target

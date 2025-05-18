@@ -8,10 +8,15 @@
 class Camera;
 class World;
 class InputManager;
+class BlockRegistry; // Forward declare BlockRegistry
 
 class Player {
 public:
-    Player(std::shared_ptr<Camera> camera, World& world, std::shared_ptr<InputManager> inputManager);
+    Player(
+        std::shared_ptr<Camera> camera,
+        World& world,
+        BlockRegistry& blockRegistry, // Add BlockRegistry reference
+        std::shared_ptr<InputManager> inputManager);
 
     void update(float deltaTime);
 
@@ -23,6 +28,7 @@ private:
 
     std::shared_ptr<Camera> m_camera;
     World& m_world; // Reference, as Player doesn't own the World
+    BlockRegistry& m_blockRegistry; // Reference to the block registry
     std::shared_ptr<InputManager> m_inputManager;
 
     uint16_t m_selectedBlockType; // The type of block to place

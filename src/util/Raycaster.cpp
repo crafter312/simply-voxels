@@ -2,6 +2,8 @@
 #include "../world/World.hpp" // For World::getBlockID and potentially Blocks::AIR_ID
 #include "../block/Block.hpp" // Assuming Blocks::AIR_ID is defined here or accessible via World.hpp
 #include "../world/Chunk.hpp" // For CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH
+#include "../block/BlockRegistry.hpp" // For BlockRegistry
+#include "../physics/VoxelShape.hpp" // For Physics::VoxelShape and Physics::VoxelShapeRayHit
 #include "../block/Blocks.hpp"
 
 #include <cmath>   // For std::floor, std::abs
@@ -11,6 +13,7 @@ namespace VoxelRaycaster {
 
 RaycastResult castRay(
     const World& world,
+    const BlockRegistry& blockRegistry,
     glm::ivec3 originChunkPos,
     glm::vec3 originLocalPos,
     glm::vec3 rayDirection) { // Assumed to be normalized
@@ -19,20 +22,24 @@ RaycastResult castRay(
     // This combines the large-scale chunk position (integer) with the integer part of the local position.
     // Use int64_t for intermediate calculations to prevent overflow when originChunkPos is large.
     // We now use glm::i64vec3 for currentBlockPos to allow traversal beyond int32_t limits.
-    glm::i64vec3 currentBlockPos; // Changed to i64vec3
-    currentBlockPos.x = 
+    // This is the initial voxel the ray starts in.
+    glm::i64vec3 initialRayVoxelPos_i64; 
+    initialRayVoxelPos_i64.x = 
         static_cast<int64_t>(originChunkPos.x) * CHUNK_WIDTH +
         static_cast<int64_t>(std::floor(originLocalPos.x));
-    currentBlockPos.y = 
+    initialRayVoxelPos_i64.y = 
         static_cast<int64_t>(originChunkPos.y) * CHUNK_HEIGHT +
         static_cast<int64_t>(std::floor(originLocalPos.y));
-    currentBlockPos.z = 
+    initialRayVoxelPos_i64.z = 
         static_cast<int64_t>(originChunkPos.z) * CHUNK_DEPTH +
         static_cast<int64_t>(std::floor(originLocalPos.z));
 
     // If the ray starts outside the int32_t addressable world, we could potentially return early.
     // However, the DDA loop will naturally handle this by not finding blocks if it queries outside.
     // For now, we let it proceed. The check will happen before calling getBlockID.
+
+    // currentBlockPos for DDA traversal starts at the initial ray voxel position.
+    glm::i64vec3 currentBlockPos = initialRayVoxelPos_i64;
 
     // Calculate the ray's origin relative to the corner of its starting voxel.
     // These components will be in the range [0, 1).
@@ -119,7 +126,36 @@ RaycastResult castRay(
 
             uint16_t blockID = world.getBlockID(queryableBlockPos);
             if (blockID != Blocks::AIR_ID) { 
-                return RaycastResult(queryableBlockPos, hitNormal, currentDistance);
+                const Block* blockDef = blockRegistry.getBlockDefinition(blockID);
+                if (blockDef) {
+                    const auto& optionalShape = blockDef->getCustomShape();
+                    if (optionalShape.has_value() && !optionalShape.value().isEmpty()) {
+                        const Physics::VoxelShape& shape = optionalShape.value();
+                        // Calculate the ray's origin in the local space of the current block being tested.
+                        // initialRayVoxelPos_i64: integer world coord of the ray's start voxel.
+                        // currentBlockPos: integer world coord of the block being tested by DDA.
+                        // rayOriginInStartVoxel: fractional part of ray's origin in its start voxel.
+                        glm::vec3 rayOriginInBlockLocal = glm::vec3(initialRayVoxelPos_i64 - currentBlockPos) + rayOriginInStartVoxel;
+
+                        Physics::VoxelShapeRayHit shapeHit = shape.intersect(
+                            rayOriginInBlockLocal,
+                            rayDirection
+                        );
+
+                        if (shapeHit.isHit && shapeHit.distance >= 0.0f && shapeHit.distance < MAX_RAY_DISTANCE) {
+                            // Ensure the hit normal from VoxelShape is ivec3 if RaycastResult expects it
+                            // VoxelShapeRayHit::normal is vec3, RaycastResult::hitNormal is ivec3
+                            // We might need to adjust RaycastResult or convert here.
+                            // For now, let's assume we can cast/round. A more robust solution might be needed.
+                            glm::ivec3 finalHitNormal = glm::ivec3(glm::round(shapeHit.normal));
+                            return RaycastResult(queryableBlockPos, finalHitNormal, shapeHit.distance);
+                        }
+                        // If custom shape was missed, or hit too far, continue ray marching
+                    } else {
+                        // No custom shape or empty shape, use DDA result (standard 1x1x1 cube)
+                        return RaycastResult(queryableBlockPos, hitNormal, currentDistance);
+                    }
+                } // else blockDef is null, treat as air (should not happen if ID is not AIR)
             }
         } else {
             // Current block position is outside the addressable range of World::getBlockID

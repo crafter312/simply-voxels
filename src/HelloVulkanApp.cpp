@@ -123,7 +123,7 @@ void HelloVulkanApp::initVulkan() {
     std::cout << "World created with initial blocks." << std::endl;
 
     // --- Create Player ---
-    player = std::make_unique<Player>(camera, *world, inputManager);
+    player = std::make_unique<Player>(camera, *world, *blockRegistry, inputManager);
     std::cout << "Player created." << std::endl;
 
     // --- Create and Initialize Renderer ---

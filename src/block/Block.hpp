@@ -4,6 +4,9 @@
 #include <string>
 #include <array>   // For std::array
 #include <cstdint> // For uint16_t
+#include <optional> // For std::optional
+#include "../physics/VoxelShape.hpp" // Include the full definition of VoxelShape
+                                     // This also brings in Physics::BlockAABB if VoxelShape.hpp includes BoundingBox.hpp
 
 // Enum to represent the 6 faces of a block/cell
 // The order matches NEIGHBOR_OFFSETS in World.hpp for convenience
@@ -35,6 +38,8 @@ public:
 
     bool hasFullOccludingFace(FaceDirection dir) const;
     void setFullOccludingFace(FaceDirection dir, bool isFull);
+    void setCustomShape(const Physics::VoxelShape& shape);
+    const std::optional<Physics::VoxelShape>& getCustomShape() const;
 
     // Helper to get the opposite face direction
     static FaceDirection getOppositeFace(FaceDirection dir);
@@ -45,6 +50,7 @@ private:
     std::string m_texturePath;
 
     std::array<bool, 6> m_fullOccludingFaces; // True if the face in this direction is full and opaque
+    std::optional<Physics::VoxelShape> customShape; // Optional custom collision shape for this block type
 };
 
 #endif // BLOCK_DEFINITION_HPP
