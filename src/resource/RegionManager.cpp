@@ -1,5 +1,5 @@
 #include "RegionManager.hpp"
-#include "Chunk.hpp" // For CHUNK_VOLUME, CHUNK_WIDTH etc. and Chunk class
+#include "../world/Chunk.hpp" // For CHUNK_VOLUME, CHUNK_WIDTH etc. and Chunk class
 #include "../block/Blocks.hpp" // For Blocks::AIR_ID (though Chunk handles this internally)
 
 #include <fstream>

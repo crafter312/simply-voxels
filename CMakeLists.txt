@@ -133,7 +133,7 @@ add_executable(SimpleVulkanWindow
     src/world/World.cpp                  # Add World class
     src/world/Chunk.cpp                  # Add Chunk class
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
-    src/world/RegionManager.cpp          # Add RegionManager class
+    src/resource/RegionManager.cpp          # Add RegionManager class
     src/util/Raycaster.cpp               # Add the new Raycaster source file
     src/physics/VoxelShape.cpp           # Add the new VoxelShape source file
 )

@@ -8,7 +8,7 @@
 //#define GLM_ENABLE_EXPERIMENTAL
 #include "../Camera.hpp" // Include Camera definition
 #include "../block/Blocks.hpp" // Include the centralized block definitions
-#include "RegionManager.hpp" // Include RegionManager definition
+#include "../resource/RegionManager.hpp" // Include RegionManager definition
 
 World::World(std::shared_ptr<Camera> camera)
     : m_camera(camera) { // m_player will be initialized below
