@@ -46,7 +46,6 @@ public:
     // Enum to describe the generation status of a chunk for meshing decisions
     enum class ChunkGenStatus { NOT_FOUND, LOADED_NOT_GENERATED, LOADED_AND_GENERATED };
 
-    // Constructor now accepts a shared pointer to the Camera
     ~World(); // Declare the destructor
     World(std::shared_ptr<Camera> camera);
 

@@ -125,6 +125,7 @@ add_executable(SimpleVulkanWindow
     src/resource/ModelLoader.cpp         # Add the new model loader
     src/resource/ResourceManager.cpp     # Add ResourceManager
     src/InputManager.cpp 
+    src/Player.cpp                       # Add the new Player source file
     src/Camera.cpp                       # Add the new Camera source file
     src/block/Block.cpp                        # Source file for the Block class
     src/block/Blocks.cpp                       # Source file for the Blocks namespace (e.g., registration)
@@ -133,6 +134,7 @@ add_executable(SimpleVulkanWindow
     src/world/Chunk.cpp                  # Add Chunk class
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
     src/world/RegionManager.cpp          # Add RegionManager class
+    src/util/Raycaster.cpp               # Add the new Raycaster source file
 )
 
 # Add compile definitions for tinygltf configuration to the target

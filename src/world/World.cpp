@@ -6,13 +6,12 @@
 #include <shared_mutex> // For std::shared_lock and std::unique_lock
 
 //#define GLM_ENABLE_EXPERIMENTAL
-//#include <glm/gtx/string_cast.hpp> // For glm::to_string
 #include "../Camera.hpp" // Include Camera definition
 #include "../block/Blocks.hpp" // Include the centralized block definitions
 #include "RegionManager.hpp" // Include RegionManager definition
 
 World::World(std::shared_ptr<Camera> camera)
-    : m_camera(camera) {
+    : m_camera(camera) { // m_player will be initialized below
     m_regionManager = std::make_unique<WorldSave::RegionManager>("../run/regions/"); // Initialize RegionManager
     // Initially, enqueue chunks around the starting camera position (which is relative to the initial rebase origin 0,0,0)
     enqueueChunksNearCamera();
@@ -25,10 +24,26 @@ World::~World() {
 }
 
 glm::ivec3 World::worldToChunkCoordinates(glm::ivec3 worldPosition) { 
+    // Perform floored division using integer arithmetic to avoid float precision issues.
+    // CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH are positive.
+    int chunkX = worldPosition.x / CHUNK_WIDTH;
+    int chunkY = worldPosition.y / CHUNK_HEIGHT;
+    int chunkZ = worldPosition.z / CHUNK_DEPTH;
+
+    // Adjust for negative coordinates if there's a non-zero remainder,
+    // because integer division truncates towards zero.
+    if (worldPosition.x < 0 && (worldPosition.x % CHUNK_WIDTH != 0)) {
+        chunkX--;
+    }
+    if (worldPosition.y < 0 && (worldPosition.y % CHUNK_HEIGHT != 0)) {
+        chunkY--;
+    }
+    if (worldPosition.z < 0 && (worldPosition.z % CHUNK_DEPTH != 0)) {
+        chunkZ--;
+    }
+
     return glm::ivec3(
-        static_cast<int>(std::floor(static_cast<float>(worldPosition.x) / CHUNK_WIDTH)),
-        static_cast<int>(std::floor(static_cast<float>(worldPosition.y) / CHUNK_HEIGHT)),
-        static_cast<int>(std::floor(static_cast<float>(worldPosition.z) / CHUNK_DEPTH))
+        chunkX, chunkY, chunkZ
     );
 }
 

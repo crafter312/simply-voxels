@@ -7,6 +7,7 @@
 #include "block/Blocks.hpp"                // Include the new Blocks header
 #include "Camera.hpp"                // Include the Camera header
 #include "world/World.hpp"                 // Include the World header
+#include "Player.hpp"                // Include the Player header
 #include "VulkanDebug.hpp"           // Include the new VulkanDebug header
 
 #include <iostream>
@@ -117,9 +118,13 @@ void HelloVulkanApp::initVulkan() {
     std::cout << "BlockRegistry created and populated." << std::endl;
 
     // --- Create World ---
-    // Pass the camera to the World constructor
+    // World constructor now only takes the camera
     world = std::make_unique<World>(camera);
     std::cout << "World created with initial blocks." << std::endl;
+
+    // --- Create Player ---
+    player = std::make_unique<Player>(camera, *world, inputManager);
+    std::cout << "Player created." << std::endl;
 
     // --- Create and Initialize Renderer ---
     renderer = std::make_unique<VulkanRenderer>(
@@ -212,6 +217,10 @@ void HelloVulkanApp::mainLoop() {
             world->update(deltaTime); // Update world logic (chunk loading/unloading)
         }
 
+        if (player) {
+            player->update(deltaTime); // Update player logic
+        }
+
         if (renderer) {
             renderer->drawFrame(); // Call renderer's drawFrame
         }
@@ -229,6 +238,9 @@ void HelloVulkanApp::cleanup() {
     // Renderer holds Vulkan objects that depend on the device, so destroy it first.
     // The renderer's destructor handles its internal cleanup.
     renderer.reset(); // Calls VulkanRenderer destructor
+
+    // Player is managed by unique_ptr, will be cleaned up automatically
+    player.reset();
 
     // InputManager is managed by unique_ptr, will be cleaned up automatically
     inputManager.reset();

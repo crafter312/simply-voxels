@@ -3,12 +3,17 @@
 #include <vector>       // For storing the list of keys to monitor
 #include <stdexcept>    // For throwing exceptions on errors
 
-// Define the list of keys we want our InputManager to track.
-// This makes it easy to add or remove keys without changing loop logic much.
-static const std::vector<KeyCode> monitoredKeys = {
+// Define the list of keyboard keys we want our InputManager to track.
+static const std::vector<KeyCode> monitoredKeyboardKeys = {
     KeyCode::W, KeyCode::A, KeyCode::S, KeyCode::D, KeyCode::Space, KeyCode::LeftShift, KeyCode::LeftControl,
     KeyCode::LeftArrow, KeyCode::RightArrow, KeyCode::UpArrow, KeyCode::DownArrow
     // Add any other KeyCode enum values you want to track here
+};
+
+// Define the list of mouse buttons we want our InputManager to track.
+static const std::vector<KeyCode> monitoredMouseButtons = {
+    KeyCode::MOUSE_BUTTON_LEFT, KeyCode::MOUSE_BUTTON_RIGHT
+    // Add any other mouse button KeyCode enum values you want to track here
 };
 
 InputManager::InputManager(GLFWwindow* window) : m_window(window) {
@@ -16,8 +21,8 @@ InputManager::InputManager(GLFWwindow* window) : m_window(window) {
         throw std::runtime_error("InputManager: GLFWwindow pointer cannot be null!");
     }
 
-    // Initialize all monitored keys to a 'not pressed' state.
-    for (KeyCode key : monitoredKeys) {
+    // Initialize all monitored keyboard keys to a 'not pressed' state.
+    for (KeyCode key : monitoredKeyboardKeys) {
         currentKeyStates[key] = false;
         previousKeyStates[key] = false;
     }
@@ -29,9 +34,15 @@ InputManager::InputManager(GLFWwindow* window) : m_window(window) {
     glfwGetCursorPos(m_window, &m_mouseX, &m_mouseY);
     m_lastMouseX = m_mouseX; // Set last to current initially to avoid a jump
     m_lastMouseY = m_mouseY; // Set last to current initially to avoid a jump
+
+    // Initialize all monitored mouse buttons to a 'not pressed' state.
+    for (KeyCode button : monitoredMouseButtons) {
+        currentMouseButtonStates[button] = false;
+        previousMouseButtonStates[button] = false;
+    }
 }
 
-int InputManager::getGlfwKeyCode(KeyCode key) const {
+int InputManager::getGlfwKeyboardKeyCode(KeyCode key) const {
     switch (key) {
         case KeyCode::W:         return GLFW_KEY_W;
         case KeyCode::A:         return GLFW_KEY_A;
@@ -44,27 +55,47 @@ int InputManager::getGlfwKeyCode(KeyCode key) const {
         case KeyCode::RightArrow:return GLFW_KEY_RIGHT;
         case KeyCode::UpArrow:   return GLFW_KEY_UP;
         case KeyCode::DownArrow: return GLFW_KEY_DOWN;
-        case KeyCode::Unknown:   // Fall through
+        // Mouse buttons are not keyboard keys
+        case KeyCode::MOUSE_BUTTON_LEFT: // Fall through
+        case KeyCode::MOUSE_BUTTON_RIGHT: // Fall through
+        case KeyCode::Unknown:    // Fall through
         default:                 return GLFW_KEY_UNKNOWN; // GLFW's code for an unknown key
+    }
+}
+
+int InputManager::getGlfwMouseButtonCode(KeyCode button) const {
+    switch (button) {
+        case KeyCode::MOUSE_BUTTON_LEFT:  return GLFW_MOUSE_BUTTON_LEFT;
+        case KeyCode::MOUSE_BUTTON_RIGHT: return GLFW_MOUSE_BUTTON_RIGHT;
+        // Keyboard keys are not mouse buttons
+        default:                          return -1; // Indicate not a valid/mapped mouse button
     }
 }
 
 void InputManager::update() {
     if (!m_window) return; // Should not happen if constructor throws, but good practice.
 
-    // First, copy the current states to the previous states.
+    // Update keyboard states
+    // First, copy the current keyboard states to the previous keyboard states.
     previousKeyStates = currentKeyStates;
 
-    // Now, poll GLFW for the current state of all monitored keys.
-    for (KeyCode appKey : monitoredKeys) {
-        int glfwKey = getGlfwKeyCode(appKey);
+    // Now, poll GLFW for the current state of all monitored keyboard keys.
+    for (KeyCode appKey : monitoredKeyboardKeys) {
+        int glfwKey = getGlfwKeyboardKeyCode(appKey);
         if (glfwKey != GLFW_KEY_UNKNOWN) {
             currentKeyStates[appKey] = (glfwGetKey(m_window, glfwKey) == GLFW_PRESS);
         } else {
-            // If a KeyCode in monitoredKeys doesn't map to a GLFW key,
+            // If a KeyCode in monitoredKeyboardKeys doesn't map to a GLFW key,
             // ensure its state is false.
             currentKeyStates[appKey] = false;
         }
+    }
+
+    // Update mouse button states
+    previousMouseButtonStates = currentMouseButtonStates;
+    for (KeyCode mouseButton : monitoredMouseButtons) {
+        int glfwButton = getGlfwMouseButtonCode(mouseButton);
+        currentMouseButtonStates[mouseButton] = (glfwButton != -1 && glfwGetMouseButton(m_window, glfwButton) == GLFW_PRESS);
     }
 
     // Update mouse position and calculate delta
@@ -113,6 +144,40 @@ bool InputManager::isKeyReleased(KeyCode key) const {
         previousPressed = it->second;
     }
     return !currentPressed && previousPressed; // True if currently up AND previously down.
+}
+
+bool InputManager::isMouseButtonDown(KeyCode button) const {
+    // Ensure the KeyCode is actually a mouse button, though map lookup will handle non-existence
+    if (getGlfwMouseButtonCode(button) == -1) return false;
+
+    auto it = currentMouseButtonStates.find(button);
+    if (it != currentMouseButtonStates.end()) {
+        return it->second;
+    }
+    return false; // Button not in our map (shouldn't happen if initialized correctly for monitoredMouseButtons)
+}
+
+bool InputManager::isMouseButtonPressed(KeyCode button) const {
+    if (getGlfwMouseButtonCode(button) == -1) return false;
+
+    bool currentPressed = isMouseButtonDown(button);
+    bool previousPressed = false;
+    auto it = previousMouseButtonStates.find(button);
+    if (it != previousMouseButtonStates.end()) {
+        previousPressed = it->second;
+    }
+    return currentPressed && !previousPressed;
+}
+
+bool InputManager::isMouseButtonReleased(KeyCode button) const {
+    if (getGlfwMouseButtonCode(button) == -1) return false;
+    bool currentPressed = isMouseButtonDown(button);
+    bool previousPressed = false;
+    auto it = previousMouseButtonStates.find(button);
+    if (it != previousMouseButtonStates.end()) {
+        previousPressed = it->second;
+    }
+    return !currentPressed && previousPressed;
 }
 
 double InputManager::getMouseX() const {

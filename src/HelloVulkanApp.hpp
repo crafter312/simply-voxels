@@ -30,6 +30,9 @@ class BlockRegistry;
 // Forward declare World
 class World;
 
+// Forward declare Player
+class Player;
+
 // Forward declare VulkanDebug
 class VulkanDebug;
 
@@ -65,6 +68,9 @@ private:
 
     // --- World Data ---
     std::unique_ptr<World> world;
+
+    // --- Player ---
+    std::unique_ptr<Player> player;
 
     // --- Renderer ---
     std::unique_ptr<VulkanRenderer> renderer;
