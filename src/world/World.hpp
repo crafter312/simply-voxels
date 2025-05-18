@@ -13,6 +13,10 @@
 // Forward declaration for Camera
 class Camera;
 
+namespace WorldSave { // Forward declare RegionManager in its namespace
+class RegionManager;
+}
+
 // Comparator for glm::ivec3 to use it as a key in std::map
 struct IVec3Comparator {
     bool operator()(const glm::ivec3& a, const glm::ivec3& b) const {
@@ -43,6 +47,7 @@ public:
     enum class ChunkGenStatus { NOT_FOUND, LOADED_NOT_GENERATED, LOADED_AND_GENERATED };
 
     // Constructor now accepts a shared pointer to the Camera
+    ~World(); // Declare the destructor
     World(std::shared_ptr<Camera> camera);
 
     // Destructor (optional, but good practice)
@@ -95,6 +100,7 @@ private:
     std::queue<glm::ivec3> m_loadQueue;
     std::queue<glm::ivec3> m_unloadQueue;
     mutable std::shared_mutex m_chunks_mutex; // Mutex to protect m_chunks
+    std::unique_ptr<WorldSave::RegionManager> m_regionManager; // Instance of RegionManager, using unique_ptr
 
     // Internal methods for managing chunk loading/unloading
     void enqueueChunksNearCamera();

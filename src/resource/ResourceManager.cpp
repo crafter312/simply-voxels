@@ -815,15 +815,22 @@ void ResourceManager::buildTextureAtlas(const BlockRegistry& registry) {
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; // Or CLAMP_TO_EDGE, etc.
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = VK_TRUE; // Enable anisotropy
-            VkPhysicalDeviceProperties properties{};
-            vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
-        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy; // Use max supported
+
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+        if (properties.limits.maxSamplerAnisotropy > 1.0f) { // Check if physical device supports anisotropy
+            samplerInfo.anisotropyEnable = VK_TRUE; 
+            samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy; // Use max supported by physical device
+        } else {
+            samplerInfo.anisotropyEnable = VK_FALSE;
+            samplerInfo.maxAnisotropy = 1.0f;
+        }
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR; // Linear for smoother mip transitions
+        samplerInfo.mipLodBias = 0.0f; // Try a small positive bias (e.g., 0.25 to 1.0)
         samplerInfo.minLod = 0.0f;
         // atlasTotalMipLevels was calculated earlier
         float maxLodValue = static_cast<float>(atlasTotalMipLevels - 1);

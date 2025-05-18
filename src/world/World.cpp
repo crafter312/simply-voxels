@@ -9,12 +9,19 @@
 //#include <glm/gtx/string_cast.hpp> // For glm::to_string
 #include "../Camera.hpp" // Include Camera definition
 #include "../block/Blocks.hpp" // Include the centralized block definitions
+#include "RegionManager.hpp" // Include RegionManager definition
 
 World::World(std::shared_ptr<Camera> camera)
     : m_camera(camera) {
-    
+    m_regionManager = std::make_unique<WorldSave::RegionManager>("../run/regions/"); // Initialize RegionManager
     // Initially, enqueue chunks around the starting camera position (which is relative to the initial rebase origin 0,0,0)
     enqueueChunksNearCamera();
+}
+
+World::~World() {
+    // The std::unique_ptr m_regionManager will be automatically destroyed here.
+    // Because this destructor is defined in the .cpp file where RegionManager.hpp is included,
+    // the compiler has the full definition of RegionManager and can correctly destroy it.
 }
 
 glm::ivec3 World::worldToChunkCoordinates(glm::ivec3 worldPosition) { 
@@ -223,8 +230,16 @@ void World::processLoadQueue() {
         if (needsLoading) {
             // getOrCreateChunk handles its own unique lock for potential emplace
             Chunk& newChunk = getOrCreateChunk(chunkCoord);
-            newChunk.generate(); // Generate terrain for the new chunk (this also marks it dirty via constructor/setBlock)
-            // std::cout << "Loaded chunk: " << glm::to_string(chunkCoord) << std::endl;
+
+            // Attempt to load from file first
+            bool loadedFromFile = m_regionManager->loadChunkFromFile(newChunk);
+            if (loadedFromFile) {
+                // std::cout << "Loaded chunk " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " from file." << std::endl;
+                // loadChunkFromFile already calls markGenerated() and sets dirty to false.
+            } else {
+                newChunk.generate(); // Generate terrain if not loaded from file
+                // std::cout << "Generated chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << std::endl;
+            }
 
             // Mark its 6 direct neighbors as dirty so they can update their meshes
             // relative to this newly generated and loaded chunk.
@@ -249,21 +264,33 @@ void World::processUnloadQueue() {
         glm::ivec3 chunkCoord = m_unloadQueue.front();
         m_unloadQueue.pop();
         
-        // Operations on m_chunks (reading for neighbors, then erasing) need to be atomic
-        // with respect to other accesses to m_chunks.
+        // Operations on m_chunks (saving, reading for neighbors, then erasing) need to be atomic
+        // with respect to other accesses to m_chunks. A unique_lock is appropriate here.
         {
             std::unique_lock<std::shared_mutex> lock(m_chunks_mutex); // Write lock for erase and consistent neighbor check
-            // Before erasing the chunk, mark its 6 direct neighbors as dirty.
-            // This allows them to rebuild their meshes now that this chunk will be gone (effectively air).
-            for (size_t i = 0; i < NUM_NEIGHBORS; ++i) {
-                glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[i];
-                if (m_chunks.count(neighborCoord)) { // Check if the neighbor exists
-                    m_changedChunks.insert(neighborCoord);
+            
+            auto it = m_chunks.find(chunkCoord);
+            if (it != m_chunks.end()) {
+                Chunk& chunk_to_unload = it->second;
+
+                // Save the chunk if it's dirty before unloading
+                if (chunk_to_unload.isDirty()) {
+                    if (!m_regionManager->saveChunkToFile(chunk_to_unload)) {
+                        std::cerr << "Warning: Failed to save chunk " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " during unload." << std::endl;
+                    }
                 }
+
+                // Before erasing the chunk, mark its 6 direct neighbors as dirty.
+                // This allows them to rebuild their meshes now that this chunk will be gone (effectively air).
+                for (size_t i = 0; i < NUM_NEIGHBORS; ++i) {
+                    glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[i];
+                    if (m_chunks.count(neighborCoord)) { // Check if the neighbor exists
+                        m_changedChunks.insert(neighborCoord);
+                    }
+                }
+                m_changedChunks.insert(chunkCoord); // Mark this chunk as changed (it's being removed)
+                m_chunks.erase(it); // Erase using the iterator
             }
-            // std::cout << "Unloading chunk: " << glm::to_string(chunkCoord) << std::endl;
-            m_changedChunks.insert(chunkCoord); // Mark this chunk as changed (it's being removed)
-            m_chunks.erase(chunkCoord);
         }
     }
 }

@@ -14,6 +14,12 @@ find_package(Vulkan REQUIRED)
 # Find GLFW package (make sure GLFW is installed or provide it)
 find_package(glfw3 REQUIRED)
 
+# Find PkgConfig to help find other libraries
+find_package(PkgConfig REQUIRED)
+# Find LZ4 using pkg-config (module name is typically 'liblz4')
+# and create an imported CMake target named 'lz4' (pkg-config module name is 'liblz4')
+pkg_check_modules(PC_LZ4 REQUIRED IMPORTED_TARGET liblz4)
+
 # --- Fetch GLM using FetchContent ---
 # Include the module
 include(FetchContent)
@@ -126,6 +132,7 @@ add_executable(SimpleVulkanWindow
     src/world/World.cpp                  # Add World class
     src/world/Chunk.cpp                  # Add Chunk class
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
+    src/world/RegionManager.cpp          # Add RegionManager class
 )
 
 # Add compile definitions for tinygltf configuration to the target
@@ -168,8 +175,8 @@ add_dependencies(SimpleVulkanWindow Shaders)
 # Link libraries
 # Link Vulkan, GLFW, and the fetched GLM target.
 # The target name provided by FetchContent for GLM is typically 'glm'.
-# Note: GLM, stb_image, and tinygltf are header-only, but we set up INTERFACE library targets for include management.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf)
+# Note: GLM, stb_image, and tinygltf are header-only (or nearly so), but we set up INTERFACE library targets for include management. LZ4 is found via pkg-config.
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4)
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")

@@ -27,6 +27,7 @@ constexpr int CHUNK_VOLUME = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH; // 4096
 // Terrain generation parameters
 constexpr double TERRAIN_FREQUENCY = 0.01; // Controls the "zoom" of the noise. Smaller = larger features.
 constexpr double TERRAIN_AMPLITUDE = 20.0; // Controls the height variation of the terrain.
+constexpr int DIRT_LAYER_THICKNESS = 3;   // Number of dirt blocks on top of stone.
 
 class Chunk {
 public:
@@ -61,6 +62,10 @@ public:
     void markGenerated() { 
         //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] markGenerated() called." << std::endl;
         m_isGenerated.store(true, std::memory_order_release); }   // Called at the end of generate()
+
+    // Methods for RegionManager to load data
+    void setAllBlocks(const std::array<uint16_t, CHUNK_VOLUME>& new_blocks_data);
+    void setAllAir();
 
     // Helper to convert 3D local coordinates to a 1D array index
     // Made public static so it can be used by external functions like ChunkMesher

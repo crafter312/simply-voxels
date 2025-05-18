@@ -185,7 +185,14 @@ void Chunk::generate() {
                 int currentBlockAbsoluteY = chunkWorldOrigin.y + ly; // Absolute Y of the current block layer
 
                 if (currentBlockAbsoluteY < surfaceTopAbsoluteY) {
-                    setBlock(lx, ly, lz, Blocks::STONE_ID);
+                    // This block is solid (not air)
+                    if (currentBlockAbsoluteY >= surfaceTopAbsoluteY - DIRT_LAYER_THICKNESS) {
+                        // Within the dirt layer (topmost solid blocks)
+                        setBlock(lx, ly, lz, Blocks::DIRT_ID);
+                    } else {
+                        // Below the dirt layer, it's stone
+                        setBlock(lx, ly, lz, Blocks::STONE_ID);
+                    }
                     intendedNonAirBlocks++;
                 } else {
                     setBlock(lx, ly, lz, Blocks::AIR_ID);
@@ -220,4 +227,28 @@ void Chunk::generate() {
     }
     //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] FINISHED generation, calling markGenerated(). isAllAir: " << m_isAllAir << std::endl;
     markGenerated(); // Mark this chunk as having completed its initial generation
+}
+
+void Chunk::setAllBlocks(const std::array<uint16_t, CHUNK_VOLUME>& new_blocks_data) {
+    std::unique_lock<std::shared_mutex> lock(m_data_mutex);
+    if (!m_blocks) {
+        // allocateBlockStorage already sets m_isAllAir to false
+        // and initializes to AIR_ID, but we'll overwrite immediately.
+        // It's crucial that allocateBlockStorage is called without the lock held
+        // if it were to call other methods that also lock. However, its current
+        // implementation is simple enough. For safety, we could unlock and relock,
+        // but given its current state, this is okay.
+        // The primary purpose of allocateBlockStorage is to create the m_blocks unique_ptr.
+        m_blocks = std::make_unique<std::array<uint16_t, CHUNK_VOLUME>>();
+    }
+    *m_blocks = new_blocks_data; // Direct copy
+    m_isAllAir = false;
+    m_isDirty = false; // Loaded from file, not dirty initially
+}
+
+void Chunk::setAllAir() {
+    std::unique_lock<std::shared_mutex> lock(m_data_mutex);
+    m_blocks.reset(); // Deallocate block storage
+    m_isAllAir = true;
+    m_isDirty = false; // Loaded from file, not dirty initially
 }
