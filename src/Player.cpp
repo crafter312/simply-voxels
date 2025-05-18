@@ -71,7 +71,10 @@ void Player::handleBlockInteraction() {
         );
 
         if (result.hit) {
-            glm::ivec3 placePosition = result.blockPosition + result.hitNormal;
+            // result.blockPosition is glm::i64vec3
+            // result.hitNormal is glm::ivec3
+            // The sum will be glm::i64vec3
+            glm::i64vec3 placePosition = result.blockPosition + glm::i64vec3(result.hitNormal);
             
             // Optional: Add a check here to prevent placing blocks inside the player
             // This would require the player to have its own bounding box and do an intersection test.

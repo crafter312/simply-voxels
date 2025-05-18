@@ -10,15 +10,15 @@ class BlockRegistry;
 
 struct RaycastResult {
     bool hit = false;
-    glm::ivec3 blockPosition; // World coordinates of the hit block
+    glm::i64vec3 blockPosition; // World coordinates of the hit block (64-bit)
     glm::ivec3 hitNormal;     // Normal of the face that was hit (e.g., {0,1,0} for top face)
     float distance = 0.0f;
 
     // Constructor for no-hit
     RaycastResult() = default;
 
-    // Constructor for a hit
-    RaycastResult(const glm::ivec3& pos, const glm::ivec3& normal, float dist)
+    // Constructor for a hit (blockPosition is now i64vec3)
+    RaycastResult(const glm::i64vec3& pos, const glm::ivec3& normal, float dist)
         : hit(true), blockPosition(pos), hitNormal(normal), distance(dist) {}
 };
 

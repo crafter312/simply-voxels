@@ -3,6 +3,8 @@
 #include <iostream> // For debugging output (can be removed later)
 #include <algorithm> // For std::max
 #include <mutex> // For std::unique_lock
+#include <optional> // For std::optional
+#include <limits>   // For std::numeric_limits
 #include <shared_mutex> // For std::shared_lock and std::unique_lock
 
 //#define GLM_ENABLE_EXPERIMENTAL
@@ -23,65 +25,131 @@ World::~World() {
     // the compiler has the full definition of RegionManager and can correctly destroy it.
 }
 
-glm::ivec3 World::worldToChunkCoordinates(glm::ivec3 worldPosition) { 
+std::optional<glm::ivec3> World::worldToChunkCoordinates(glm::i64vec3 worldPosition) {
     // Perform floored division using integer arithmetic to avoid float precision issues.
     // CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH are positive.
-    int chunkX = worldPosition.x / CHUNK_WIDTH;
-    int chunkY = worldPosition.y / CHUNK_HEIGHT;
-    int chunkZ = worldPosition.z / CHUNK_DEPTH;
+    int64_t chunkX_i64 = worldPosition.x / CHUNK_WIDTH;
+    int64_t chunkY_i64 = worldPosition.y / CHUNK_HEIGHT;
+    int64_t chunkZ_i64 = worldPosition.z / CHUNK_DEPTH;
 
     // Adjust for negative coordinates if there's a non-zero remainder,
     // because integer division truncates towards zero.
     if (worldPosition.x < 0 && (worldPosition.x % CHUNK_WIDTH != 0)) {
-        chunkX--;
+        chunkX_i64--;
     }
     if (worldPosition.y < 0 && (worldPosition.y % CHUNK_HEIGHT != 0)) {
-        chunkY--;
+        chunkY_i64--;
     }
     if (worldPosition.z < 0 && (worldPosition.z % CHUNK_DEPTH != 0)) {
-        chunkZ--;
+        chunkZ_i64--;
+    }
+
+    // Check if the 64-bit chunk coordinates fit into 32-bit integers
+    if (chunkX_i64 < std::numeric_limits<int>::min() || chunkX_i64 > std::numeric_limits<int>::max() ||
+        chunkY_i64 < std::numeric_limits<int>::min() || chunkY_i64 > std::numeric_limits<int>::max() ||
+        chunkZ_i64 < std::numeric_limits<int>::min() || chunkZ_i64 > std::numeric_limits<int>::max()) {
+        // One or more chunk coordinates are out of the 32-bit range
+        return std::nullopt;
+    }
+
+    return glm::ivec3( // Safely cast to int and return
+        static_cast<int>(chunkX_i64),
+        static_cast<int>(chunkY_i64),
+        static_cast<int>(chunkZ_i64)
+    );
+
+}
+
+std::optional<glm::ivec3> World::worldToLocalCoordinates(glm::i64vec3 worldPosition, glm::ivec3 chunkCoord) {
+    glm::i64vec3 localPos_i64;
+    localPos_i64.x = worldPosition.x - static_cast<int64_t>(chunkCoord.x) * CHUNK_WIDTH;
+    localPos_i64.y = worldPosition.y - static_cast<int64_t>(chunkCoord.y) * CHUNK_HEIGHT;
+    localPos_i64.z = worldPosition.z - static_cast<int64_t>(chunkCoord.z) * CHUNK_DEPTH;
+
+    // Check if the calculated local coordinates are within the valid range [0, CHUNK_DIMENSION - 1].
+    // Mathematically, if chunkCoord was correctly derived from worldToChunkCoordinates(worldPosition),
+    // these local coordinates should always be in range.
+    // This check adds robustness if the function is called with inconsistent inputs,
+    // or helps catch unexpected behavior.
+    if (localPos_i64.x < 0 || localPos_i64.x >= CHUNK_WIDTH ||
+        localPos_i64.y < 0 || localPos_i64.y >= CHUNK_HEIGHT ||
+        localPos_i64.z < 0 || localPos_i64.z >= CHUNK_DEPTH) {
+        // This indicates that the provided chunkCoord was not the canonical one for worldPosition,
+        // or an unexpected calculation error occurred.
+        // std::cerr << "Warning: worldToLocalCoordinates produced out-of-bounds local coordinates. "
+        //           << "worldPos: (" << worldPosition.x << "," << worldPosition.y << "," << worldPosition.z << "), "
+        //           << "chunkCoord: (" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "), "
+        //           << "calculated local_i64: (" << localPos_i64.x << "," << localPos_i64.y << "," << localPos_i64.z << ")" << std::endl;
+        return std::nullopt;
     }
 
     return glm::ivec3(
-        chunkX, chunkY, chunkZ
+        static_cast<int>(localPos_i64.x),
+        static_cast<int>(localPos_i64.y),
+        static_cast<int>(localPos_i64.z)
     );
 }
 
-glm::ivec3 World::worldToLocalCoordinates(glm::ivec3 worldPosition, glm::ivec3 chunkCoord) {
-    return glm::ivec3(
-        worldPosition.x - chunkCoord.x * CHUNK_WIDTH,
-        worldPosition.y - chunkCoord.y * CHUNK_HEIGHT,
-        worldPosition.z - chunkCoord.z * CHUNK_DEPTH
-    );
-}
+uint16_t World::getBlockID(glm::i64vec3 worldPosition) const {
+    std::optional<glm::ivec3> optChunkCoord = worldToChunkCoordinates(worldPosition);
+    if (!optChunkCoord) {
+        // World position results in chunk coordinates outside the 32-bit integer range.
+        return Blocks::AIR_ID;
+    }
+    glm::ivec3 chunkCoord = *optChunkCoord;
 
-uint16_t World::getBlockID(glm::ivec3 worldPosition) const {
-    glm::ivec3 chunkCoord = worldToChunkCoordinates(worldPosition);
-    // std::cout << "World::getBlockID: Query for worldPos [" << worldPosition.x << "," << worldPosition.y << "," << worldPosition.z << "] -> chunkCoord [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "]" << std::endl;
-    std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
-    auto it = m_chunks.find(chunkCoord);
-    if (it != m_chunks.end()) {
-        const Chunk& chunk = it->second;
-        bool genStatus = chunk.isGenerated(); // Call it once
-        // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] FOUND. isGenerated: " << genStatus << std::endl;
-        if (!genStatus) { // If the queried chunk hasn't finished its generation
-            // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] NOT YET GENERATED. Returning AIR." << std::endl;
-            return Blocks::AIR_ID;    // Treat it as air to avoid using incomplete data
+    { // Scope for shared_lock
+        std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
+        auto it = m_chunks.find(chunkCoord);
+        if (it != m_chunks.end()) {
+            const Chunk& chunk = it->second;
+            if (!chunk.isGenerated()) {
+                return Blocks::AIR_ID; // Chunk exists but not generated, treat as air
+            }
+            std::optional<glm::ivec3> optLocalPos = worldToLocalCoordinates(worldPosition, chunkCoord);
+            if (!optLocalPos) {
+                // This case should ideally not be reached if worldToChunkCoordinates is correct
+                // and its result is used here. It implies a deeper logic error.
+                std::cerr << "Critical Error: In getBlockID, worldToLocalCoordinates failed for worldPos ("
+                          << worldPosition.x << "," << worldPosition.y << "," << worldPosition.z
+                          << ") and chunkCoord ("
+                          << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z
+                          << "). This indicates an internal logic flaw." << std::endl;
+                return Blocks::AIR_ID;
+            }
+            glm::ivec3 localPos = *optLocalPos;
+            return chunk.getBlock(localPos.x, localPos.y, localPos.z);
         }
-        glm::ivec3 localPos = worldToLocalCoordinates(worldPosition, chunkCoord);
-        uint16_t blockId = chunk.getBlock(localPos.x, localPos.y, localPos.z);
-        // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] GENERATED. LocalPos [" << localPos.x << "," << localPos.y << "," << localPos.z << "] -> BlockID: " << blockId << std::endl;
-        return blockId;
     }
-    // std::cout << "World::getBlockID: Chunk [" << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << "] NOT FOUND. Returning AIR." << std::endl;
     return Blocks::AIR_ID; // Chunk doesn't exist, so it's air. Using Blocks::AIR_ID for consistency.
 }
 
-void World::setBlockID(glm::ivec3 worldPosition, uint16_t blockID) {
-    glm::ivec3 chunkCoord = worldToChunkCoordinates(worldPosition);
+void World::setBlockID(glm::i64vec3 worldPosition, uint16_t blockID) {
+    std::optional<glm::ivec3> optChunkCoord = worldToChunkCoordinates(worldPosition);
+    if (!optChunkCoord) {
+        // World position results in chunk coordinates outside the 32-bit integer range.
+        // Cannot set block here.
+        // Optionally, log a warning:
+        // std::cerr << "Warning: Attempted to set block at a position "
+        //           << worldPosition.x << "," << worldPosition.y << "," << worldPosition.z
+        //           << " which is outside the 32-bit chunk coordinate addressable range." << std::endl;
+        return;
+    }
+    glm::ivec3 chunkCoord = *optChunkCoord;
+
     // getOrCreateChunk handles its own unique lock for potential modification of m_chunks
     Chunk& chunk = getOrCreateChunk(chunkCoord);
-    glm::ivec3 localPos = worldToLocalCoordinates(worldPosition, chunkCoord);
+    std::optional<glm::ivec3> optLocalPos = worldToLocalCoordinates(worldPosition, chunkCoord);
+    if (!optLocalPos) {
+        // Similar to getBlockID, this indicates a critical internal logic error.
+        std::cerr << "Critical Error: In setBlockID, worldToLocalCoordinates failed for worldPos ("
+                  << worldPosition.x << "," << worldPosition.y << "," << worldPosition.z
+                  << ") and chunkCoord ("
+                  << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z
+                  << "). Block will not be set. This indicates an internal logic flaw." << std::endl;
+        return;
+    }
+    glm::ivec3 localPos = *optLocalPos;
     chunk.setBlock(localPos.x, localPos.y, localPos.z, blockID); // This will call markModified on the chunk
 
     // If the modified block is on a boundary, mark the adjacent neighbor chunk(s) as dirty too.

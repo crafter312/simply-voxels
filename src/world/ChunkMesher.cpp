@@ -76,13 +76,6 @@ ModelData generateMesh(
         return meshData; // Empty mesh for all-air or no data chunks
     }
 
-    // Calculate chunk's world origin using its coordinates
-    glm::ivec3 chunkWorldOrigin = glm::ivec3(
-        chunkCoord.x * CHUNK_WIDTH,
-        chunkCoord.y * CHUNK_HEIGHT,
-        chunkCoord.z * CHUNK_DEPTH
-    );
-
     // 1. Cache data for 6 adjacent neighbor chunks
     std::array<CachedNeighborData, 6> neighborCache;
     for (int i = 0; i < 6; ++i) { // NEIGHBOR_OFFSETS has 6 elements

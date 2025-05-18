@@ -5,6 +5,7 @@
 #include <glm/vec3.hpp>
 #include <glm/gtc/type_ptr.hpp> // For glm::ivec3
 #include <memory> // For std::shared_ptr
+#include <optional> // For std::optional
 #include <set>    // To track changed chunks efficiently
 #include <queue> // For chunk loading/unloading queue
 #include <shared_mutex> // For std::shared_mutex
@@ -51,12 +52,12 @@ public:
 
     // Destructor (optional, but good practice)
     // Gets the block ID at the given world position.
-    // Returns AIR_BLOCK_ID if the chunk doesn't exist or the block is air.
-    uint16_t getBlockID(glm::ivec3 worldPosition) const;
+    // Returns Blocks::AIR_ID if the chunk doesn't exist or the block is air.
+    uint16_t getBlockID(glm::i64vec3 worldPosition) const;
 
     // Sets the block ID at the given world position.
     // This may involve creating a new chunk if one doesn't exist at that location.
-    void setBlockID(glm::ivec3 worldPosition, uint16_t blockID);
+    void setBlockID(glm::i64vec3 worldPosition, uint16_t blockID);
 
     // Retrieves a pointer to a chunk at the given chunk coordinates.
     // Returns nullptr if the chunk does not exist.
@@ -69,9 +70,9 @@ public:
     bool isChunkLoaded(glm::ivec3 chunkCoord) const; // New method
 
     // Helper to convert world coordinates to chunk coordinates
-    static glm::ivec3 worldToChunkCoordinates(glm::ivec3 worldPosition);
+    static std::optional<glm::ivec3> worldToChunkCoordinates(glm::i64vec3 worldPosition);
     // Helper to convert world coordinates to local block coordinates within a chunk
-    static glm::ivec3 worldToLocalCoordinates(glm::ivec3 worldPosition, glm::ivec3 chunkCoord);
+    static std::optional<glm::ivec3> worldToLocalCoordinates(glm::i64vec3 worldPosition, glm::ivec3 chunkCoord);
 
     // Provides access to the underlying chunk map for iteration (e.g., by the renderer)
     const std::map<glm::ivec3, Chunk, IVec3Comparator>& getChunkMap() const;
