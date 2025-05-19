@@ -5,6 +5,10 @@
 #include <vector>
 #include <cstdint>
 #include <glm/vec3.hpp>
+#include <map>    // For std::map
+#include <mutex>  // For std::mutex
+#include <fstream> // For std::fstream
+#include <memory> // For std::unique_ptr
 
 // Forward declaration
 class Chunk;
@@ -56,6 +60,16 @@ struct ChunkIndexEntry {
     // }
 };
 
+// Comparator for glm::ivec3 to use it as a key in std::map
+struct RegionCoordComparator {
+    bool operator()(const glm::ivec3& a, const glm::ivec3& b) const {
+        if (a.x != b.x) return a.x < b.x;
+        if (a.y != b.y) return a.y < b.y;
+        return a.z < b.z;
+    }
+};
+
+
 class RegionManager {
 public:
     RegionManager(const std::string& base_save_path);
@@ -71,10 +85,25 @@ public:
     // - Returns true if the chunk was successfully saved, false otherwise.
     bool saveChunkToFile(Chunk& chunk_ref);
 
+    // Called by World when a chunk is being unloaded from memory.
+    // Decrements the active chunk counter for the chunk's region if the chunk was originally loaded from file.
+    void notifyChunkUnloaded(const Chunk& unloadedChunk);
+
+    ~RegionManager(); // Destructor to close any open files
+
 private:
     std::string m_base_save_path;
     std::string getRegionFilePath(const glm::ivec3& region_coord) const;
     size_t getLocalChunkIndex(const glm::ivec3& local_chunk_coord_in_region) const;
+    // Helper to get/open a region file stream
+    void compactRegionFile(const glm::ivec3& region_coord); // New private method
+    std::fstream* getRegionFileStream(const glm::ivec3& region_coord);
+
+    std::map<glm::ivec3, int, RegionCoordComparator> m_activeChunkCounters;
+    mutable std::mutex m_countersMutex; // Protects m_activeChunkCounters
+
+    std::map<glm::ivec3, std::unique_ptr<std::fstream>, RegionCoordComparator> m_openRegionFiles;
+    mutable std::mutex m_openFilesMutex; // Protects m_openRegionFiles
 };
 
 } // namespace WorldSave

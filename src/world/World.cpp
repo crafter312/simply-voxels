@@ -389,6 +389,9 @@ void World::processUnloadQueue() {
             if (it != m_chunks.end()) {
                 Chunk& chunk_to_unload = it->second;
 
+                // Notify RegionManager that this chunk is being unloaded *before* saving or erasing
+                m_regionManager->notifyChunkUnloaded(chunk_to_unload);
+
                 // Save the chunk if it needs saving before unloading
                 if (chunk_to_unload.isDirty() && !m_regionManager->saveChunkToFile(chunk_to_unload)) {
                     std::cerr << "Warning: Failed to save chunk " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " during unload." << std::endl;

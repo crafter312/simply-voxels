@@ -26,7 +26,8 @@ Chunk::Chunk(Chunk&& other) noexcept
     : m_chunkCoord(other.m_chunkCoord),
       m_blocks(std::move(other.m_blocks)), // Transfer ownership of the block data
       m_isAllAir(other.m_isAllAir),
-      m_isDirty(other.m_isDirty)
+      m_isDirty(other.m_isDirty),
+      m_wasLoadedFromFile(other.m_wasLoadedFromFile) // Move the new flag
       // m_isGenerated: std::atomic is not trivially move-constructible in the same way.
       // We need to load from other and store into this.
 {
@@ -43,9 +44,11 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
         m_isAllAir = other.m_isAllAir;
         m_isDirty = other.m_isDirty;
         m_isGenerated.store(other.m_isGenerated.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        m_wasLoadedFromFile = other.m_wasLoadedFromFile; // Move the new flag
         
         // Reset other's relevant state if needed (unique_ptr is handled by move)
         other.m_isGenerated.store(false, std::memory_order_relaxed);
+        other.m_wasLoadedFromFile = false; // Reset other's flag
     }
     return *this;
 }

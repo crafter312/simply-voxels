@@ -66,6 +66,9 @@ public:
     // Methods for RegionManager to load data
     void setAllBlocks(const std::array<uint16_t, CHUNK_VOLUME>& new_blocks_data);
     void setAllAir();
+    // For RegionManager to track if this chunk instance was loaded from a file
+    void setWasLoadedFromFile(bool val) { m_wasLoadedFromFile = val; }
+    bool wasLoadedFromFile() const { return m_wasLoadedFromFile; }
 
     // Helper to convert 3D local coordinates to a 1D array index
     // Made public static so it can be used by external functions like ChunkMesher
@@ -94,6 +97,7 @@ private:
     bool m_isDirty;  // True if the chunk's geometry needs to be rebuilt (for rendering)
     std::atomic<bool> m_isGenerated; // True if the chunk has completed its initial procedural generation
     mutable std::shared_mutex m_data_mutex; // To protect m_blocks, m_isAllAir, and m_isDirty
+    bool m_wasLoadedFromFile = false; // True if this chunk instance's data was populated by RegionManager::loadChunkFromFile
 
     void allocateBlockStorage();
 
