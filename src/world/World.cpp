@@ -21,8 +21,41 @@ World::World(std::shared_ptr<Camera> camera)
 
 World::~World() {
     // The std::unique_ptr m_regionManager will be automatically destroyed here.
-    // Because this destructor is defined in the .cpp file where RegionManager.hpp is included,
-    // the compiler has the full definition of RegionManager and can correctly destroy it.
+    // Before it's destroyed, we should save any modified chunks.
+    std::cout << "World destructor: Attempting to save modified chunks..." << std::endl;
+
+    if (m_regionManager) {
+        // A shared_lock is appropriate here because we are only iterating through m_chunks
+        // and calling methods on the Chunk objects. We are not modifying the m_chunks map structure itself.
+        // The saveChunkToFile method takes a Chunk&, implying it might modify the chunk (e.g., clear its dirty flag).
+        // In a destructor, we assume other threads that might interact with these specific chunk objects
+        // have been shut down or are no longer active.
+        std::shared_lock<std::shared_mutex> lock(m_chunks_mutex);
+
+        std::cout << "Iterating over " << m_chunks.size() << " loaded chunks to save modifications." << std::endl;
+        int savedCount = 0;
+        int isDirtyCount = 0;
+
+        for (auto& pair : m_chunks) { // Use auto& to get Chunk& for pair.second
+            Chunk& chunk = pair.second; // chunk is Chunk&
+            if (chunk.isDirty()) { // Check if the chunk has unpersisted data changes
+                isDirtyCount++;
+                if (m_regionManager->saveChunkToFile(chunk)) {
+                    savedCount++;
+                } else {
+                    // Outputting coordinates directly to avoid needing glm::to_string and potential include issues.
+                    std::cerr << "Warning: Failed to save chunk at coordinates ("
+                              << pair.first.x << ", " << pair.first.y << ", " << pair.first.z
+                              << ") during shutdown." << std::endl;
+                }
+            }
+        }
+        std::cout << "Found " << isDirtyCount << " chunks requiring save. Successfully saved " << savedCount << " chunks." << std::endl;
+    } else {
+        std::cout << "RegionManager is null, skipping chunk saving on shutdown." << std::endl;
+    }
+    std::cout << "World destruction complete." << std::endl;
+    // m_regionManager (and other members) will be destroyed automatically after this.
 }
 
 std::optional<glm::ivec3> World::worldToChunkCoordinates(glm::i64vec3 worldPosition) {
@@ -356,11 +389,9 @@ void World::processUnloadQueue() {
             if (it != m_chunks.end()) {
                 Chunk& chunk_to_unload = it->second;
 
-                // Save the chunk if it's dirty before unloading
-                if (chunk_to_unload.isDirty()) {
-                    if (!m_regionManager->saveChunkToFile(chunk_to_unload)) {
-                        std::cerr << "Warning: Failed to save chunk " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " during unload." << std::endl;
-                    }
+                // Save the chunk if it needs saving before unloading
+                if (chunk_to_unload.isDirty() && !m_regionManager->saveChunkToFile(chunk_to_unload)) {
+                    std::cerr << "Warning: Failed to save chunk " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " during unload." << std::endl;
                 }
 
                 // Before erasing the chunk, mark its 6 direct neighbors as dirty.

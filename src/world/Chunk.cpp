@@ -9,7 +9,7 @@ Chunk::Chunk(glm::ivec3 chunkCoord)
     : m_chunkCoord(chunkCoord),
       m_blocks(nullptr), // Start with no block data allocated
       m_isAllAir(true),  // Assume all air initially
-      m_isDirty(true)    // New chunks are dirty by default, needing a mesh
+      m_isDirty(false)   // New chunks are not dirty, only once generated or modified
       // m_isGenerated is default-initialized for std::atomic<bool> to false
 {
     //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] CONSTRUCTOR called." << std::endl;
@@ -102,6 +102,17 @@ void Chunk::setBlock(int localX, int localY, int localZ, uint16_t blockID) {
     // By this point, if blockID is non-air, m_blocks is guaranteed to be allocated.
     // If blockID is air, and m_blocks was already allocated, we just set it.
 
+    // Check if the block actually changed before marking as dirty or needing save
+    uint16_t oldBlockID = Blocks::AIR_ID; // Assume air if m_blocks is null
+    if (m_blocks) {
+        oldBlockID = (*m_blocks)[localToIndex(localX, localY, localZ)];
+    }
+
+    // If the block is the same as before, no need to do anything
+    if (oldBlockID == blockID) {
+        return; // No change
+    }
+
     if (m_blocks) { // Should always be true if we are setting a non-air block or were not all-air
         (*m_blocks)[localToIndex(localX, localY, localZ)] = blockID;
     }
@@ -126,6 +137,7 @@ void Chunk::setDirty(bool dirty) {
     std::unique_lock<std::shared_mutex> lock(m_data_mutex);
     m_isDirty = dirty; 
 }
+
 bool Chunk::isAllAir() const {
     std::shared_lock<std::shared_mutex> lock(m_data_mutex);
     // std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] isAllAir() returning " << m_isAllAir << std::endl;

@@ -91,7 +91,7 @@ private:
     std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> m_blocks;
 
     bool m_isAllAir; // True if the chunk contains only air blocks (m_blocks will be nullptr)
-    bool m_isDirty;  // True if the chunk's geometry needs to be rebuilt
+    bool m_isDirty;  // True if the chunk's geometry needs to be rebuilt (for rendering)
     std::atomic<bool> m_isGenerated; // True if the chunk has completed its initial procedural generation
     mutable std::shared_mutex m_data_mutex; // To protect m_blocks, m_isAllAir, and m_isDirty
 
