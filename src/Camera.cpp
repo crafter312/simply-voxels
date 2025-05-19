@@ -54,29 +54,33 @@ void Camera::update(float deltaTime) {
     }
 
     // --- Horizontal keyboard movement (WASD) ---
-    glm::vec3 targetHorizontalVelocity(0.0f);
+    glm::vec3 movementDirection(0.0f); // Accumulator for movement input direction
 
     // Define the forward direction in the horizontal plane based purely on yaw
     // This ensures W/S movement is always horizontal, regardless of pitch.
     glm::vec3 horizontalForward(cos(glm::radians(m_yaw)), 0.0f, sin(glm::radians(m_yaw)));
     // The 'right' vector (calculated in updateCameraVectors as cross(front, worldUp))
-    // is already constrained to the horizontal plane, effectively:
-    // glm::vec3 horizontalRight(-sin(glm::radians(yaw)), 0.0f, cos(glm::radians(yaw)));
-    // So, 'right' can be used directly for A/D strafing.
+    // is already normalized and constrained to the horizontal plane.
 
     if (m_inputManager->isKeyDown(KeyCode::W)) {
-        targetHorizontalVelocity += horizontalForward * currentMoveSpeed; // Use local horizontalForward
+        movementDirection += horizontalForward;
     }
     if (m_inputManager->isKeyDown(KeyCode::S)) {
-        targetHorizontalVelocity -= horizontalForward * currentMoveSpeed; // Use local horizontalForward
+        movementDirection -= horizontalForward;
     }
     if (m_inputManager->isKeyDown(KeyCode::A)) {
-        targetHorizontalVelocity -= m_right * currentMoveSpeed;
+        movementDirection -= m_right;
     }
     if (m_inputManager->isKeyDown(KeyCode::D)) {
-        targetHorizontalVelocity += m_right * currentMoveSpeed;
+        movementDirection += m_right;
     }
 
+    glm::vec3 targetHorizontalVelocity(0.0f);
+    // If there is movement input, normalize the direction and scale by speed
+    if (glm::length(movementDirection) > 0.0f) {
+        targetHorizontalVelocity = glm::normalize(movementDirection) * currentMoveSpeed;
+    }
+    // If movementDirection is (0,0,0), targetHorizontalVelocity remains (0,0,0)
     // --- Vertical keyboard movement (Space/Shift) ---
     float targetVerticalVelocity = 0.0f;
     if (m_inputManager->isKeyDown(KeyCode::Space)) {
