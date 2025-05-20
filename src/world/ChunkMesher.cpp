@@ -197,15 +197,13 @@ ModelData generateMesh(
                         glm::vec3 currentBlockLocalPos_vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
 
                         // 1. Add specific "full" canonical faces if they are defined for the block AND the cell face is exposed
+                        // MODIFIED LOGIC: Add any geometry defined in canonicalFaces[faceIdx] if the cell face is exposed.
+                        // The SeparableModelData.canonicalFaces[faceIdx] now contains all geometry on that plane,
+                        // not just "full quad" faces. The blockDef->hasFullOccludingFace() is used for neighbor culling checks.
                         for (int faceIdx = 0; faceIdx < 6; ++faceIdx) {
                             if (cellFaceIsActuallyExposed[faceIdx]) { // If this specific cell face is open
-                                FaceDirection currentBlockDir = static_cast<FaceDirection>(faceIdx);
-                                // And if the current block *has* a defined canonical face for this direction
-                                if (blockDef->hasFullOccludingFace(currentBlockDir)) { 
-                                    const ModelData& faceGeom = separableModelDataPtr->canonicalFaces[faceIdx];
-                                    // The faceGeom.atlasTextureInfos should be populated by ResourceManager
-                                    addBlockModelToMeshData(meshData, faceGeom, currentBlockLocalPos_vec3);
-                                }
+                                const ModelData& faceGeom = separableModelDataPtr->canonicalFaces[faceIdx];
+                                addBlockModelToMeshData(meshData, faceGeom, currentBlockLocalPos_vec3);
                             }
                         }
 

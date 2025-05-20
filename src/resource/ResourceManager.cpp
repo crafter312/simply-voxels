@@ -337,9 +337,9 @@ CachedModelAnalysis ResourceManager::getOrPerformAnalysis(const std::string& mod
 
         // We extract geometry for a face if the analysis determined it's a full face.
         // The blockDef's properties will be set later using detectedFullFaces.
-        if (!detectedFullFaces[faceIdx]) {
-            continue; 
-        }
+        // OLD: if (!detectedFullFaces[faceIdx]) { continue; }
+        // NEW: We always attempt to extract planar geometry for canonicalFaces.
+        // detectedFullFaces is used by ChunkMesher to determine if a *neighbor* occludes.
 
         // Adjust for 0-1 range
         float expectedPrimaryCoord = (faceIdx % 2 == 0) ? MODEL_ANALYSIS_MAX_EXTENT : MODEL_ANALYSIS_MIN_EXTENT;
@@ -369,16 +369,48 @@ CachedModelAnalysis ResourceManager::getOrPerformAnalysis(const std::string& mod
             }
 
             if (onPlane) {
-                // Basic check: if on plane and this face is considered "full" by blockDef, add it.
-                // More advanced: check triangle normal alignment. For now, this is simpler.
-                uint32_t baseIdx = static_cast<uint32_t>(currentFaceModelData.vertices.size());
-                currentFaceModelData.vertices.push_back(v0);
-                currentFaceModelData.vertices.push_back(v1);
-                currentFaceModelData.vertices.push_back(v2);
-                currentFaceModelData.indices.push_back(baseIdx);
-                currentFaceModelData.indices.push_back(baseIdx + 1);
-                currentFaceModelData.indices.push_back(baseIdx + 2);
-                rawTriangleProcessed[triIndex] = true;
+                // Triangle is on the current canonical plane.
+                // Now check if its extents are within the 0-1 unit cube face.
+                float u0, v0_coord, u1, v1_coord, u2, v2_coord; // Using v0_coord to avoid conflict with v0 vertex
+                if (faceIdx == 0 || faceIdx == 1) { // +/- X faces (normal along X), U=Y, V=Z
+                    u0 = v0.pos.y; v0_coord = v0.pos.z;
+                    u1 = v1.pos.y; v1_coord = v1.pos.z;
+                    u2 = v2.pos.y; v2_coord = v2.pos.z;
+                } else if (faceIdx == 2 || faceIdx == 3) { // +/- Y faces (normal along Y), U=X, V=Z
+                    u0 = v0.pos.x; v0_coord = v0.pos.z;
+                    u1 = v1.pos.x; v1_coord = v1.pos.z;
+                    u2 = v2.pos.x; v2_coord = v2.pos.z;
+                } else { // +/- Z faces (normal along Z), U=X, V=Y
+                    u0 = v0.pos.x; v0_coord = v0.pos.y;
+                    u1 = v1.pos.x; v1_coord = v1.pos.y;
+                    u2 = v2.pos.x; v2_coord = v2.pos.y;
+                }
+
+                float minU_tri = std::min({u0, u1, u2});
+                float maxU_tri = std::max({u0, u1, u2});
+                float minV_tri = std::min({v0_coord, v1_coord, v2_coord});
+                float maxV_tri = std::max({v0_coord, v1_coord, v2_coord});
+
+                bool isWithinUnitBounds = 
+                    (minU_tri >= MODEL_ANALYSIS_MIN_EXTENT - MODEL_ANALYSIS_EPSILON) &&
+                    (maxU_tri <= MODEL_ANALYSIS_MAX_EXTENT + MODEL_ANALYSIS_EPSILON) &&
+                    (minV_tri >= MODEL_ANALYSIS_MIN_EXTENT - MODEL_ANALYSIS_EPSILON) &&
+                    (maxV_tri <= MODEL_ANALYSIS_MAX_EXTENT + MODEL_ANALYSIS_EPSILON);
+
+                if (isWithinUnitBounds) {
+                    // Triangle is on the plane AND within the 0-1 extents for that face.
+                    // Add it to the canonical face geometry.
+                    uint32_t baseIdx = static_cast<uint32_t>(currentFaceModelData.vertices.size());
+                    currentFaceModelData.vertices.push_back(v0);
+                    currentFaceModelData.vertices.push_back(v1);
+                    currentFaceModelData.vertices.push_back(v2);
+                    currentFaceModelData.indices.push_back(baseIdx);
+                    currentFaceModelData.indices.push_back(baseIdx + 1);
+                    currentFaceModelData.indices.push_back(baseIdx + 2);
+                    rawTriangleProcessed[triIndex] = true;
+                }
+                // If !isWithinUnitBounds, the triangle is planar but too large.
+                // It will not be marked as processed and will fall into remainingGeometry.
             }
         }
         std::cout << "    Face " << faceIdx << " (Geometrically full: " << detectedFullFaces[faceIdx] << "): Extracted "
