@@ -29,6 +29,12 @@ struct AtlasTextureInfo {
     glm::vec2 uvScale{1.0f, 1.0f};  // Size in atlas (subTextureSize / atlasSize)
 };
 
+// Private helper struct for caching analysis results
+struct CachedModelAnalysis {
+    std::array<bool, 6> faceProperties;
+    std::shared_ptr<SeparableModelData> rawSeparableModel; // Geometry with default atlas UVs
+};
+
 class ResourceManager {
 public:
     ResourceManager(VkPhysicalDevice physicalDevice, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue);
@@ -76,8 +82,12 @@ private:
     std::shared_ptr<ModelData> internalLoadModel(const std::string& path, bool isFallbackAttempt = false) const;
     std::shared_ptr<VulkanTextureLoader> internalLoadTexture(const std::string& path, bool isFallbackAttempt = false) const;
 
-    // Helper to analyze a model and set block properties
-    std::shared_ptr<SeparableModelData> analyzeModelAndSetProperties(Block& blockDef, const ModelData& rawModelData) const;
+    // Helper to get cached analysis results or perform analysis if not cached.
+    // The const ModelData& is the raw model data loaded from file.
+    // The modelPath is used as the cache key.
+    CachedModelAnalysis getOrPerformAnalysis(const std::string& modelPath, const ModelData& rawModelData) const;
+    // The old analyzeModelAndSetProperties will be effectively replaced by getOrPerformAnalysis
+    // and the application of its results in loadAssetsFromRegistry.
     void finalizeSeparableModelAtlasInfos(); // New method
 
     // Constants for model analysis
@@ -94,6 +104,10 @@ private:
                                                                          // The key is the path used for loading (could be default path)
     AtlasTextureInfo m_defaultAtlasTextureInfo; // Atlas info for the default/error texture
     VkSampler m_customAtlasSampler = VK_NULL_HANDLE; // Custom sampler for the atlas with LOD clamping
+
+    // For caching analysis results based on model path
+    mutable std::map<std::string, CachedModelAnalysis> m_modelAnalysisCache;
+    mutable std::shared_mutex m_analysis_cache_mutex; // Protects m_modelAnalysisCache
 };
 
 #endif // RESOURCE_MANAGER_HPP
