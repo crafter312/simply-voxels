@@ -38,11 +38,11 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build", // Current working directory
             "environment": [
-                { "name": "PATH", "value": "C:/mingw64/bin;${env:PATH}" } // ADJUST THIS PATH TO YOUR GCC 15.1.0 BIN
+                { "name": "PATH", "value": "C:/x86_64-14.2.0-release-posix-seh-ucrt-rt_v12-rev2/mingw64/bin;${env:PATH}" } // ADJUST THIS PATH TO YOUR GCC 15.1.0 BIN
             ],
             "externalConsole": false,
             "MIMode": "gdb",
-            "miDebuggerPath": "C:/mingw64/bin/gdb.exe",
+            "miDebuggerPath": "C:/x86_64-14.2.0-release-posix-seh-ucrt-rt_v12-rev2/mingw64/bin/gdb.exe",
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",
