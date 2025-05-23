@@ -3,6 +3,7 @@
 #include <limits>
 #include <algorithm>
 #include <stdexcept>
+#include <array>
 #include <iostream> // For messages
 
 VulkanSwapChain::VulkanSwapChain(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window, const QueueFamilyIndices& queueIndices)

@@ -74,5 +74,8 @@
         "variant": "cpp",
         "future": "cpp",
         "shared_mutex": "cpp"
+    },
+    "cmake.configureSettings": {
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.10"
     }
 }
