@@ -10,6 +10,11 @@
 #include "../world/World.hpp"                        // Include the World class definition
 #include "../Camera.hpp"            // Include the Camera class definition
 #include "../block/Blocks.hpp"      // Include the Blocks class for block IDs
+#include "../block/Block.hpp"       // For Block definition
+#include "../physics/WireframeMesher.hpp" // For WireframeMesher
+#include "../physics/VoxelShape.hpp"    // For VoxelShape
+#include "../Player.hpp"            // Include the Player class definition
+#include "../util/Raycaster.hpp" // For RaycastResult
 
 #include <iostream>
 #include <set>
@@ -34,14 +39,15 @@ const size_t VulkanRenderer::MAX_CONCURRENT_MESHING_TASKS = []() {
     return std::max(1u, num_cores - 1); // Use num_cores - 1, but at least 1
 }();
 
-VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, BlockRegistry& blockRegistryRef, std::shared_ptr<Camera> cameraPtr)
+VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, BlockRegistry& blockRegistryRef, std::shared_ptr<Camera> cameraPtr, Player& playerRef)
     : window(glfwWindow), // Initialized with a reference
       instanceRef(instance),
       surfaceRef(surface),
       m_vulkanDeviceRef(vulkanDevice),
       m_blockRegistryRef(blockRegistryRef), // Initialize block registry reference
       m_world(worldRef), // Initialize world reference
-      m_camera(cameraPtr)
+      m_camera(cameraPtr),
+      m_playerRef(playerRef) // Initialize player reference
 {
     // The check for 'window' being null is removed as it's now a reference.
     // The caller is responsible for ensuring glfwWindow is valid.
@@ -146,6 +152,14 @@ VulkanRenderer::~VulkanRenderer() {
         commandPool = VK_NULL_HANDLE;
     }
 
+    // Destroy wireframe buffers
+    if (m_wireframeVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBuffer, nullptr);
+    if (m_wireframeVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBufferMemory, nullptr);
+    if (m_wireframeIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBuffer, nullptr);
+    if (m_wireframeIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBufferMemory, nullptr);
+    if (m_wireframePipeline != VK_NULL_HANDLE) vkDestroyPipeline(m_vulkanDeviceRef.getLogicalDevice(), m_wireframePipeline, nullptr);
+    if (m_wireframePipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), m_wireframePipelineLayout, nullptr);
+
     // Other resources (device, instance, surface) are managed by HelloVulkanApp
     std::cout << "VulkanRenderer cleanup complete." << std::endl;
 }
@@ -222,6 +236,24 @@ void VulkanRenderer::init() {
         throw std::runtime_error("Failed to create graphics pipeline using factory!");
     }
     std::cout << "Graphics Pipeline and Layout created." << std::endl;
+
+    // --- Create Wireframe Pipeline ---
+    // The push constant range for the wireframe pipeline will also be for the model matrix.
+    // It can be the same as the one used for the main graphics pipeline if the shader expects it at the same stage/offset/size.
+    VkPushConstantRange wireframePushConstantRange{};
+    wireframePushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // Model matrix used in vertex shader
+    wireframePushConstantRange.offset = 0;
+    wireframePushConstantRange.size = sizeof(glm::mat4); // Size of our model matrix
+
+    if (!pipelineFactory->createWireframePipeline("shaders/wireframe_vert.spv",
+                                                  "shaders/wireframe_frag.spv",
+                                                  descriptorSetManager->getDescriptorSetLayout(), // Same UBO layout
+                                                  renderPass, // Same render pass
+                                                  m_wireframePipelineLayout, m_wireframePipeline,
+                                                  &wireframePushConstantRange)) {
+        throw std::runtime_error("Failed to create wireframe pipeline using factory!");
+    }
+    std::cout << "Wireframe Pipeline and Layout created." << std::endl;
 
     swapChainManager->createFramebuffers(renderPass, depthImageView); // Create framebuffers (needs render pass, image views, and depth image view)
     // createCommandPool(); // Moved earlier
@@ -509,6 +541,19 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
         }
     }
 
+    // --- Wireframe Rendering ---
+    if (m_wireframeIndexCount > 0 && m_wireframeVertexBuffer != VK_NULL_HANDLE && m_wireframeIndexBuffer != VK_NULL_HANDLE) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_wireframePipeline);
+        // Descriptor set for UBO (view/proj) is already bound from main pass
+
+        VkBuffer wireframeVertexBuffers[] = {m_wireframeVertexBuffer};
+        VkDeviceSize offsets[] = {0};
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, wireframeVertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBuffer, m_wireframeIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdPushConstants(commandBuffer, m_wireframePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_wireframeModelMatrix);
+        vkCmdDrawIndexed(commandBuffer, m_wireframeIndexCount, 1, 0, 0, 0);
+    }
+
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -537,6 +582,9 @@ void VulkanRenderer::drawFrame() {
 
     // Process chunk changes (mesh rebuilds for modified/new chunks, cleanup for unloaded)
     processChunkChanges();
+
+    // Update the wireframe for the targeted block
+    updateTargetedBlockWireframe();
 
     uint32_t imageIndex;
     VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
@@ -631,10 +679,15 @@ void VulkanRenderer::recreateSwapChainResources() {
 
     // 3. Cleanup renderer resources dependent on the swap chain/render pass
     if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(m_vulkanDeviceRef.getLogicalDevice(), graphicsPipeline, nullptr); // Nullify handles after destruction
+    if (m_wireframePipeline != VK_NULL_HANDLE) vkDestroyPipeline(m_vulkanDeviceRef.getLogicalDevice(), m_wireframePipeline, nullptr);
     if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), pipelineLayout, nullptr);
+    if (m_wireframePipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), m_wireframePipelineLayout, nullptr);
     if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(m_vulkanDeviceRef.getLogicalDevice(), renderPass, nullptr);
+
     graphicsPipeline = VK_NULL_HANDLE; // Nullify handles after destruction
+    m_wireframePipeline = VK_NULL_HANDLE;
     pipelineLayout = VK_NULL_HANDLE;
+    m_wireframePipelineLayout = VK_NULL_HANDLE;
     renderPass = VK_NULL_HANDLE;
 
     // 4. Recreate swap chain and image views
@@ -679,6 +732,21 @@ void VulkanRenderer::recreateSwapChainResources() {
         throw std::runtime_error("Failed to recreate graphics pipeline using factory!");
     }
     std::cout << "Graphics pipeline recreated." << std::endl;
+
+    // 7.5 Recreate wireframe pipeline (depends on new render pass and existing push constant setup)
+    VkPushConstantRange wireframePushConstantRange{};
+    wireframePushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    wireframePushConstantRange.offset = 0;
+    wireframePushConstantRange.size = sizeof(glm::mat4);
+    if (!pipelineFactory->createWireframePipeline("shaders/wireframe_vert.spv",
+                                                  "shaders/wireframe_frag.spv",
+                                                  descriptorSetManager->getDescriptorSetLayout(),
+                                                  renderPass,
+                                                  m_wireframePipelineLayout, m_wireframePipeline,
+                                                  &wireframePushConstantRange)) {
+        throw std::runtime_error("Failed to recreate wireframe pipeline using factory!");
+    }
+    std::cout << "Wireframe pipeline recreated." << std::endl;
 
     // 8. Recreate framebuffers (depends on new image views, render pass, and new depth image view)
     swapChainManager->createFramebuffers(renderPass, depthImageView);
@@ -871,4 +939,92 @@ void VulkanRenderer::processChunkChanges() {
         }
     }
     // m_world.clearChangedChunks(); // REMOVED: Now handled by acknowledgeChunkChangeProcessed
+}
+
+void VulkanRenderer::updateTargetedBlockWireframe() {
+    const auto& targetedBlockInfoOpt = m_playerRef.getCurrentTargetedBlockInfo();
+    // bool needsBufferUpdate = false; // This variable is no longer needed with the new structure
+
+    // Handle the case where no block is targeted or the ray didn't hit
+    if (!targetedBlockInfoOpt || !targetedBlockInfoOpt->hit) {
+        if (m_lastTargetedBlockPos) { // If we were previously targeting a block
+            // We need to clear the buffers and reset state
+            m_lastTargetedBlockPos = std::nullopt;
+            m_wireframeMeshNeedsUpdate = true; // Ready for an update when a target is acquired
+            
+            vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Wait before destroying buffers
+            if (m_wireframeVertexBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBuffer, nullptr); m_wireframeVertexBuffer = VK_NULL_HANDLE; }
+            if (m_wireframeVertexBufferMemory != VK_NULL_HANDLE) { vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBufferMemory, nullptr); m_wireframeVertexBufferMemory = VK_NULL_HANDLE; }
+            if (m_wireframeIndexBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBuffer, nullptr); m_wireframeIndexBuffer = VK_NULL_HANDLE; }
+            if (m_wireframeIndexBufferMemory != VK_NULL_HANDLE) { vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBufferMemory, nullptr); m_wireframeIndexBufferMemory = VK_NULL_HANDLE; }
+            m_wireframeIndexCount = 0;
+        }
+        return; // Early return as there's no wireframe to update or draw
+    }
+
+    // At this point, a block IS targeted (targetedBlockInfoOpt is valid and hit is true)
+    const RaycastResult& targetedBlockInfo = *targetedBlockInfoOpt; // Safe to dereference
+
+    // If the target hasn't changed and no update is forced, do nothing.
+    // Condition: (m_lastTargetedBlockPos IS valid AND current target IS THE SAME AS last AND m_wireframeMeshNeedsUpdate IS false)
+    if (m_lastTargetedBlockPos && 
+        (*m_lastTargetedBlockPos == targetedBlockInfo.blockPosition) && 
+        !m_wireframeMeshNeedsUpdate) {
+        return; // No change needed
+    }
+
+    // --- Proceed with updating the wireframe mesh and buffers ---
+    m_lastTargetedBlockPos = targetedBlockInfo.blockPosition;
+
+    // Query the World for the block ID using the position from RaycastResult
+    uint16_t blockID_from_world = m_world.getBlockID(targetedBlockInfo.blockPosition);
+    const Block* blockDef = m_blockRegistryRef.getBlockDefinition(blockID_from_world);
+    Physics::VoxelShape shapeToMesh;
+
+    if (blockDef && blockDef->getCustomShape()) {
+        shapeToMesh = *(blockDef->getCustomShape());
+    } else {
+        // Default full block shape if no custom shape or blockDef is null (should not happen for valid ID)
+        shapeToMesh = Physics::VoxelShape::createCuboidShape(0.0f, 0.0f, 0.0f, 16.0f, 16.0f, 16.0f);
+    }
+
+    WireframeMesher::WireframeMeshData meshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
+
+    // GPU resources should be modified after waiting for idle, or use a safer buffer update strategy.
+    // For simplicity, waiting for idle here if buffers are changing.
+    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
+
+    // Destroy old buffers
+    if (m_wireframeVertexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBuffer, nullptr);
+        m_wireframeVertexBuffer = VK_NULL_HANDLE;
+    }
+    if (m_wireframeVertexBufferMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBufferMemory, nullptr);
+        m_wireframeVertexBufferMemory = VK_NULL_HANDLE;
+    }
+    if (m_wireframeIndexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBuffer, nullptr);
+        m_wireframeIndexBuffer = VK_NULL_HANDLE;
+    }
+    if (m_wireframeIndexBufferMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBufferMemory, nullptr);
+        m_wireframeIndexBufferMemory = VK_NULL_HANDLE;
+    }
+    m_wireframeIndexCount = 0;
+
+    if (!meshData.vertices.empty() && !meshData.indices.empty()) {
+        bufferManager->createVertexBuffer(meshData.vertices, m_wireframeVertexBuffer, m_wireframeVertexBufferMemory);
+        bufferManager->createIndexBuffer(meshData.indices, m_wireframeIndexBuffer, m_wireframeIndexBufferMemory);
+        m_wireframeIndexCount = static_cast<uint32_t>(meshData.indices.size());
+    }
+
+    // Calculate model matrix
+    glm::i64vec3 worldBlockPos_i64 = targetedBlockInfo.blockPosition;
+    glm::ivec3 rebaseOriginChunkCoord_ivec3 = m_world.getRebaseOriginChunkCoord();
+    glm::i64vec3 rebaseOriginWorldPos_i64 = glm::i64vec3(rebaseOriginChunkCoord_ivec3) * glm::i64vec3(CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH);
+    glm::i64vec3 relativeBlockPos_i64 = worldBlockPos_i64 - rebaseOriginWorldPos_i64;
+    m_wireframeModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(relativeBlockPos_i64));
+    
+    m_wireframeMeshNeedsUpdate = false;
 }

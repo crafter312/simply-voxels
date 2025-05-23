@@ -37,6 +37,7 @@ class Camera; // Forward declaration
 class BlockRegistry; // Forward declaration
 class ResourceManager; // Forward declaration
 //#include "../world/World.hpp" // This will bring in IVec3Comparator and Chunk
+class Player; // Forward declaration for Player
 class Chunk; // Forward declaration for Chunk
 
 // --- Uniform Buffer Object ---
@@ -57,7 +58,7 @@ class VulkanSwapChain;
 
 class VulkanRenderer {
 public:
-    VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, BlockRegistry& blockRegistryRef, std::shared_ptr<Camera> cameraPtr);
+    VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSurfaceKHR surface, VulkanDevice& vulkanDevice, World& worldRef, BlockRegistry& blockRegistryRef, std::shared_ptr<Camera> cameraPtr, Player& playerRef);
     ~VulkanRenderer(); // Use destructor for cleanup
 
     // Call this after constructor to create pipeline resources
@@ -91,6 +92,7 @@ private:
     std::shared_ptr<Camera> m_camera; // Store the camera
     BlockRegistry& m_blockRegistryRef; // Reference to the block registry
     World& m_world; // Reference to the world data
+    Player& m_playerRef; // Reference to the player object
 
     // --- Depth Buffer Resources ---
     VkImage depthImage = VK_NULL_HANDLE;
@@ -136,6 +138,19 @@ private:
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 
+    // --- Wireframe Rendering Pipeline (for targeted block outline) ---
+    VkPipelineLayout m_wireframePipelineLayout = VK_NULL_HANDLE;
+    VkPipeline m_wireframePipeline = VK_NULL_HANDLE;
+    VkBuffer m_wireframeVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_wireframeVertexBufferMemory = VK_NULL_HANDLE;
+    VkBuffer m_wireframeIndexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_wireframeIndexBufferMemory = VK_NULL_HANDLE;
+    uint32_t m_wireframeIndexCount = 0;
+    glm::mat4 m_wireframeModelMatrix; // Model matrix to position the wireframe
+    std::optional<glm::i64vec3> m_lastTargetedBlockPos; // To track if the targeted block changed
+    bool m_wireframeMeshNeedsUpdate = true; // Flag to rebuild wireframe mesh
+
+
     // --- Descriptors for Uniforms ---
     // These are now managed by VulkanDescriptorSetManager
     // VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
@@ -163,6 +178,7 @@ private:
     void processChunkChanges();
     // void createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk); // Old synchronous version
     void createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ModelData& meshData); // New version
+    void updateTargetedBlockWireframe(); // New function for wireframe
 };
 
 #endif // VULKAN_RENDERER_HPP

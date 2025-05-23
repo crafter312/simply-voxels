@@ -3,12 +3,14 @@
 
 #include <memory> // For std::shared_ptr
 #include <glm/glm.hpp>
+#include <optional> // For std::optional
 
 // Forward declarations
 class Camera;
 class World;
 class InputManager;
 class BlockRegistry; // Forward declare BlockRegistry
+class RaycastResult; // Forward declare RaycastResult
 
 class Player {
 public:
@@ -19,6 +21,7 @@ public:
         std::shared_ptr<InputManager> inputManager);
 
     void update(float deltaTime);
+    const std::optional<RaycastResult>& getCurrentTargetedBlockInfo() const;
 
     // Potentially add methods to change selected block, etc.
     void setSelectedBlockType(uint16_t type);
@@ -34,6 +37,7 @@ private:
     uint16_t m_selectedBlockType; // The type of block to place
 
     // Cooldowns to prevent breaking/placing too fast
+    std::optional<RaycastResult> m_currentTargetedBlockInfo; // Optional to indicate no hit
     float m_breakCooldown = 0.0f;
     float m_placeCooldown = 0.0f;
     const float ACTION_COOLDOWN_TIME = 0.2f; // e.g., 5 actions per second

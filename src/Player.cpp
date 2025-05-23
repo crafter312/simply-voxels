@@ -41,48 +41,43 @@ void Player::update(float deltaTime) {
 }
 
 void Player::handleBlockInteraction() {
-    if (!m_camera || !m_inputManager) return;
+    if (!m_camera || !m_inputManager) {
+        m_currentTargetedBlockInfo = std::nullopt; // Clear if no camera/input
+        return;
+    }
+
+    // Perform raycast once and store the result, regardless of mouse clicks
+    m_currentTargetedBlockInfo = VoxelRaycaster::castRay(
+        m_world,
+        m_blockRegistry,
+        m_camera->getAbsoluteChunkPos(),
+        m_camera->getLocalPositionInChunk(),
+        m_camera->getFront()
+    );
 
     // Block Breaking (e.g., Left Mouse Button)
     if (m_inputManager->isMouseButtonDown(KeyCode::MOUSE_BUTTON_LEFT) && m_breakCooldown <= 0.0f) {
-        RaycastResult result = VoxelRaycaster::castRay(
-            m_world,
-            m_blockRegistry,
-            m_camera->getAbsoluteChunkPos(),
-            m_camera->getLocalPositionInChunk(),
-            m_camera->getFront()
-        );
-
-        if (result.hit) {
-            // std::cout << "Ray hit block at: " << result.blockPosition.x << ", " << result.blockPosition.y << ", " << result.blockPosition.z << std::endl;
-            m_world.setBlockID(result.blockPosition, Blocks::AIR_ID);
+        if (m_currentTargetedBlockInfo && m_currentTargetedBlockInfo->hit) {
+            m_world.setBlockID(m_currentTargetedBlockInfo->blockPosition, Blocks::AIR_ID);
             m_breakCooldown = ACTION_COOLDOWN_TIME;
         }
     }
 
     // Block Placing (e.g., Right Mouse Button)
     if (m_inputManager->isMouseButtonDown(KeyCode::MOUSE_BUTTON_RIGHT) && m_placeCooldown <= 0.0f) {
-        RaycastResult result = VoxelRaycaster::castRay(
-            m_world,
-            m_blockRegistry,
-            m_camera->getAbsoluteChunkPos(),
-            m_camera->getLocalPositionInChunk(),
-            m_camera->getFront()
-        );
-
-        if (result.hit) {
-            // result.blockPosition is glm::i64vec3
-            // result.hitNormal is glm::ivec3
+        if (m_currentTargetedBlockInfo && m_currentTargetedBlockInfo->hit) {
+            // m_currentTargetedBlockInfo->blockPosition is glm::i64vec3
+            // m_currentTargetedBlockInfo->hitNormal is glm::ivec3
             // The sum will be glm::i64vec3
-            glm::i64vec3 placePosition = result.blockPosition + glm::i64vec3(result.hitNormal);
+            glm::i64vec3 placePosition = m_currentTargetedBlockInfo->blockPosition + glm::i64vec3(m_currentTargetedBlockInfo->hitNormal);
             
             // Optional: Add a check here to prevent placing blocks inside the player
-            // This would require the player to have its own bounding box and do an intersection test.
-            // For now, we'll keep it simple.
-
-            // std::cout << "Placing block at: " << placePosition.x << ", " << placePosition.y << ", " << placePosition.z << std::endl;
             m_world.setBlockID(placePosition, m_selectedBlockType);
             m_placeCooldown = ACTION_COOLDOWN_TIME;
         }
     }
+}
+
+const std::optional<RaycastResult>& Player::getCurrentTargetedBlockInfo() const {
+    return m_currentTargetedBlockInfo;
 }

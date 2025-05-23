@@ -112,6 +112,40 @@ void VulkanBufferManager::createVertexBuffer(const std::vector<Vertex>& vertices
     vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
 }
 
+void VulkanBufferManager::createVertexBuffer(
+    const std::vector<WireframeMesher::WireframeVertex>& vertices,
+    VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory) {
+
+    if (vertices.empty()) {
+        // Handle empty vertex list: either throw, log, or create a dummy buffer.
+        // For now, let's just return and leave the output buffers as VK_NULL_HANDLE.
+        outVertexBuffer = VK_NULL_HANDLE;
+        outVertexBufferMemory = VK_NULL_HANDLE;
+        // std::cout << "Warning: Attempted to create a vertex buffer with no wireframe vertices." << std::endl;
+        return;
+    }
+
+    VkDeviceSize bufferSize = sizeof(WireframeMesher::WireframeVertex) * vertices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(deviceRef, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, vertices.data(), (size_t)bufferSize);
+    vkUnmapMemory(deviceRef, stagingBufferMemory);
+
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outVertexBuffer, outVertexBufferMemory);
+    copyBuffer(stagingBuffer, outVertexBuffer, bufferSize);
+
+    vkDestroyBuffer(deviceRef, stagingBuffer, nullptr);
+    vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
+}
+
 void VulkanBufferManager::createIndexBuffer(const std::vector<uint32_t>& indices, VkBuffer& outIndexBuffer, VkDeviceMemory& outIndexBufferMemory) {
     if (indices.empty()) {
         throw std::runtime_error("Cannot create index buffer from empty indices vector.");

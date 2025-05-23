@@ -4,6 +4,7 @@
 #include <vector>
 #include <string> // Though not directly used in this header, often included with vector
 #include "../resource/ModelLoader.hpp" // For Vertex struct (moved from Vertex.hpp)
+#include "../physics/WireframeMesher.hpp" // For WireframeVertex struct
 
 class VulkanBufferManager {
 public:
@@ -16,6 +17,10 @@ public:
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
     void createVertexBuffer(const std::vector<Vertex>& vertices,
+                            VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory);
+
+    // Overload for WireframeVertex data
+    void createVertexBuffer(const std::vector<WireframeMesher::WireframeVertex>& vertices,
                             VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory);
 
     void createIndexBuffer(const std::vector<uint32_t>& indices, // Changed from uint16_t to uint32_t

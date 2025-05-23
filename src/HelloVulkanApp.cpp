@@ -134,7 +134,8 @@ void HelloVulkanApp::initVulkan() {
         *vulkanDevice, // Pass the VulkanDevice object
         *world,        // Pass the World object by reference
         *blockRegistry, // Pass the BlockRegistry object by reference
-        camera
+        camera,
+        *player        // Pass the Player object by reference
     );
     renderer->init(); // init no longer takes BlockRegistry
                                     // --- End Renderer Init ---

@@ -149,8 +149,12 @@ target_compile_definitions(SimpleVulkanWindow PRIVATE
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders)
 set(VERT_SHADER_SRC ${SHADER_DIR}/shader.vert)
 set(FRAG_SHADER_SRC ${SHADER_DIR}/shader.frag)
+set(WIREFRAME_VERT_SHADER_SRC ${SHADER_DIR}/wireframe.vert) # New wireframe vertex shader
+set(WIREFRAME_FRAG_SHADER_SRC ${SHADER_DIR}/wireframe.frag) # New wireframe fragment shader
 set(VERT_SHADER_SPV ${CMAKE_CURRENT_BINARY_DIR}/shaders/vert.spv) # Output to build dir
 set(FRAG_SHADER_SPV ${CMAKE_CURRENT_BINARY_DIR}/shaders/frag.spv) # Output to build dir
+set(WIREFRAME_VERT_SHADER_SPV ${CMAKE_CURRENT_BINARY_DIR}/shaders/wireframe_vert.spv) # Output to build dir
+set(WIREFRAME_FRAG_SHADER_SPV ${CMAKE_CURRENT_BINARY_DIR}/shaders/wireframe_frag.spv) # Output to build dir
 
 # Ensure output directory exists
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/shaders)
@@ -169,11 +173,22 @@ add_custom_command(
     DEPENDS ${FRAG_SHADER_SRC}
     COMMENT "Compiling fragment shader ${FRAG_SHADER_SRC}")
 
-# Custom target to group shader compilation
-add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV})
+# Custom command to compile wireframe vertex shader
+add_custom_command(
+    OUTPUT ${WIREFRAME_VERT_SHADER_SPV}
+    COMMAND ${GLSLANG_VALIDATOR_EXECUTABLE} -V ${WIREFRAME_VERT_SHADER_SRC} -o ${WIREFRAME_VERT_SHADER_SPV}
+    DEPENDS ${WIREFRAME_VERT_SHADER_SRC}
+    COMMENT "Compiling wireframe vertex shader ${WIREFRAME_VERT_SHADER_SRC}")
 
-# Make the main executable depend on the shaders being compiled
-add_dependencies(SimpleVulkanWindow Shaders)
+# Custom command to compile wireframe fragment shader
+add_custom_command(
+    OUTPUT ${WIREFRAME_FRAG_SHADER_SPV}
+    COMMAND ${GLSLANG_VALIDATOR_EXECUTABLE} -V ${WIREFRAME_FRAG_SHADER_SRC} -o ${WIREFRAME_FRAG_SHADER_SPV}
+    DEPENDS ${WIREFRAME_FRAG_SHADER_SRC}
+    COMMENT "Compiling wireframe fragment shader ${WIREFRAME_FRAG_SHADER_SRC}")
+
+# Custom target to group shader compilation
+add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WIREFRAME_VERT_SHADER_SPV} ${WIREFRAME_FRAG_SHADER_SPV})
 
 # Link libraries
 # Link Vulkan, GLFW, and the fetched GLM target.
