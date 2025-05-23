@@ -74,5 +74,9 @@
         "variant": "cpp",
         "future": "cpp",
         "shared_mutex": "cpp"
+    },
+    "C_Cpp.compilerPath": "C:/msys64/mingw64/bin/g++.exe",
+    "cmake.configureSettings": {
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.10"
     }
 }

@@ -11,15 +11,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Ensure Vulkan SDK is installed and VULKAN_SDK environment variable is set
 find_package(Vulkan REQUIRED)
 
-# Find GLFW package (make sure GLFW is installed or provide it)
-find_package(glfw3 REQUIRED)
-
-# Find PkgConfig to help find other libraries
-find_package(PkgConfig REQUIRED)
-# Find LZ4 using pkg-config (module name is typically 'liblz4')
-# and create an imported CMake target named 'lz4' (pkg-config module name is 'liblz4')
-pkg_check_modules(PC_LZ4 REQUIRED IMPORTED_TARGET liblz4)
-
 # --- Fetch GLM using FetchContent ---
 # Include the module
 include(FetchContent)
@@ -34,11 +25,46 @@ FetchContent_Declare(
   GIT_TAG 1.0.1 # Try the latest stable release tag
 )
 
+FetchContent_Declare(
+  glfw
+  GIT_REPOSITORY https://github.com/glfw/glfw.git
+  GIT_TAG 3.4 # Using latest release tag for GLFW
+)
+
 # Explicitly prevent find_package from finding the system GLM
 set(glm_DIR "" CACHE INTERNAL "Prevent find_package for system GLM")
 
 # Make it available (downloads/configures if needed)
 FetchContent_MakeAvailable(glm)
+
+# GLFW options (to build only the library, not examples/tests/docs)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "Build GLFW examples" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "Build GLFW tests" FORCE)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "Build GLFW documentation" FORCE)
+FetchContent_MakeAvailable(glfw)
+
+# LZ4 options (to build only the static library, disable CLI and tests)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build LZ4 as a shared library" FORCE)
+set(LZ4_BUILD_CLI OFF CACHE BOOL "Build LZ4 command line interface" FORCE)
+set(LZ4_SKIP_TESTS ON CACHE BOOL "Skip LZ4 tests" FORCE)
+
+# Populate LZ4 directly, providing all details.
+# This avoids the deprecation warning associated with calling FetchContent_Populate
+# on a previously declared FetchContent_Declare name.
+FetchContent_Populate(
+  lz4  # This name is used to derive lz4_SOURCE_DIR and lz4_BINARY_DIR
+  GIT_REPOSITORY https://github.com/lz4/lz4.git
+  GIT_TAG        v1.9.4
+  GIT_SHALLOW    FALSE
+  GIT_PROGRESS   TRUE
+)
+
+set(LZ4_CMAKE_SUBDIR "build/cmake") # LZ4's CMakeLists.txt is in a subdirectory
+
+cmake_policy(PUSH) # Save current policy settings
+cmake_policy(VERSION ${CMAKE_VERSION}) # Set policy version to current CMake version
+add_subdirectory(${lz4_SOURCE_DIR}/${LZ4_CMAKE_SUBDIR} ${lz4_BINARY_DIR}/lz4-build) # Explicitly add lz4 as a subproject, adjust binary dir
+cmake_policy(POP) # Restore previous policy settings
 
 # --- Manage stb_image.h ---
 # Define where stb_image.h will be stored locally
@@ -179,7 +205,7 @@ add_dependencies(SimpleVulkanWindow Shaders)
 # Link Vulkan, GLFW, and the fetched GLM target.
 # The target name provided by FetchContent for GLM is typically 'glm'.
 # Note: GLM, stb_image, and tinygltf are header-only (or nearly so), but we set up INTERFACE library targets for include management. LZ4 is found via pkg-config.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4)
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4_static)
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
