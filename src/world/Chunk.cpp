@@ -171,74 +171,60 @@ void Chunk::generate() {
 
     glm::ivec3 chunkWorldOrigin = getWorldPosition(); // Absolute world coordinates of this chunk's origin (0,0,0 local)
 
-    // No need to call allocateBlockStorage() explicitly at the start.
-    // setBlock() will call it if a non-air block is placed in an all-air chunk.
-    // m_isAllAir is true by default for a new chunk.
+    // Temporary storage for block data. CHUNK_VOLUME is typically small enough (e.g., 16*256*16 = 65536)
+    // for a std::array<uint16_t, CHUNK_VOLUME> (128KB) to be on the stack.
+    // If CHUNK_VOLUME were much larger, std::vector or heap allocation might be preferred.
+    std::array<uint16_t, CHUNK_VOLUME> tempBlockData;
+    // tempBlockData.fill(Blocks::AIR_ID); // Initialize all to air, though loop will set all.
 
     //std::cout << "  Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] World Y range: [" << chunkWorldOrigin.y << " to " << chunkWorldOrigin.y + CHUNK_HEIGHT - 1 << "]" << std::endl;
-    int intendedNonAirBlocks = 0;
+    bool hasNonAirBlock = false;
+
     for (int lx = 0; lx < CHUNK_WIDTH; ++lx) {
         for (int lz = 0; lz < CHUNK_DEPTH; ++lz) {
             // Calculate absolute world X and Z for the current block column
-            // Using double for precision with Perlin noise, especially with large coordinates
             double absoluteWorldX = static_cast<double>(chunkWorldOrigin.x + lx);
             double absoluteWorldZ = static_cast<double>(chunkWorldOrigin.z + lz);
 
-            // Generate Perlin noise value. glm::perlin for dvec2 returns double in [-1, 1]
             double noiseValue = glm::perlin(glm::dvec2(absoluteWorldX * TERRAIN_FREQUENCY, absoluteWorldZ * TERRAIN_FREQUENCY));
-
-            // Calculate surface height for this column
-            // This is an absolute Y coordinate in the world
             int surfaceTopAbsoluteY = baseSurfaceAbsoluteY + static_cast<int>(noiseValue * TERRAIN_AMPLITUDE);
-            
-            if (lx == 0 && lz == 0) { // Log for one column for brevity
-                 //std::cout << "  Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] Col (0,0): surfaceTopAbsoluteY = " << surfaceTopAbsoluteY 
-                 //          << " (base: " << baseSurfaceAbsoluteY << ", noiseVal: " << noiseValue << ", amplitudeEffect: " << static_cast<int>(noiseValue * TERRAIN_AMPLITUDE) << ")" << std::endl;
-            }
 
             for (int ly = 0; ly < CHUNK_HEIGHT; ++ly) {
                 int currentBlockAbsoluteY = chunkWorldOrigin.y + ly; // Absolute Y of the current block layer
+                uint16_t blockID;
 
                 if (currentBlockAbsoluteY < surfaceTopAbsoluteY) {
-                    // This block is solid (not air)
                     if (currentBlockAbsoluteY >= surfaceTopAbsoluteY - DIRT_LAYER_THICKNESS) {
-                        // Within the dirt layer (topmost solid blocks)
-                        setBlock(lx, ly, lz, Blocks::DIRT_ID);
+                        blockID = Blocks::DIRT_ID;
                     } else {
-                        // Below the dirt layer, it's stone
-                        setBlock(lx, ly, lz, Blocks::STONE_ID);
+                        blockID = Blocks::STONE_ID;
                     }
-                    intendedNonAirBlocks++;
                 } else {
-                    setBlock(lx, ly, lz, Blocks::AIR_ID);
+                    blockID = Blocks::AIR_ID;
+                }
+
+                tempBlockData[localToIndex(lx, ly, lz)] = blockID;
+                if (blockID != Blocks::AIR_ID) {
+                    hasNonAirBlock = true;
                 }
             }
         }
     }
 
-    //std::cout << "  Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] Intended non-air blocks during generation: " << intendedNonAirBlocks << std::endl;
-    
-    // After all blocks are set, accurately determine if the chunk is all air.
-    // This is important because setBlock(AIR_BLOCK_ID) in an all-air chunk doesn't allocate.
-    // If non-air blocks were placed, m_blocks would be allocated.
-    // If it was allocated then filled with air, we should deallocate.
-    // This critical section needs to be protected.
+    // Now, update the chunk's actual block data under a single lock
     {
         std::unique_lock<std::shared_mutex> lock(m_data_mutex);
-        bool finalIsAllAirCheck = true; // Use a temporary for the check
-        if (m_blocks) { // Only check if m_blocks was ever allocated
-            for (const auto& blockID_val : *m_blocks) { // Renamed to avoid conflict
-                if (blockID_val != Blocks::AIR_ID) {
-                    finalIsAllAirCheck = false;
-                    break;
-                }
+        if (hasNonAirBlock) {
+            if (!m_blocks) { // Allocate if it doesn't exist (expected for a new chunk)
+                m_blocks = std::make_unique<std::array<uint16_t, CHUNK_VOLUME>>();
             }
-            if (finalIsAllAirCheck) {
-                m_blocks.reset(); // Deallocate if it ended up all air
-            }
+            *m_blocks = tempBlockData; // Copy the generated data
+            m_isAllAir = false;
+        } else {
+            m_blocks.reset(); // Deallocate if it was all air (and ensure it's null)
+            m_isAllAir = true;
         }
-        m_isAllAir = finalIsAllAirCheck; // Set the final state under lock
-        m_isDirty = true; // Mark the chunk as dirty so its mesh will be rebuilt, now under lock.
+        m_isDirty = true; // Generation makes the chunk dirty, requiring a mesh rebuild.
     }
     //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] FINISHED generation, calling markGenerated(). isAllAir: " << m_isAllAir << std::endl;
     markGenerated(); // Mark this chunk as having completed its initial generation
