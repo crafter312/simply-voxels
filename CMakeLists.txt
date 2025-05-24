@@ -162,6 +162,7 @@ add_executable(SimpleVulkanWindow
     src/resource/RegionManager.cpp          # Add RegionManager class
     src/util/Raycaster.cpp               # Add the new Raycaster source file
     src/physics/VoxelShape.cpp           # Add the new VoxelShape source file
+    src/physics/WireframeMesher.cpp
 )
 
 # Add compile definitions for tinygltf configuration to the target

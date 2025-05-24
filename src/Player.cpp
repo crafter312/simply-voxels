@@ -2,7 +2,6 @@
 #include "Camera.hpp"       // For Camera methods
 #include "world/World.hpp"  // For World methods
 #include "InputManager.hpp" // For InputManager methods
-#include "util/Raycaster.hpp" // For VoxelRaycaster::castRay and RaycastResult
 #include "block/BlockRegistry.hpp" // Include for BlockRegistry
 #include "block/Blocks.hpp"   // For Blocks::STONE_ID, Blocks::AIR_ID etc.
 #include "InputManager.hpp"   // Assuming your KeyCode::MOUSE_BUTTON_LEFT etc. are here

@@ -91,6 +91,14 @@ void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
     } else {
         std::cout << "Sampler Anisotropy feature is NOT supported by the selected physical device." << std::endl;
     }
+
+    // Enable fillModeNonSolid if supported (required for wireframe rendering)
+    if (deviceSupportedFeatures.fillModeNonSolid) {
+        m_enabledFeatures.fillModeNonSolid = VK_TRUE;
+    } else {
+        // fillModeNonSolid is required for wireframe rendering.
+        throw std::runtime_error("Selected physical device does not support fillModeNonSolid, which is required for wireframe rendering.");
+    }
 }
 
 void VulkanDevice::createLogicalDevice(VkInstance instance, const std::vector<const char*>& requiredDeviceExtensions, VulkanDebug& vulkanDebug) {

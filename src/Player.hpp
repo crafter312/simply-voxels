@@ -1,6 +1,8 @@
 #ifndef PLAYER_HPP
 #define PLAYER_HPP
 
+#include "util/Raycaster.hpp" // For VoxelRaycaster::castRay and RaycastResult
+
 #include <memory> // For std::shared_ptr
 #include <glm/glm.hpp>
 #include <optional> // For std::optional
@@ -10,7 +12,6 @@ class Camera;
 class World;
 class InputManager;
 class BlockRegistry; // Forward declare BlockRegistry
-class RaycastResult; // Forward declare RaycastResult
 
 class Player {
 public:
