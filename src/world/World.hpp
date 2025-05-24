@@ -35,8 +35,15 @@ constexpr glm::ivec3 NEIGHBOR_OFFSETS[] = {
 };
 constexpr size_t NUM_NEIGHBORS = sizeof(NEIGHBOR_OFFSETS) / sizeof(NEIGHBOR_OFFSETS[0]);
 
+// Struct to hold information about a block potentially colliding with an entity
+struct PotentialCollisionBlock {
+    glm::i64vec3 worldPosition; // Absolute world coordinate of the block's origin
+    uint16_t blockID;
+};
+
 // --- Constants for chunk management ---
 static constexpr int LOAD_CHUNK_RADIUS = 8; // Radius in chunks around the camera to load chunks
+static constexpr int SPAWN_CHUNK_RADIUS = 4;  // Max radius in chunks from origin (0,0) to pick a spawn chunk XZ
 static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase (remains large)
 static constexpr int UNLOAD_CHUNK_RADIUS = LOAD_CHUNK_RADIUS + 2; // Increased: Radius in chunks beyond which to unload chunks (was 3)
 static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 4; // Increased: Max chunks to process from load queue per frame (was 2)
@@ -88,6 +95,16 @@ public:
     void markAllChunksDirty(); // Mark all loaded chunks for mesh regeneration (e.g., texture change)
     ChunkGenStatus getChunkGeneratedStatus(glm::ivec3 chunkCoord) const;
     bool rebaseOccurredLastFrame() const; // Check if a rebase happened
+
+    // Retrieves a list of blocks (and their IDs) that potentially intersect with an AABB
+    // defined by the entity's chunk position, local position, and dimensions.
+    std::vector<PotentialCollisionBlock> getPotentialCollisionBlocks(
+        const glm::ivec3& entityAbsoluteChunkPos,
+        const glm::vec3& entityLocalPosInChunk, // Player's feet, center XZ
+        const glm::vec3& entityDimensions) const;
+
+    // Determines a suitable spawn position for the player.
+    std::optional<glm::i64vec3> getPlayerSpawnPos() const;
 
 private:
     std::map<glm::ivec3, Chunk, IVec3Comparator> m_chunks;

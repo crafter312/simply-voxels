@@ -6,9 +6,6 @@
 #include "world/Chunk.hpp" // Include Chunk for dimension constants
 #include <glm/gtx/compatibility.hpp> // For glm::lerp
 
-// Define the static constants
-const float Camera::BASE_MOVE_SPEED = 5.0f; // Units per second
-const float Camera::SPRINT_MULTIPLIER = 2.5f; // Multiplier for sprint speed
 
 Camera::Camera(std::shared_ptr<InputManager> inputManager)
     : m_inputManager(inputManager),
@@ -18,9 +15,7 @@ Camera::Camera(std::shared_ptr<InputManager> inputManager)
       m_yaw(-90.0f), // Pointing down negative Z-axis
       m_pitch(0.0f),
       m_fov(45.0f),
-      m_mouseSensitivity(0.05f), // Correctly initialize the member variable m_mouseSensitivity
-      m_horizontalVelocity(0.0f), // Initialize horizontal velocity
-      m_verticalVelocity(0.0f) {   // Initialize vertical velocity
+      m_mouseSensitivity(0.05f) { // Correctly initialize the member variable m_mouseSensitivity
     if (!m_inputManager) {
         throw std::runtime_error("Camera: InputManager shared_ptr cannot be null!");
     }
@@ -47,97 +42,8 @@ void Camera::updateCameraVectors() {
 void Camera::update(float deltaTime) {
     if (!m_inputManager) return;
 
-    // Determine current move speed based on sprint key
-    float currentMoveSpeed = BASE_MOVE_SPEED;
-    if (m_inputManager->isKeyDown(KeyCode::LeftControl)) {
-        currentMoveSpeed *= SPRINT_MULTIPLIER;
-    }
-
-    // --- Horizontal keyboard movement (WASD) ---
-    glm::vec3 movementDirection(0.0f); // Accumulator for movement input direction
-
-    // Define the forward direction in the horizontal plane based purely on yaw
-    // This ensures W/S movement is always horizontal, regardless of pitch.
-    glm::vec3 horizontalForward(cos(glm::radians(m_yaw)), 0.0f, sin(glm::radians(m_yaw)));
-    // The 'right' vector (calculated in updateCameraVectors as cross(front, worldUp))
-    // is already normalized and constrained to the horizontal plane.
-
-    if (m_inputManager->isKeyDown(KeyCode::W)) {
-        movementDirection += horizontalForward;
-    }
-    if (m_inputManager->isKeyDown(KeyCode::S)) {
-        movementDirection -= horizontalForward;
-    }
-    if (m_inputManager->isKeyDown(KeyCode::A)) {
-        movementDirection -= m_right;
-    }
-    if (m_inputManager->isKeyDown(KeyCode::D)) {
-        movementDirection += m_right;
-    }
-
-    glm::vec3 targetHorizontalVelocity(0.0f);
-    // If there is movement input, normalize the direction and scale by speed
-    if (glm::length(movementDirection) > 0.0f) {
-        targetHorizontalVelocity = glm::normalize(movementDirection) * currentMoveSpeed;
-    }
-    // If movementDirection is (0,0,0), targetHorizontalVelocity remains (0,0,0)
-    // --- Vertical keyboard movement (Space/Shift) ---
-    float targetVerticalVelocity = 0.0f;
-    if (m_inputManager->isKeyDown(KeyCode::Space)) {
-        targetVerticalVelocity += BASE_MOVE_SPEED; // Vertical movement uses base speed
-    }
-    if (m_inputManager->isKeyDown(KeyCode::LeftShift)) {
-        targetVerticalVelocity -= BASE_MOVE_SPEED; // Vertical movement uses base speed
-    }
-
-    // --- Apply Momentum ---
-    // Smoothly interpolate current horizontal velocity towards target
-    float horizontalSmoothingFactor = 5.0f; // Current smoothing for W,A,S,D
-    m_horizontalVelocity = glm::lerp(m_horizontalVelocity, targetHorizontalVelocity, horizontalSmoothingFactor * deltaTime);
-
-    // Smoothly interpolate current vertical velocity towards target (snappier)
-    float verticalSmoothingFactor = 15.0f; // Higher value for snappier vertical movement
-    m_verticalVelocity = glm::lerp(m_verticalVelocity, targetVerticalVelocity, verticalSmoothingFactor * deltaTime);
-
-    // --- Update Position ---
-    glm::vec3 deltaPosition = m_horizontalVelocity * deltaTime + m_worldUp * m_verticalVelocity * deltaTime;
-    m_localPositionInChunk += deltaPosition;
-
-    // --- Handle crossing chunk boundaries ---
-    // Check each dimension and update absolute chunk position and local position
-
-    if (m_localPositionInChunk.x < 0.0f) {
-        m_absoluteChunkPos.x--;
-        m_localPositionInChunk.x += CHUNK_WIDTH;
-    } else if (m_localPositionInChunk.x >= CHUNK_WIDTH) {
-        m_absoluteChunkPos.x++;
-        m_localPositionInChunk.x -= CHUNK_WIDTH;
-    }
-
-    if (m_localPositionInChunk.y < 0.0f) {
-        m_absoluteChunkPos.y--;
-        m_localPositionInChunk.y += CHUNK_HEIGHT;
-    } else if (m_localPositionInChunk.y >= CHUNK_HEIGHT) {
-        m_absoluteChunkPos.y++;
-        m_localPositionInChunk.y -= CHUNK_HEIGHT;
-    }
-
-    if (m_localPositionInChunk.z < 0.0f) {
-        m_absoluteChunkPos.z--;
-        m_localPositionInChunk.z += CHUNK_DEPTH;
-    } else if (m_localPositionInChunk.z >= CHUNK_DEPTH) {
-        m_absoluteChunkPos.z++;
-        m_localPositionInChunk.z -= CHUNK_DEPTH;
-    }
-
-    // --- Apply Drag ---
-    // Optional: Apply drag to slow down when no keys are pressed
-    float dragFactor = 2.0f; // Adjust drag strength as needed
-    float drag = 1.0f - glm::clamp(dragFactor * deltaTime, 0.0f, 1.0f);
-    m_horizontalVelocity *= drag;
-    m_verticalVelocity *= drag;
-
-    // --- Mouse look (direct, no momentum) ---
+    // --- Mouse look for camera orientation ---
+    // Player class now handles position. Camera only handles orientation via mouse.
     double deltaX = m_inputManager->getMouseDeltaX();
     double deltaY = m_inputManager->getMouseDeltaY();
 
@@ -155,7 +61,12 @@ void Camera::update(float deltaTime) {
     if (m_pitch < -89.0f)
         m_pitch = -89.0f;
 
-    // Always update camera vectors if position or orientation changed
+    // Update camera vectors based on new orientation.
+    // Position is set by the Player via setPosition().
+    // The chunk boundary logic is now handled within setPosition()
+    // to ensure m_absoluteChunkPos and m_localPositionInChunk are the canonical representation.
+    // The m_position member has been removed, as m_absoluteChunkPos and m_localPositionInChunk
+    // are sufficient to define the camera's location.
     updateCameraVectors();
 }
 
@@ -195,15 +106,12 @@ float Camera::getFov() const { return m_fov; }
 glm::vec3 Camera::getFront() const { return m_front; }
 
 // --- Setters ---
-void Camera::setPosition(const glm::vec3& position) {
-    // This setter is now ambiguous (absolute or relative?). Consider removing or clarifying.
-    // For now, let's assume it sets the absolute position.
-    m_absoluteChunkPos = glm::ivec3(std::floor(position.x / CHUNK_WIDTH),
-                                    std::floor(position.y / CHUNK_HEIGHT),
-                                    std::floor(position.z / CHUNK_DEPTH));
-    m_localPositionInChunk = position - glm::vec3(m_absoluteChunkPos.x * CHUNK_WIDTH,
-                                                 m_absoluteChunkPos.y * CHUNK_HEIGHT,
-                                                 m_absoluteChunkPos.z * CHUNK_DEPTH);
+void Camera::setPosition(const glm::ivec3& absoluteChunkPos, const glm::vec3& localPositionInChunk) {
+    // This method directly sets the camera's chunk and local-in-chunk positions.
+    // It's called by the Player class.
+    m_absoluteChunkPos = absoluteChunkPos;
+    m_localPositionInChunk = localPositionInChunk;
+    // No need to call updateCameraVectors() as only position changed, not orientation.
 }
 
 void Camera::setYaw(float yaw) {
@@ -224,23 +132,3 @@ void Camera::setFov(float fov) {
     // No need to call updateCameraVectors() as FOV only affects projection.
     // Projection matrix will use the new FOV when getProjectionMatrix() is called.
 }
-
-// --- Origin Rebasing Methods (Removed/Modified) ---
-
-// getAbsolutePosition is no longer needed as camera tracks absolute pos internally
-// glm::vec3 Camera::getAbsolutePosition(glm::ivec3 currentRebaseOriginChunkCoord, glm::ivec3 chunkDimensions) const {
-//     // Calculate the world position of the origin of the rebase chunk
-//     glm::vec3 rebaseOriginWorldPos = glm::vec3(
-//         currentRebaseOriginChunkCoord.x * chunkDimensions.x,
-//         currentRebaseOriginChunkCoord.y * chunkDimensions.y,
-//         currentRebaseOriginChunkCoord.z * chunkDimensions.z
-//     );
-//     // The camera's m_position is relative to this rebase origin
-//     return rebaseOriginWorldPos + m_position;
-// }
-
-// rebase is no longer needed as camera always tracks absolute pos
-// void Camera::rebase(glm::ivec3 newRebaseOriginChunkCoord, glm::ivec3 oldRebaseOriginChunkCoord, glm::ivec3 chunkDimensions) {
-//     // The camera's absolute position (m_absoluteChunkPos + m_localPositionInChunk) remains constant.
-//     // The "rebasing" happens when getPositionRelativeTo is called for rendering.
-// }

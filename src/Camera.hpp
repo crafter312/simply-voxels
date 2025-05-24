@@ -34,7 +34,7 @@ public:
     glm::vec3 getFront() const;
     float getPitch() const;
     // Setters
-    void setPosition(const glm::vec3& position);
+    void setPosition(const glm::ivec3& absoluteChunkPos, const glm::vec3& localPositionInChunk);
     void setYaw(float yaw);
     void setPitch(float pitch);
     void setFov(float fov);
@@ -48,7 +48,6 @@ private:
     std::shared_ptr<InputManager> m_inputManager; // Store the InputManager
 
     // Camera Attributes
-    glm::vec3 m_position;
     glm::vec3 m_front;
     glm::vec3 m_up;
     glm::vec3 m_right;
@@ -63,15 +62,10 @@ private:
     glm::ivec3 m_absoluteChunkPos; // Camera's absolute chunk coordinate
     glm::vec3 m_localPositionInChunk; // Camera's position within the current chunk [0, CHUNK_DIMENSION)
     float m_mouseSensitivity;     // Sensitivity for mouse look
-    glm::vec3 m_horizontalVelocity; // For W, A, S, D momentum
-    float m_verticalVelocity;     // For Space, Left Shift momentum
 
     void updateCameraVectors();
 
-public: // Making constants public for potential external reference, or move to private if only internal
-    static const float BASE_MOVE_SPEED;
-    static const float SPRINT_MULTIPLIER;
-
+public:
     // Constants for projection matrix
     static constexpr float NEAR_PLANE_DISTANCE = 0.1f;
     static constexpr float SQRT3_APPROX = 1.73205081f; // sqrt(3)

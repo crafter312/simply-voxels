@@ -6,6 +6,8 @@
 #include <optional> // For std::optional
 #include <limits>   // For std::numeric_limits
 #include <shared_mutex> // For std::shared_lock and std::unique_lock
+#include <random>   // For std::random_device, std::mt19937, std::uniform_real_distribution
+#include <glm/gtc/constants.hpp> // For glm::pi()
 
 //#define GLM_ENABLE_EXPERIMENTAL
 #include "../Camera.hpp" // Include Camera definition
@@ -467,4 +469,161 @@ World::ChunkGenStatus World::getChunkGeneratedStatus(glm::ivec3 chunkCoord) cons
         return ChunkGenStatus::LOADED_NOT_GENERATED;
     }
     return ChunkGenStatus::LOADED_AND_GENERATED;
+}
+
+std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
+    const glm::ivec3& entityAbsoluteChunkPos,
+    const glm::vec3& entityLocalPosInChunk, // Entity's feet, center XZ
+    const glm::vec3& entityDimensions) const { // Width, Height, Depth
+
+    std::vector<PotentialCollisionBlock> potentialBlocks;
+
+    // Reserve a reasonable amount of space if entity dimensions are small,
+    // e.g., for a player. This can avoid some reallocations.
+    // Max blocks a small player might touch is around 2x3x2 blocks * 2x2x2 chunks = 12 * 8 = 96.
+    potentialBlocks.reserve(100); // Adjust as needed, or base on entityDimensions
+
+    // 1. Calculate entity's AABB relative to its own chunk's origin.
+    //    entityLocalPosInChunk is at the entity's feet, centered on XZ.
+    glm::vec3 entityAABBMinInOwnChunk(
+        entityLocalPosInChunk.x - entityDimensions.x / 2.0f,
+        entityLocalPosInChunk.y, // Feet
+        entityLocalPosInChunk.z - entityDimensions.z / 2.0f
+    );
+    glm::vec3 entityAABBMaxInOwnChunk(
+        entityLocalPosInChunk.x + entityDimensions.x / 2.0f,
+        entityLocalPosInChunk.y + entityDimensions.y, // Top
+        entityLocalPosInChunk.z + entityDimensions.z / 2.0f
+    );
+
+    // 2. Determine the range of chunk offsets this AABB spans, relative to entityAbsoluteChunkPos.
+    //    These offsets tell us which neighboring (or same) chunks the AABB touches.
+    glm::ivec3 minChunkOffset(
+        static_cast<int>(std::floor(entityAABBMinInOwnChunk.x / CHUNK_WIDTH)),
+        static_cast<int>(std::floor(entityAABBMinInOwnChunk.y / CHUNK_HEIGHT)),
+        static_cast<int>(std::floor(entityAABBMinInOwnChunk.z / CHUNK_DEPTH))
+    );
+    glm::ivec3 maxChunkOffset(
+        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.x / CHUNK_WIDTH)),
+        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.y / CHUNK_HEIGHT)),
+        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.z / CHUNK_DEPTH))
+    );
+
+    // 3. Iterate through the absolute chunk coordinates overlapped by the entity's AABB.
+    for (int cz_offset = minChunkOffset.z; cz_offset <= maxChunkOffset.z; ++cz_offset) {
+        for (int cy_offset = minChunkOffset.y; cy_offset <= maxChunkOffset.y; ++cy_offset) {
+            for (int cx_offset = minChunkOffset.x; cx_offset <= maxChunkOffset.x; ++cx_offset) {
+                glm::ivec3 currentRelativeChunkOffset(cx_offset, cy_offset, cz_offset);
+                glm::ivec3 iterChunkAbsCoord = entityAbsoluteChunkPos + currentRelativeChunkOffset;
+
+                const Chunk* chunk = getChunk(iterChunkAbsCoord); // Read-only access
+                if (!chunk || !chunk->isGenerated()) { // Skip if chunk isn't loaded or generated
+                    continue;
+                }
+
+                // Pre-calculate the world origin of the current iterated chunk
+                glm::i64vec3 iterChunkWorldOrigin(
+                    static_cast<int64_t>(iterChunkAbsCoord.x) * CHUNK_WIDTH,
+                    static_cast<int64_t>(iterChunkAbsCoord.y) * CHUNK_HEIGHT,
+                    static_cast<int64_t>(iterChunkAbsCoord.z) * CHUNK_DEPTH
+                );
+
+                // 4. Transform entity's AABB into the local coordinate system of iterChunkAbsCoord.
+                //    The offset (in local units) from entity's chunk origin to iterChunk's origin is:
+                //    (entityAbsoluteChunkPos - iterChunkAbsCoord) * CHUNK_DIMENSIONS
+                //    which simplifies to -currentRelativeChunkOffset * CHUNK_DIMENSIONS.
+                glm::vec3 offsetToIterChunkOriginInLocalUnits(
+                    static_cast<float>(-currentRelativeChunkOffset.x * CHUNK_WIDTH),
+                    static_cast<float>(-currentRelativeChunkOffset.y * CHUNK_HEIGHT),
+                    static_cast<float>(-currentRelativeChunkOffset.z * CHUNK_DEPTH)
+                );
+
+                glm::vec3 entityAABBMinInIterChunk = entityAABBMinInOwnChunk + offsetToIterChunkOriginInLocalUnits;
+                glm::vec3 entityAABBMaxInIterChunk = entityAABBMaxInOwnChunk + offsetToIterChunkOriginInLocalUnits;
+
+                // 5. Determine block indices within iterChunkAbsCoord covered by this transformed AABB.
+                glm::ivec3 startBlockLocal(
+                    static_cast<int>(std::floor(entityAABBMinInIterChunk.x)),
+                    static_cast<int>(std::floor(entityAABBMinInIterChunk.y)),
+                    static_cast<int>(std::floor(entityAABBMinInIterChunk.z))
+                );
+                glm::ivec3 endBlockLocal( // Inclusive end block index
+                    static_cast<int>(std::floor(entityAABBMaxInIterChunk.x)),
+                    static_cast<int>(std::floor(entityAABBMaxInIterChunk.y)),
+                    static_cast<int>(std::floor(entityAABBMaxInIterChunk.z))
+                );
+
+                // 6. Clamp block indices to be within the current chunk's bounds [0, CHUNK_DIM-1].
+                glm::ivec3 clampedStartBlockLocal(std::max(0, startBlockLocal.x), std::max(0, startBlockLocal.y), std::max(0, startBlockLocal.z));
+                glm::ivec3 clampedEndBlockLocal(std::min(CHUNK_WIDTH - 1, endBlockLocal.x), std::min(CHUNK_HEIGHT - 1, endBlockLocal.y), std::min(CHUNK_DEPTH - 1, endBlockLocal.z));
+
+                // 7. Iterate over the blocks in iterChunkAbsCoord.
+                for (int ly = clampedStartBlockLocal.y; ly <= clampedEndBlockLocal.y; ++ly) {
+                    for (int lz = clampedStartBlockLocal.z; lz <= clampedEndBlockLocal.z; ++lz) {
+                        for (int lx = clampedStartBlockLocal.x; lx <= clampedEndBlockLocal.x; ++lx) {
+                            uint16_t blockID = chunk->getBlock(lx, ly, lz); // Direct access since we have the chunk
+                            if (blockID != Blocks::AIR_ID) {
+                                potentialBlocks.push_back({iterChunkWorldOrigin + glm::i64vec3(lx, ly, lz), blockID});
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return potentialBlocks;
+}
+
+std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    // 1. Select a random XZ chunk coordinate within SPAWN_CHUNK_RADIUS around (0,0)
+    std::uniform_real_distribution<> angle_dist(0.0, 2.0 * glm::pi<double>());
+    std::uniform_real_distribution<> radius_dist(0.0, static_cast<double>(SPAWN_CHUNK_RADIUS));
+
+    double angle = angle_dist(gen);
+    double radius_in_chunks = radius_dist(gen);
+
+    int spawnChunkX = static_cast<int>(std::round(radius_in_chunks * std::cos(angle)));
+    int spawnChunkZ = static_cast<int>(std::round(radius_in_chunks * std::sin(angle)));
+
+    // Check if the chosen chunk column (at a representative Y level, e.g., Y=0) is generated.
+    // Terrain generation is primarily XZ dependent, so checking one chunk in the column is usually sufficient.
+    // If your world has distinct generation patterns at different Y chunk levels, you might need a more sophisticated check.
+    glm::ivec3 representativeChunkCoordForGenCheck(spawnChunkX, 0, spawnChunkZ); // Using Y=0 as representative
+    if (getChunkGeneratedStatus(representativeChunkCoordForGenCheck) != ChunkGenStatus::LOADED_AND_GENERATED) {
+        return std::nullopt; // Chosen spawn chunk area is not yet generated
+    }
+
+    // 2. Select a random XZ local block coordinate within that chunk
+    std::uniform_int_distribution<> local_block_dist(0, CHUNK_WIDTH - 1); // Assuming CHUNK_WIDTH == CHUNK_DEPTH
+    int localBlockX = local_block_dist(gen);
+    int localBlockZ = local_block_dist(gen);
+
+    // 3. Calculate absolute world XZ coordinates
+    int64_t worldSpawnX = static_cast<int64_t>(spawnChunkX) * CHUNK_WIDTH + localBlockX;
+    int64_t worldSpawnZ = static_cast<int64_t>(spawnChunkZ) * CHUNK_DEPTH + localBlockZ;
+
+    // 4. Scan downwards from a maximum height to find the highest non-air block
+    //    Adjust MAX_WORLD_Y_SEARCH_SPAWN if your world can be taller.
+    //    This assumes a typical Minecraft-like height range.
+    const int64_t MAX_WORLD_Y_SEARCH_SPAWN = CHUNK_HEIGHT * 8; // e.g., Y=128 if CHUNK_HEIGHT=16
+    const int64_t MIN_WORLD_Y_SEARCH_SPAWN = 0;               // Don't spawn below Y=0
+
+    for (int64_t currentY = MAX_WORLD_Y_SEARCH_SPAWN; currentY >= MIN_WORLD_Y_SEARCH_SPAWN; --currentY) {
+        uint16_t blockID = getBlockID({worldSpawnX, currentY, worldSpawnZ});
+        if (blockID != Blocks::AIR_ID) {
+            // Found the highest solid block at currentY. Spawn player one block above it.
+            // Ensure the spot directly above is also air for basic safety (2-block high space).
+            // uint16_t blockAboveID = getBlockID({worldSpawnX, currentY + 1, worldSpawnZ});
+            // uint16_t blockTwoAboveID = getBlockID({worldSpawnX, currentY + 2, worldSpawnZ});
+            // if (blockAboveID == Blocks::AIR_ID && blockTwoAboveID == Blocks::AIR_ID) { // Add this check for robustness
+            return glm::i64vec3(worldSpawnX, currentY + 1, worldSpawnZ);
+            // }
+        }
+    }
+
+    // Fallback: If no suitable ground found (e.g., over a void), return nullopt.
+    return std::nullopt;
 }

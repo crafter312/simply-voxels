@@ -212,6 +212,32 @@ void HelloVulkanApp::mainLoop() {
             inputManager->update(); // Call input manager update
         }
 
+        // --- Player Spawning Logic ---
+        if (player && !player->hasSpawned() && world) {
+            std::optional<glm::i64vec3> spawnPosOpt = world->getPlayerSpawnPos();
+            if (spawnPosOpt) {
+                glm::i64vec3 absoluteSpawnBlockPos = *spawnPosOpt; // This is the world block coord for player's feet
+
+                std::optional<glm::ivec3> spawnChunkOpt = World::worldToChunkCoordinates(absoluteSpawnBlockPos);
+                if (spawnChunkOpt) {
+                    glm::ivec3 spawnChunk = *spawnChunkOpt;
+                    std::optional<glm::ivec3> spawnLocalBlockOpt = World::worldToLocalCoordinates(absoluteSpawnBlockPos, spawnChunk);
+                    if (spawnLocalBlockOpt) {
+                        // Convert local block coords to vec3 for player's local position.
+                        // The Y from getPlayerSpawnPos is already the feet level.
+                        // Center the player on the XZ of the block.
+                        // Add a small epsilon to Y to prevent clipping into the spawn block.
+                        glm::vec3 spawnLocalPos = glm::vec3(*spawnLocalBlockOpt);
+                        spawnLocalPos.x += 0.5f; // Center on X
+                        spawnLocalPos.y += 0.001f; // Small epsilon for Y
+                        spawnLocalPos.z += 0.5f; // Center on Z
+                        player->setPosition(spawnChunk, spawnLocalPos);
+                        std::cout << "Player spawned at chunk: (" << spawnChunk.x << "," << spawnChunk.y << "," << spawnChunk.z << "), local: (" << spawnLocalPos.x << "," << spawnLocalPos.y << "," << spawnLocalPos.z << ")" << std::endl;
+                    }
+                }
+            }
+        }
+
         // Handle pause toggle
         if (inputManager && inputManager->isKeyPressed(KeyCode::Escape)) {
             m_isPaused = !m_isPaused;
