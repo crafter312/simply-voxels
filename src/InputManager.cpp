@@ -6,7 +6,7 @@
 // Define the list of keyboard keys we want our InputManager to track.
 static const std::vector<KeyCode> monitoredKeyboardKeys = {
     KeyCode::W, KeyCode::A, KeyCode::S, KeyCode::D, KeyCode::Space, KeyCode::LeftShift, KeyCode::LeftControl,
-    KeyCode::LeftArrow, KeyCode::RightArrow, KeyCode::UpArrow, KeyCode::DownArrow
+    KeyCode::LeftArrow, KeyCode::RightArrow, KeyCode::UpArrow, KeyCode::DownArrow, KeyCode::Escape
     // Add any other KeyCode enum values you want to track here
 };
 
@@ -55,6 +55,7 @@ int InputManager::getGlfwKeyboardKeyCode(KeyCode key) const {
         case KeyCode::RightArrow:return GLFW_KEY_RIGHT;
         case KeyCode::UpArrow:   return GLFW_KEY_UP;
         case KeyCode::DownArrow: return GLFW_KEY_DOWN;
+        case KeyCode::Escape:    return GLFW_KEY_ESCAPE;
         // Mouse buttons are not keyboard keys
         case KeyCode::MOUSE_BUTTON_LEFT: // Fall through
         case KeyCode::MOUSE_BUTTON_RIGHT: // Fall through

@@ -78,6 +78,10 @@ private:
     // --- Timing ---
     float lastFrameTime = 0.0f;
 
+    // --- Game State ---
+    bool m_isPaused = false; // Tracks if the game is paused
+
+
     void initWindow();
     void initVulkan();
     void mainLoop();

@@ -80,8 +80,10 @@ void HelloVulkanApp::initWindow() {
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
-    // Capture and hide the cursor
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // Initialize game state
+    m_isPaused = false; // Start unpaused
+    // Capture and hide the cursor by default (unpaused state)
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); 
 
     // --- Initialize Input Manager ---
     inputManager = std::make_shared<InputManager>(window);
@@ -210,10 +212,21 @@ void HelloVulkanApp::mainLoop() {
             inputManager->update(); // Call input manager update
         }
 
-        if (camera) {
-            camera->update(deltaTime); // Call camera update (e.g., for smoothing, animations, or if it polls input itself)
+        // Handle pause toggle
+        if (inputManager && inputManager->isKeyPressed(KeyCode::Escape)) {
+            m_isPaused = !m_isPaused;
+            if (m_isPaused) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show and uncapture cursor
+            } else {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide and capture cursor
+            }
         }
 
+        // Only update camera if not paused
+        if (camera && !m_isPaused) {
+            camera->update(deltaTime); 
+        }
+        
         if (world) {
             world->update(deltaTime); // Update world logic (chunk loading/unloading)
         }

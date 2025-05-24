@@ -9,7 +9,7 @@ struct GLFWwindow;
 // KeyCode enum now includes mouse buttons.
 enum class KeyCode {
     Unknown, // Default
-    W, A, S, D, Space, LeftShift, LeftControl, LeftArrow, RightArrow, UpArrow, DownArrow,
+    W, A, S, D, Space, LeftShift, LeftControl, LeftArrow, RightArrow, UpArrow, DownArrow, Escape,
     MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT
     // ... add other keys you need
 };
