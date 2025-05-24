@@ -87,7 +87,6 @@ void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
     m_enabledFeatures = {}; // Clear any previous
     if (deviceSupportedFeatures.samplerAnisotropy) {
         m_enabledFeatures.samplerAnisotropy = VK_TRUE;
-        std::cout << "Sampler Anisotropy feature is supported and will be enabled for the logical device." << std::endl;
     } else {
         std::cout << "Sampler Anisotropy feature is NOT supported by the selected physical device." << std::endl;
     }
@@ -98,6 +97,13 @@ void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
     } else {
         // fillModeNonSolid is required for wireframe rendering.
         throw std::runtime_error("Selected physical device does not support fillModeNonSolid, which is required for wireframe rendering.");
+    }
+
+    // Enable wideLines if supported (for thicker wireframe lines)
+    if (deviceSupportedFeatures.wideLines) {
+        m_enabledFeatures.wideLines = VK_TRUE;
+    } else {
+        std::cout << "wideLines feature is NOT supported by the selected physical device. Wireframe lines will be 1.0f thick." << std::endl;
     }
 }
 

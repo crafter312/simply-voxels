@@ -6,9 +6,12 @@
 #include <vector>
 #include "../resource/ModelLoader.hpp" // For Vertex::getBindingDescription and Vertex::getAttributeDescription (Vertex is now in ModelLoader.hpp)
 
+// Forward declare VulkanDevice
+class VulkanDevice;
+
 class VulkanPipelineFactory {
 public:
-    VulkanPipelineFactory(VkDevice device);
+    VulkanPipelineFactory(VulkanDevice& vulkanDevice);
     ~VulkanPipelineFactory(); // Though likely empty if it doesn't own Vulkan resources directly
 
     // Creates the graphics pipeline and its layout
@@ -37,7 +40,7 @@ public:
 
 
 private:
-    VkDevice deviceRef; // Store a reference to the logical device
+    VulkanDevice& m_vulkanDeviceRef; // Store a reference to the VulkanDevice
 
     // Helper methods, moved from VulkanRenderer
     static std::vector<char> readFile(const std::string& filename);

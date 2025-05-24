@@ -3,10 +3,11 @@
 #include <stdexcept> // For runtime_error
 #include <iostream>  // For error messages
 #include "../physics/WireframeMesher.hpp" // For WireframeVertex
+#include "VulkanDevice.hpp" // Include VulkanDevice to access its methods
 
-VulkanPipelineFactory::VulkanPipelineFactory(VkDevice device) : deviceRef(device) {
-    if (deviceRef == VK_NULL_HANDLE) {
-        throw std::runtime_error("VulkanPipelineFactory received a null VkDevice handle!");
+VulkanPipelineFactory::VulkanPipelineFactory(VulkanDevice& vulkanDevice) : m_vulkanDeviceRef(vulkanDevice) {
+    if (m_vulkanDeviceRef.getLogicalDevice() == VK_NULL_HANDLE) {
+        throw std::runtime_error("VulkanPipelineFactory received a VulkanDevice with a null logical device handle!");
     }
 }
 
@@ -39,7 +40,7 @@ VkShaderModule VulkanPipelineFactory::createShaderModule(const std::vector<char>
     createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
     VkShaderModule shaderModule;
-    if (vkCreateShaderModule(deviceRef, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+    if (vkCreateShaderModule(m_vulkanDeviceRef.getLogicalDevice(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create shader module!");
     }
     return shaderModule;
@@ -143,7 +144,7 @@ bool VulkanPipelineFactory::createGraphicsPipeline(
     pipelineLayoutInfo.pushConstantRangeCount = pushConstantRange ? 1 : 0;
     pipelineLayoutInfo.pPushConstantRanges = pushConstantRange;
 
-    if (vkCreatePipelineLayout(deviceRef, &pipelineLayoutInfo, nullptr, &outPipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), &pipelineLayoutInfo, nullptr, &outPipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout in factory!");
     }
 
@@ -163,14 +164,14 @@ bool VulkanPipelineFactory::createGraphicsPipeline(
     pipelineInfo.renderPass = renderPass;
     pipelineInfo.subpass = 0;
 
-    if (vkCreateGraphicsPipelines(deviceRef, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outGraphicsPipeline) != VK_SUCCESS) {
-        vkDestroyPipelineLayout(deviceRef, outPipelineLayout, nullptr); // Clean up layout if pipeline creation fails
+    if (vkCreateGraphicsPipelines(m_vulkanDeviceRef.getLogicalDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outGraphicsPipeline) != VK_SUCCESS) {
+        vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), outPipelineLayout, nullptr); // Clean up layout if pipeline creation fails
         outPipelineLayout = VK_NULL_HANDLE;
         throw std::runtime_error("Failed to create graphics pipeline in factory!");
     }
 
-    vkDestroyShaderModule(deviceRef, fragShaderModule, nullptr);
-    vkDestroyShaderModule(deviceRef, vertShaderModule, nullptr);
+    vkDestroyShaderModule(m_vulkanDeviceRef.getLogicalDevice(), fragShaderModule, nullptr);
+    vkDestroyShaderModule(m_vulkanDeviceRef.getLogicalDevice(), vertShaderModule, nullptr);
 
     return true;
 }
@@ -230,7 +231,15 @@ bool VulkanPipelineFactory::createWireframePipeline(
     rasterizer.depthClampEnable = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_LINE; // For wireframe
-    rasterizer.lineWidth = 1.0f; // Can be adjusted, might require dynamic state or wideLines feature
+
+    // Check if wideLines feature was enabled on the logical device
+    if (m_vulkanDeviceRef.getEnabledFeatures().wideLines) {
+        rasterizer.lineWidth = 2.0f; // Set desired thicker line width
+        // std::cout << "VulkanPipelineFactory: wideLines enabled. Wireframe lineWidth set to 2.0f." << std::endl;
+    } else {
+        rasterizer.lineWidth = 1.0f; // Default line width if wideLines is not enabled
+        // std::cout << "VulkanPipelineFactory: wideLines NOT enabled. Wireframe lineWidth set to 1.0f." << std::endl;
+    }
     rasterizer.cullMode = VK_CULL_MODE_NONE;   // Corrected: No culling for wireframes
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
@@ -270,7 +279,7 @@ bool VulkanPipelineFactory::createWireframePipeline(
     pipelineLayoutInfo.pushConstantRangeCount = pushConstantRange ? 1 : 0;
     pipelineLayoutInfo.pPushConstantRanges = pushConstantRange; // For model matrix
 
-    if (vkCreatePipelineLayout(deviceRef, &pipelineLayoutInfo, nullptr, &outPipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), &pipelineLayoutInfo, nullptr, &outPipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create wireframe pipeline layout in factory!");
     }
 
@@ -290,14 +299,14 @@ bool VulkanPipelineFactory::createWireframePipeline(
     pipelineInfo.renderPass = renderPass;
     pipelineInfo.subpass = 0;
 
-    if (vkCreateGraphicsPipelines(deviceRef, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outWireframePipeline) != VK_SUCCESS) {
-        vkDestroyPipelineLayout(deviceRef, outPipelineLayout, nullptr);
+    if (vkCreateGraphicsPipelines(m_vulkanDeviceRef.getLogicalDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outWireframePipeline) != VK_SUCCESS) {
+        vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), outPipelineLayout, nullptr);
         outPipelineLayout = VK_NULL_HANDLE;
         throw std::runtime_error("Failed to create wireframe graphics pipeline in factory!");
     }
 
-    vkDestroyShaderModule(deviceRef, fragShaderModule, nullptr);
-    vkDestroyShaderModule(deviceRef, vertShaderModule, nullptr);
+    vkDestroyShaderModule(m_vulkanDeviceRef.getLogicalDevice(), fragShaderModule, nullptr);
+    vkDestroyShaderModule(m_vulkanDeviceRef.getLogicalDevice(), vertShaderModule, nullptr);
 
     return true;
 }

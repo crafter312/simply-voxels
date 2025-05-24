@@ -227,7 +227,7 @@ void VulkanRenderer::init() {
        pushConstantRange.offset = 0;
        pushConstantRange.size = sizeof(glm::mat4); // Size of our model matrix
    
-    pipelineFactory = std::make_unique<VulkanPipelineFactory>(m_vulkanDeviceRef.getLogicalDevice());
+    pipelineFactory = std::make_unique<VulkanPipelineFactory>(m_vulkanDeviceRef);
        if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", 
                                                    "shaders/frag.spv", 
                                                    descriptorSetManager->getDescriptorSetLayout(), 
