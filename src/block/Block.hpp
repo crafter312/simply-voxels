@@ -36,8 +36,6 @@ public:
     const std::string& getModelPath() const;
     const std::string& getTexturePath() const;
 
-    bool hasFullOccludingFace(FaceDirection dir) const;
-    void setFullOccludingFace(FaceDirection dir, bool isFull);
     void setCustomShape(const Physics::VoxelShape& shape);
     const std::optional<Physics::VoxelShape>& getCustomShape() const;
 
@@ -49,7 +47,6 @@ private:
     std::string m_modelPath;
     std::string m_texturePath;
 
-    std::array<bool, 6> m_fullOccludingFaces; // True if the face in this direction is full and opaque
     std::optional<Physics::VoxelShape> customShape; // Optional custom collision shape for this block type
 };
 

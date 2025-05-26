@@ -54,16 +54,12 @@ void ResourceManager::loadAssetsFromRegistry(BlockRegistry& registry, bool preLo
                 // Get (cached) analysis results
                 CachedModelAnalysis analysis = getOrPerformAnalysis(modelPathToLoad, *rawModelData);
 
-                // Apply face properties to the block definition
-                Block* modifiableBlockDef = registry.getBlockDefinitionForModification(blockID);
-                if (modifiableBlockDef) {
-                    std::cout << "ResourceManager: Applying analysis results to Block ID: " << blockID 
-                              << " (Model Path: " << modelPathToLoad << ")" << std::endl;
-                    for (int face_idx = 0; face_idx < 6; ++face_idx) {
-                        modifiableBlockDef->setFullOccludingFace(static_cast<FaceDirection>(face_idx), analysis.faceProperties[face_idx]);
-                    }
-                } else {
-                    std::cerr << "ResourceManager Error: Could not get modifiable block definition for ID " << blockID << " for applying face properties." << std::endl;
+                // Apply face properties directly to the BlockRegistry
+                std::cout << "ResourceManager: Setting face occlusion properties in BlockRegistry for ID: " << blockID
+                          << " (Model Path: " << modelPathToLoad << ")" << std::endl;
+                for (int face_idx = 0; face_idx < 6; ++face_idx) {
+                    // Use the registry's method to set occlusion properties
+                    registry.setBlockFaceOcclusion(blockID, static_cast<FaceDirection>(face_idx), analysis.faceProperties[face_idx]);
                 }
                 // Create a unique copy of SeparableModelData for this block, to be populated with specific atlas UVs later
                 if (analysis.rawSeparableModel) {

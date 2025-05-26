@@ -3,6 +3,14 @@
 
 namespace Blocks {
 
+// Static counter to assign block IDs sequentially after AIR_ID.
+static uint16_t s_nextAvailableBlockID = 1; // Start from 1, as AIR_ID is 0.
+
+const uint16_t DIRT_ID = s_nextAvailableBlockID++;
+const uint16_t STONE_ID = s_nextAvailableBlockID++;
+const uint16_t COBBLESTONE_ID = s_nextAvailableBlockID++;
+const uint16_t COBBLESTONE_SLAB_ID = s_nextAvailableBlockID++;
+
 void registerBlockTypes(BlockRegistry& registry) {
     // Register Dirt
     registry.registerBlockType(DIRT_ID, 

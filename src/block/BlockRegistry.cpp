@@ -15,6 +15,12 @@ void BlockRegistry::registerBlockType(uint16_t id, const std::string& modelPath,
     m_blockDefinitions.emplace(std::piecewise_construct,
                                std::forward_as_tuple(id), // Key for the map
                                std::forward_as_tuple(id, modelPath, texturePath)); // Arguments for Block constructor
+    
+    // Ensure the occlusion data cache is large enough.
+    // New entries in the vector will be value-initialized (std::array<bool, 6> will have all bools as false).
+    if (id >= m_blockFaceOcclusionData.size()) {
+        m_blockFaceOcclusionData.resize(id + 1);
+    }
     std::cout << "BlockRegistry: Registered block with ID " << id << "." << std::endl;
 }
 
@@ -38,12 +44,25 @@ const std::map<uint16_t, Block>& BlockRegistry::getAllBlockDefinitions() const {
     return m_blockDefinitions;
 }
 
-bool BlockRegistry::isBlockFaceFull(uint16_t blockID, FaceDirection dir) const {
-    const Block* blockDef = getBlockDefinition(blockID);
-    if (blockDef) {
-        return blockDef->hasFullOccludingFace(dir);
+void BlockRegistry::setBlockFaceOcclusion(uint16_t blockID, FaceDirection dir, bool isFull) {
+    // First, ensure the block type is actually registered.
+    if (m_blockDefinitions.find(blockID) == m_blockDefinitions.end()) {
+        std::cerr << "BlockRegistry Warning: Attempting to set face occlusion for unregistered block ID " << blockID << std::endl;
+        return;
     }
-    // If block ID is not found (e.g., it's implicitly air or an undefined block),
-    // it does not have a full occluding face.
+
+    // Ensure the cache is large enough (should have been handled by registerBlockType, but good for safety)
+    if (blockID >= m_blockFaceOcclusionData.size()) {
+        m_blockFaceOcclusionData.resize(blockID + 1); // New arrays are value-initialized (all bools false)
+    }
+    m_blockFaceOcclusionData[blockID][static_cast<size_t>(dir)] = isFull;
+}
+
+bool BlockRegistry::isBlockFaceFull(uint16_t blockID, FaceDirection dir) const {
+    if (blockID < m_blockFaceOcclusionData.size()) {
+        // Direct lookup from the cache
+        return m_blockFaceOcclusionData[blockID][static_cast<size_t>(dir)];
+    }
+    // If blockID is out of bounds or was never configured, assume it's not occluding.
     return false;
 }

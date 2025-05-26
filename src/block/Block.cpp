@@ -2,8 +2,7 @@
 #include <stdexcept> // For std::out_of_range
 
 Block::Block(uint16_t id, const std::string& modelPath, const std::string& texturePath)
-    : m_id(id), m_modelPath(modelPath), m_texturePath(texturePath), customShape(std::nullopt),
-      m_fullOccludingFaces{} { // Initialize all faces to false (not full) by default
+    : m_id(id), m_modelPath(modelPath), m_texturePath(texturePath), customShape(std::nullopt) {
     // Constructor initializes member variables
 }
 
@@ -17,23 +16,6 @@ const std::string& Block::getModelPath() const {
 
 const std::string& Block::getTexturePath() const {
     return m_texturePath;
-}
-
-bool Block::hasFullOccludingFace(FaceDirection dir) const {
-    size_t index = static_cast<size_t>(dir);
-    if (index >= m_fullOccludingFaces.size()) {
-        // This should ideally not happen if FaceDirection enum is used correctly
-        throw std::out_of_range("FaceDirection out of bounds in hasFullOccludingFace");
-    }
-    return m_fullOccludingFaces[index];
-}
-
-void Block::setFullOccludingFace(FaceDirection dir, bool isFull) {
-    size_t index = static_cast<size_t>(dir);
-    if (index >= m_fullOccludingFaces.size()) {
-        throw std::out_of_range("FaceDirection out of bounds in setFullOccludingFace");
-    }
-    m_fullOccludingFaces[index] = isFull;
 }
 
 FaceDirection Block::getOppositeFace(FaceDirection dir) {

@@ -73,6 +73,18 @@ ModelData generateMesh(
     const BlockRegistry& blockRegistry) { // Added blockRegistry
     ModelData meshData;
 
+    // Reserve memory to reduce reallocations. These are heuristics and can be tuned.
+    // CHUNK_VOLUME is CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH (e.g., 16*16*16 = 4096).
+    //
+    // Estimate based on a fraction of blocks being solid and exposing a few faces:
+    //   Vertices reserve: CHUNK_VOLUME * 4 (e.g., 4096 * 4 = 16384)
+    //   Indices reserve:  CHUNK_VOLUME * 6 (e.g., 4096 * 6 = 24576)
+    //
+    // These values are chosen as a starting point. Profiling actual mesh sizes for
+    // typical and dense chunks in your world can help refine these estimates.
+    meshData.vertices.reserve(static_cast<size_t>(CHUNK_VOLUME * 4));
+    meshData.indices.reserve(static_cast<size_t>(CHUNK_VOLUME * 6));
+
     if (currentChunk.isAllAir()) {
         return meshData; // Empty mesh for all-air or no data chunks
     }
@@ -206,15 +218,22 @@ ModelData generateMesh(
                             const Block* blockDef = blockRegistry.getBlockDefinition(blockID); 
 
                             if (separableModelDataPtr && blockDef) { 
+                                // Construct the vec3 position only if we actually have model data to add
                                 glm::vec3 currentBlockLocalPos_vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
 
                                 for (int faceIdx = 0; faceIdx < 6; ++faceIdx) {
                                     if (cellFaceIsActuallyExposed[faceIdx]) { 
                                         const ModelData& faceGeom = separableModelDataPtr->canonicalFaces[faceIdx];
-                                        addBlockModelToMeshData(meshData, faceGeom, currentBlockLocalPos_vec3);
+                                        // Only call addBlockModelToMeshData if faceGeom has vertices
+                                        if (!faceGeom.vertices.empty()) {
+                                            addBlockModelToMeshData(meshData, faceGeom, currentBlockLocalPos_vec3);
+                                        }
                                     }
                                 }
-                                addBlockModelToMeshData(meshData, separableModelDataPtr->remainingGeometry, currentBlockLocalPos_vec3);
+                                // Only call addBlockModelToMeshData if remainingGeometry has vertices
+                                if (!separableModelDataPtr->remainingGeometry.vertices.empty()) {
+                                    addBlockModelToMeshData(meshData, separableModelDataPtr->remainingGeometry, currentBlockLocalPos_vec3);
+                                }
                             }
                         }
                     } // End x loop
