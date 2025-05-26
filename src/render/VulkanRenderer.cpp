@@ -95,6 +95,20 @@ VulkanRenderer::~VulkanRenderer() {
     }
     // Note: vkDeviceWaitIdle should be called before this destructor is invoked (e.g., in HelloVulkanApp::cleanup)
 
+    // Destroy all per-chunk render data first. This will queue their Vulkan buffers for deletion.
+    destroyAllChunkRenderData();
+
+    // Process any remaining items in deletion queues.
+    // Assuming vkDeviceWaitIdle has been called externally or we'd call it here.
+    std::cout << "VulkanRenderer Destructor: Processing final deletion queues..." << std::endl;
+    for (size_t i = 0; i < m_deletionQueues.size(); ++i) {
+        for (const auto& resource : m_deletionQueues[i]) {
+            if (resource.buffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.buffer, nullptr);
+            if (resource.memory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memory, nullptr);
+        }
+        m_deletionQueues[i].clear();
+    }
+
     // Swap chain resources are cleaned up by swapChainManager's destructor
     // Descriptor set manager resources are cleaned up by its destructor
     descriptorSetManager.reset();
@@ -122,12 +136,6 @@ VulkanRenderer::~VulkanRenderer() {
         if (uniformBuffersMemory[i] != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), uniformBuffersMemory[i], nullptr);
     }
 
-    // Descriptor pool and layout are now cleaned up by VulkanDescriptorSetManager's destructor
-    // if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(m_vulkanDeviceRef.getLogicalDevice(), descriptorPool, nullptr);
-    // if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(m_vulkanDeviceRef.getLogicalDevice(), descriptorSetLayout, nullptr);
-
-    // Destroy all per-chunk render data
-    destroyAllChunkRenderData();
     // Destroy synchronization objects
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         if (imageAvailableSemaphores.size() > i && imageAvailableSemaphores[i] != VK_NULL_HANDLE)
@@ -341,6 +349,9 @@ void VulkanRenderer::init() {
     createSyncObjects();
     std::cout << "Synchronization Objects created." << std::endl;
     std::cout << "VulkanRenderer initialization complete." << std::endl;
+
+    // Initialize deletion queues
+    m_deletionQueues.resize(MAX_FRAMES_IN_FLIGHT);
 }
 
 // createSwapChain, createImageViews, createFramebuffers, cleanupSwapChain, recreateSwapChain
@@ -566,6 +577,14 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 void VulkanRenderer::drawFrame() {
     vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
+    // Process deletions for the frame whose fence just signaled
+    for (const auto& resource : m_deletionQueues[currentFrame]) {
+        // std::cout << "Deleting buffer: " << resource.buffer << " memory: " << resource.memory << " for frame " << currentFrame << std::endl;
+        if (resource.buffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.buffer, nullptr);
+        if (resource.memory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memory, nullptr);
+    }
+    m_deletionQueues[currentFrame].clear();
+
     // If a rebase occurred, update all chunk model matrices immediately
     if (m_world.rebaseOccurredLastFrame()) {
         // std::cout << "Rebase detected by renderer. Updating all model matrices." << std::endl;
@@ -674,6 +693,16 @@ void VulkanRenderer::recreateSwapChainResources() {
     // Framebuffers are cleaned by swapChainManager as they depend on swap chain image views
     swapChainManager->cleanupForRecreation();
 
+    // Process all pending deletions immediately since we've waited for idle
+    std::cout << "RecreateSwapChainResources: Processing all deletion queues..." << std::endl;
+    for (size_t i = 0; i < m_deletionQueues.size(); ++i) {
+        for (const auto& resource : m_deletionQueues[i]) {
+            if (resource.buffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.buffer, nullptr);
+            if (resource.memory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memory, nullptr);
+        }
+        m_deletionQueues[i].clear();
+    }
+
     // 2. Cleanup old depth buffer resources (as they depend on extent)
     cleanupDepthResources();
 
@@ -774,19 +803,15 @@ void VulkanRenderer::recreateSwapChainResources() {
 
 void VulkanRenderer::destroyChunkRenderData(ChunkRenderData& data) {
     if (data.vertexBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), data.vertexBuffer, nullptr);
+        m_deletionQueues[currentFrame].push_back({data.vertexBuffer, data.vertexBufferMemory});
+        // std::cout << "Queueing VB for deletion: " << data.vertexBuffer << " on frame " << currentFrame << std::endl;
         data.vertexBuffer = VK_NULL_HANDLE;
-    }
-    if (data.vertexBufferMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), data.vertexBufferMemory, nullptr);
         data.vertexBufferMemory = VK_NULL_HANDLE;
     }
     if (data.indexBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), data.indexBuffer, nullptr);
+        m_deletionQueues[currentFrame].push_back({data.indexBuffer, data.indexBufferMemory});
+        // std::cout << "Queueing IB for deletion: " << data.indexBuffer << " on frame " << currentFrame << std::endl;
         data.indexBuffer = VK_NULL_HANDLE;
-    }
-    if (data.indexBufferMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), data.indexBufferMemory, nullptr);
         data.indexBufferMemory = VK_NULL_HANDLE;
     }
     data.indexCount = 0;
@@ -860,11 +885,14 @@ void VulkanRenderer::processChunkChanges() {
             try {                
                 ModelData mesh_data_result = future_obj.get();
                 // GPU buffer operations must happen on the main thread.
-                // Wait for GPU to be idle ONCE if we have results to process.
-                if (!gpu_waited_this_frame_stage1) {
-                    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
-                    gpu_waited_this_frame_stage1 = true;
-                }
+                // The vkDeviceWaitIdle here is removed.
+                // VulkanBufferManager::createVertexBuffer/IndexBuffer use staging buffers
+                // and internally wait on the graphics queue for the copy to complete,
+                // which is less disruptive than waiting for the entire device.
+                // if (!gpu_waited_this_frame_stage1) { // This logic is no longer needed
+                //     vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
+                //     gpu_waited_this_frame_stage1 = true;
+                // }
                 //std::cout << "VulkanRenderer: APPLYING mesh for chunk [" << future_chunk_coord.x << "," << future_chunk_coord.y << "," << future_chunk_coord.z << "]." << std::endl;
                 createChunkRenderDataFromMeshData(future_chunk_coord, mesh_data_result);
             } catch (const std::exception& e) {
@@ -926,8 +954,8 @@ void VulkanRenderer::processChunkChanges() {
                         m_submittedMeshTasks.insert(coordForTask); // Mark as submitted
                 }
             }
-        } else { // Chunk does not exist in world map: it was unloaded
-            vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Wait before this specific buffer manipulation
+        } else { // Chunk does not exist in world map: it was unloaded (or never existed but was in changed list)            
+            // vkDeviceWaitIdle call removed here as destroyChunkRenderData now defers deletion.
             auto renderDataIt = m_chunkRenderData.find(chunkCoord);
             // If it was unloaded, it might have had a pending mesh task or existing render data.
             m_submittedMeshTasks.erase(chunkCoord); // Remove if it was in submitted set
@@ -952,11 +980,17 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
             m_lastTargetedBlockPos = std::nullopt;
             m_wireframeMeshNeedsUpdate = true; // Ready for an update when a target is acquired
             
-            vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Wait before destroying buffers
-            if (m_wireframeVertexBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBuffer, nullptr); m_wireframeVertexBuffer = VK_NULL_HANDLE; }
-            if (m_wireframeVertexBufferMemory != VK_NULL_HANDLE) { vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBufferMemory, nullptr); m_wireframeVertexBufferMemory = VK_NULL_HANDLE; }
-            if (m_wireframeIndexBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBuffer, nullptr); m_wireframeIndexBuffer = VK_NULL_HANDLE; }
-            if (m_wireframeIndexBufferMemory != VK_NULL_HANDLE) { vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBufferMemory, nullptr); m_wireframeIndexBufferMemory = VK_NULL_HANDLE; }
+            // vkDeviceWaitIdle removed. Queue wireframe buffers for deferred deletion.
+            if (m_wireframeVertexBuffer != VK_NULL_HANDLE) {
+                m_deletionQueues[currentFrame].push_back({m_wireframeVertexBuffer, m_wireframeVertexBufferMemory});
+                m_wireframeVertexBuffer = VK_NULL_HANDLE;
+                m_wireframeVertexBufferMemory = VK_NULL_HANDLE;
+            }
+            if (m_wireframeIndexBuffer != VK_NULL_HANDLE) {
+                m_deletionQueues[currentFrame].push_back({m_wireframeIndexBuffer, m_wireframeIndexBufferMemory});
+                m_wireframeIndexBuffer = VK_NULL_HANDLE;
+                m_wireframeIndexBufferMemory = VK_NULL_HANDLE;
+            }
             m_wireframeIndexCount = 0;
         }
         return; // Early return as there's no wireframe to update or draw
@@ -990,27 +1024,24 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
 
     WireframeMesher::WireframeMeshData meshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
 
-    // GPU resources should be modified after waiting for idle, or use a safer buffer update strategy.
-    // For simplicity, waiting for idle here if buffers are changing.
-    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
+    // vkDeviceWaitIdle removed. BufferManager handles staging for creation.
+    // Old buffers are queued for deferred deletion.
 
     // Destroy old buffers
     if (m_wireframeVertexBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBuffer, nullptr);
+        m_deletionQueues[currentFrame].push_back({m_wireframeVertexBuffer, m_wireframeVertexBufferMemory});
         m_wireframeVertexBuffer = VK_NULL_HANDLE;
-    }
-    if (m_wireframeVertexBufferMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBufferMemory, nullptr);
         m_wireframeVertexBufferMemory = VK_NULL_HANDLE;
     }
+    // m_wireframeVertexBufferMemory is handled with m_wireframeVertexBuffer
+
     if (m_wireframeIndexBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBuffer, nullptr);
+        m_deletionQueues[currentFrame].push_back({m_wireframeIndexBuffer, m_wireframeIndexBufferMemory});
         m_wireframeIndexBuffer = VK_NULL_HANDLE;
-    }
-    if (m_wireframeIndexBufferMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBufferMemory, nullptr);
         m_wireframeIndexBufferMemory = VK_NULL_HANDLE;
     }
+    // m_wireframeIndexBufferMemory is handled with m_wireframeIndexBuffer
+
     m_wireframeIndexCount = 0;
 
     if (!meshData.vertices.empty() && !meshData.indices.empty()) {

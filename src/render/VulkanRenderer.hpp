@@ -49,6 +49,12 @@ struct UniformBufferObject {
     glm::mat4 proj;
 };
 
+// --- Structure for Deferred Deletion ---
+struct ResourceToDelete {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+};
+
 // Forward declare VulkanSwapChain
 class VulkanSwapChain;
 
@@ -129,6 +135,7 @@ private:
     // Store chunkCoord with the future to correctly manage m_submittedMeshTasks on exception
     std::vector<std::pair<glm::ivec3, std::future<ModelData>>> m_pendingMeshFutures;
     std::set<glm::ivec3, IVec3Comparator> m_submittedMeshTasks; // Chunks for which a mesh task has been launched
+    std::vector<std::vector<ResourceToDelete>> m_deletionQueues; // Indexed by frame in flight for deferred deletion
 
     // Helper to destroy chunk buffers
     void destroyChunkRenderData(ChunkRenderData& data);
