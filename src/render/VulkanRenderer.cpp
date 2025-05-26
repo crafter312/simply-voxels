@@ -593,9 +593,9 @@ void VulkanRenderer::drawFrame() {
             const glm::ivec3& chunkCoord = pair.first;
             ChunkRenderData& renderData = pair.second;
             glm::ivec3 relativeChunkCoord = chunkCoord - newRebaseOrigin;
-            renderData.modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(relativeChunkCoord.x * CHUNK_WIDTH,
-                                                                               relativeChunkCoord.y * CHUNK_HEIGHT,
-                                                                               relativeChunkCoord.z * CHUNK_DEPTH));
+            renderData.modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(relativeChunkCoord.x * CHUNK_SIDE_LENGTH,
+                                                                               relativeChunkCoord.y * CHUNK_SIDE_LENGTH,
+                                                                               relativeChunkCoord.z * CHUNK_SIDE_LENGTH));
         }
     }
 
@@ -849,9 +849,9 @@ void VulkanRenderer::createChunkRenderDataFromMeshData(const glm::ivec3& chunkCo
         // Calculate the chunk's position relative to the current rebase origin
         glm::ivec3 rebaseOriginChunkCoord = m_world.getRebaseOriginChunkCoord();
         glm::ivec3 relativeChunkCoord = chunkCoord - rebaseOriginChunkCoord;
-        glm::vec3 relativeWorldPos = glm::vec3(relativeChunkCoord.x * CHUNK_WIDTH,
-                                               relativeChunkCoord.y * CHUNK_HEIGHT,
-                                               relativeChunkCoord.z * CHUNK_DEPTH);
+        glm::vec3 relativeWorldPos = glm::vec3(relativeChunkCoord.x * CHUNK_SIDE_LENGTH,
+                                               relativeChunkCoord.y * CHUNK_SIDE_LENGTH,
+                                               relativeChunkCoord.z * CHUNK_SIDE_LENGTH);
         renderData.modelMatrix = glm::translate(glm::mat4(1.0f), relativeWorldPos);
         // std::cout << "Created render data for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " Indices: " << renderData.indexCount << std::endl;
     } else {
@@ -1053,7 +1053,7 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
     // Calculate model matrix
     glm::i64vec3 worldBlockPos_i64 = targetedBlockInfo.blockPosition;
     glm::ivec3 rebaseOriginChunkCoord_ivec3 = m_world.getRebaseOriginChunkCoord();
-    glm::i64vec3 rebaseOriginWorldPos_i64 = glm::i64vec3(rebaseOriginChunkCoord_ivec3) * glm::i64vec3(CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH);
+    glm::i64vec3 rebaseOriginWorldPos_i64 = glm::i64vec3(rebaseOriginChunkCoord_ivec3) * glm::i64vec3(CHUNK_SIDE_LENGTH, CHUNK_SIDE_LENGTH, CHUNK_SIDE_LENGTH);
     glm::i64vec3 relativeBlockPos_i64 = worldBlockPos_i64 - rebaseOriginWorldPos_i64;
     m_wireframeModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(relativeBlockPos_i64));
     

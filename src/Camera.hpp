@@ -70,16 +70,10 @@ public:
     static constexpr float NEAR_PLANE_DISTANCE = 0.1f;
     static constexpr float SQRT3_APPROX = 1.73205081f; // sqrt(3)
 
-    // Calculate the maximum dimension of a chunk (assuming CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH are available from Chunk.hpp)
-    // std::max with an initializer_list is constexpr since C++14
-    static constexpr float MAX_CHUNK_DIM = static_cast<float>(
-        std::max({CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH})
-    );
-
     // Calculate far plane distance to encompass the furthest unloadable chunk diagonally
     // For spherical loading, this is roughly (Radius in Chunks + Diagonal of one Chunk) * Chunk Dimension
     static constexpr float FAR_PLANE_DISTANCE =
-        (static_cast<float>(UNLOAD_CHUNK_RADIUS) + SQRT3_APPROX) * MAX_CHUNK_DIM;
+        (static_cast<float>(UNLOAD_CHUNK_RADIUS) + SQRT3_APPROX) * CHUNK_SIDE_LENGTH;
 };
 
 #endif // CAMERA_HPP

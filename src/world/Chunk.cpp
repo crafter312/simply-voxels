@@ -66,9 +66,9 @@ void Chunk::allocateBlockStorage() {
 
 uint16_t Chunk::getBlock(int localX, int localY, int localZ) const {
     std::shared_lock<std::shared_mutex> lock(m_data_mutex);
-    if (localX < 0 || localX >= CHUNK_WIDTH ||
-        localY < 0 || localY >= CHUNK_HEIGHT ||
-        localZ < 0 || localZ >= CHUNK_DEPTH) {
+    if (localX < 0 || localX >= CHUNK_SIDE_LENGTH ||
+        localY < 0 || localY >= CHUNK_SIDE_LENGTH ||
+        localZ < 0 || localZ >= CHUNK_SIDE_LENGTH) {
         // Potentially handle out-of-bounds access, e.g., by returning AIR_BLOCK_ID
         // or throwing an error. For now, let's assume valid local coordinates
         // or rely on the caller to ensure this.
@@ -83,9 +83,9 @@ uint16_t Chunk::getBlock(int localX, int localY, int localZ) const {
 }
 
 void Chunk::setBlock(int localX, int localY, int localZ, uint16_t blockID) {
-    if (localX < 0 || localX >= CHUNK_WIDTH ||
-        localY < 0 || localY >= CHUNK_HEIGHT ||
-        localZ < 0 || localZ >= CHUNK_DEPTH) {
+    if (localX < 0 || localX >= CHUNK_SIDE_LENGTH ||
+        localY < 0 || localY >= CHUNK_SIDE_LENGTH ||
+        localZ < 0 || localZ >= CHUNK_SIDE_LENGTH) {
         // Cannot set a block outside the chunk's bounds from within the chunk itself.
         // This should be handled by a world manager.
         // For now, we can ignore or log an error.
@@ -129,9 +129,9 @@ void Chunk::setBlock(int localX, int localY, int localZ, uint16_t blockID) {
 }
 
 glm::ivec3 Chunk::getWorldPosition() const {
-    return glm::ivec3(m_chunkCoord.x * CHUNK_WIDTH,
-                      m_chunkCoord.y * CHUNK_HEIGHT,
-                      m_chunkCoord.z * CHUNK_DEPTH);
+    return glm::ivec3(m_chunkCoord.x * CHUNK_SIDE_LENGTH,
+                      m_chunkCoord.y * CHUNK_SIDE_LENGTH,
+                      m_chunkCoord.z * CHUNK_SIDE_LENGTH);
 }
 bool Chunk::isDirty() const { 
     std::shared_lock<std::shared_mutex> lock(m_data_mutex);
@@ -155,7 +155,7 @@ void Chunk::generate() {
     // const double TERRAIN_FREQUENCY = 0.01; // Defined in Chunk.hpp
     // const double TERRAIN_AMPLITUDE = 20.0; // Defined in Chunk.hpp
 
-    const int baseSurfaceAbsoluteY = CHUNK_HEIGHT / 2; // An arbitrary "sea level" or average ground height in absolute Y.
+    const int baseSurfaceAbsoluteY = CHUNK_SIDE_LENGTH / 2; // An arbitrary "sea level" or average ground height in absolute Y.
                                                 // Adjust this if your world's "ground" is typically higher or lower.
                                                 // For chunks at y=0, this means surface is around local y=8.
 
@@ -170,8 +170,8 @@ void Chunk::generate() {
     //std::cout << "  Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] World Y range: [" << chunkWorldOrigin.y << " to " << chunkWorldOrigin.y + CHUNK_HEIGHT - 1 << "]" << std::endl;
     bool hasNonAirBlock = false;
 
-    for (int lx = 0; lx < CHUNK_WIDTH; ++lx) {
-        for (int lz = 0; lz < CHUNK_DEPTH; ++lz) {
+    for (int lx = 0; lx < CHUNK_SIDE_LENGTH; ++lx) {
+        for (int lz = 0; lz < CHUNK_SIDE_LENGTH; ++lz) {
             // Calculate absolute world X and Z for the current block column
             double absoluteWorldX = static_cast<double>(chunkWorldOrigin.x + lx);
             double absoluteWorldZ = static_cast<double>(chunkWorldOrigin.z + lz);
@@ -179,7 +179,7 @@ void Chunk::generate() {
             double noiseValue = glm::perlin(glm::dvec2(absoluteWorldX * TERRAIN_FREQUENCY, absoluteWorldZ * TERRAIN_FREQUENCY));
             int surfaceTopAbsoluteY = baseSurfaceAbsoluteY + static_cast<int>(noiseValue * TERRAIN_AMPLITUDE);
 
-            for (int ly = 0; ly < CHUNK_HEIGHT; ++ly) {
+            for (int ly = 0; ly < CHUNK_SIDE_LENGTH; ++ly) {
                 int currentBlockAbsoluteY = chunkWorldOrigin.y + ly; // Absolute Y of the current block layer
                 uint16_t blockID;
 

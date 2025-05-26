@@ -177,26 +177,26 @@ namespace { // Anonymous namespace for helper functions local to this file
 }
 
 void Player::normalizeAndCrossChunkBoundaryX() {
-    int chunksMovedX = static_cast<int>(std::floor(m_localPositionInChunk.x / CHUNK_WIDTH));
+    int chunksMovedX = static_cast<int>(std::floor(m_localPositionInChunk.x / CHUNK_SIDE_LENGTH));
     if (chunksMovedX != 0) {
         m_absoluteChunkPos.x += chunksMovedX;
-        m_localPositionInChunk.x -= chunksMovedX * CHUNK_WIDTH;
+        m_localPositionInChunk.x -= chunksMovedX * CHUNK_SIDE_LENGTH;
     }
 }
 
 void Player::normalizeAndCrossChunkBoundaryY() {
-    int chunksMovedY = static_cast<int>(std::floor(m_localPositionInChunk.y / CHUNK_HEIGHT));
+    int chunksMovedY = static_cast<int>(std::floor(m_localPositionInChunk.y / CHUNK_SIDE_LENGTH));
     if (chunksMovedY != 0) {
         m_absoluteChunkPos.y += chunksMovedY;
-        m_localPositionInChunk.y -= chunksMovedY * CHUNK_HEIGHT;
+        m_localPositionInChunk.y -= chunksMovedY * CHUNK_SIDE_LENGTH;
     }
 }
 
 void Player::normalizeAndCrossChunkBoundaryZ() {
-    int chunksMovedZ = static_cast<int>(std::floor(m_localPositionInChunk.z / CHUNK_DEPTH));
+    int chunksMovedZ = static_cast<int>(std::floor(m_localPositionInChunk.z / CHUNK_SIDE_LENGTH));
     if (chunksMovedZ != 0) {
         m_absoluteChunkPos.z += chunksMovedZ;
-        m_localPositionInChunk.z -= chunksMovedZ * CHUNK_DEPTH;
+        m_localPositionInChunk.z -= chunksMovedZ * CHUNK_SIDE_LENGTH;
     }
 }
 
@@ -425,12 +425,12 @@ void Player::updateCameraPosition() {
 
         // Normalize the camera's local Y position and adjust its chunk Y coordinate if necessary.
         // This handles cases where adding EYE_HEIGHT pushes the camera into an adjacent chunk vertically.
-        int chunksMovedY = static_cast<int>(std::floor(cameraTargetLocalPos.y / CHUNK_HEIGHT));
+        int chunksMovedY = static_cast<int>(std::floor(cameraTargetLocalPos.y / CHUNK_SIDE_LENGTH));
         if (chunksMovedY != 0) { // Check if it actually crossed a boundary
             cameraTargetChunkPos.y += chunksMovedY;
-            cameraTargetLocalPos.y -= chunksMovedY * CHUNK_HEIGHT;
+            cameraTargetLocalPos.y -= chunksMovedY * CHUNK_SIDE_LENGTH;
         }
-        // Note: We assume EYE_HEIGHT is less than CHUNK_HEIGHT, so it won't cross more than one chunk boundary.
+        // Note: We assume EYE_HEIGHT is less than CHUNK_SIDE_LENGTH, so it won't cross more than one chunk boundary.
         // If EYE_HEIGHT could be >= CHUNK_HEIGHT, a loop or more robust normalization might be needed,
         // but for typical player/camera setups, this is sufficient.
         m_camera->setPosition(cameraTargetChunkPos, cameraTargetLocalPos);
@@ -441,9 +441,9 @@ void Player::updateCameraPosition() {
 glm::vec3 Player::getAABBMin() const {
     // Reconstruct absolute world position for AABB calculation
     glm::vec3 playerBasePosition = glm::vec3(
-        static_cast<float>(m_absoluteChunkPos.x * CHUNK_WIDTH) + m_localPositionInChunk.x,
-        static_cast<float>(m_absoluteChunkPos.y * CHUNK_HEIGHT) + m_localPositionInChunk.y,
-        static_cast<float>(m_absoluteChunkPos.z * CHUNK_DEPTH) + m_localPositionInChunk.z);
+        static_cast<float>(m_absoluteChunkPos.x * CHUNK_SIDE_LENGTH) + m_localPositionInChunk.x,
+        static_cast<float>(m_absoluteChunkPos.y * CHUNK_SIDE_LENGTH) + m_localPositionInChunk.y,
+        static_cast<float>(m_absoluteChunkPos.z * CHUNK_SIDE_LENGTH) + m_localPositionInChunk.z);
     return glm::vec3(
         playerBasePosition.x - PLAYER_DIMENSIONS.x / 2.0f,
         playerBasePosition.y, // Base of the player
@@ -453,9 +453,9 @@ glm::vec3 Player::getAABBMin() const {
 glm::vec3 Player::getAABBMax() const {
     // Reconstruct absolute world position for AABB calculation
     glm::vec3 playerBasePosition = glm::vec3(
-        static_cast<float>(m_absoluteChunkPos.x * CHUNK_WIDTH) + m_localPositionInChunk.x,
-        static_cast<float>(m_absoluteChunkPos.y * CHUNK_HEIGHT) + m_localPositionInChunk.y,
-        static_cast<float>(m_absoluteChunkPos.z * CHUNK_DEPTH) + m_localPositionInChunk.z);
+        static_cast<float>(m_absoluteChunkPos.x * CHUNK_SIDE_LENGTH) + m_localPositionInChunk.x,
+        static_cast<float>(m_absoluteChunkPos.y * CHUNK_SIDE_LENGTH) + m_localPositionInChunk.y,
+        static_cast<float>(m_absoluteChunkPos.z * CHUNK_SIDE_LENGTH) + m_localPositionInChunk.z);
     return glm::vec3(
         playerBasePosition.x + PLAYER_DIMENSIONS.x / 2.0f,
         playerBasePosition.y + PLAYER_DIMENSIONS.y, // Top of the player

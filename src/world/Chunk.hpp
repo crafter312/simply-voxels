@@ -20,10 +20,8 @@ typedef VkBuffer_T* VkBuffer;
 typedef VkDeviceMemory_T* VkDeviceMemory;
 
 
-constexpr int CHUNK_WIDTH = 16;
-constexpr int CHUNK_HEIGHT = 16;
-constexpr int CHUNK_DEPTH = 16;
-constexpr int CHUNK_VOLUME = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH; // 4096
+constexpr int CHUNK_SIDE_LENGTH = 16;
+constexpr int CHUNK_VOLUME = CHUNK_SIDE_LENGTH * CHUNK_SIDE_LENGTH * CHUNK_SIDE_LENGTH; // 4096
 
 // Terrain generation parameters
 constexpr double TERRAIN_FREQUENCY = 0.01; // Controls the "zoom" of the noise. Smaller = larger features.
@@ -89,7 +87,7 @@ public:
         // if (x < 0 || x >= CHUNK_WIDTH || y < 0 || y >= CHUNK_HEIGHT || z < 0 || z >= CHUNK_DEPTH) {
         //     throw std::out_of_range("Block coordinates are out of chunk bounds");
         // }
-        return static_cast<size_t>(x + y * CHUNK_WIDTH + z * CHUNK_WIDTH * CHUNK_HEIGHT);
+        return static_cast<size_t>(x + (y + z * CHUNK_SIDE_LENGTH) * CHUNK_SIDE_LENGTH);
     }
 
 private:

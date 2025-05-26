@@ -75,9 +75,9 @@ glm::vec3 Camera::getPositionRelativeTo(glm::ivec3 rebaseOriginChunkCoord) const
     // Calculate the relative chunk coordinate
     glm::ivec3 relativeChunkPos = m_absoluteChunkPos - rebaseOriginChunkCoord;
     // Calculate the world position of the relative chunk origin
-    glm::vec3 relativeChunkWorldPos = glm::vec3(relativeChunkPos.x * CHUNK_WIDTH,
-                                               relativeChunkPos.y * CHUNK_HEIGHT,
-                                               relativeChunkPos.z * CHUNK_DEPTH);
+    glm::vec3 relativeChunkWorldPos = glm::vec3(relativeChunkPos.x * CHUNK_SIDE_LENGTH,
+                                               relativeChunkPos.y * CHUNK_SIDE_LENGTH,
+                                               relativeChunkPos.z * CHUNK_SIDE_LENGTH);
     // Add the local position within the chunk
     return relativeChunkWorldPos + m_localPositionInChunk;
 }

@@ -25,13 +25,13 @@ RaycastResult castRay(
     // This is the initial voxel the ray starts in.
     glm::i64vec3 initialRayVoxelPos_i64; 
     initialRayVoxelPos_i64.x = 
-        static_cast<int64_t>(originChunkPos.x) * CHUNK_WIDTH +
+        static_cast<int64_t>(originChunkPos.x) * CHUNK_SIDE_LENGTH +
         static_cast<int64_t>(std::floor(originLocalPos.x));
     initialRayVoxelPos_i64.y = 
-        static_cast<int64_t>(originChunkPos.y) * CHUNK_HEIGHT +
+        static_cast<int64_t>(originChunkPos.y) * CHUNK_SIDE_LENGTH +
         static_cast<int64_t>(std::floor(originLocalPos.y));
     initialRayVoxelPos_i64.z = 
-        static_cast<int64_t>(originChunkPos.z) * CHUNK_DEPTH +
+        static_cast<int64_t>(originChunkPos.z) * CHUNK_SIDE_LENGTH +
         static_cast<int64_t>(std::floor(originLocalPos.z));
 
     // If the ray starts outside the int32_t addressable world, we could potentially return early.

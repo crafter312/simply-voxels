@@ -128,9 +128,9 @@ ModelData generateMesh(
             }
 
             // Iterate through blocks in the current chunk using nested loops
-            for (int z = 0; z < CHUNK_DEPTH; ++z) {
-                for (int y = 0; y < CHUNK_HEIGHT; ++y) {
-                    for (int x = 0; x < CHUNK_WIDTH; ++x) {
+            for (int z = 0; z < CHUNK_SIDE_LENGTH; ++z) {
+                for (int y = 0; y < CHUNK_SIDE_LENGTH; ++y) {
+                    for (int x = 0; x < CHUNK_SIDE_LENGTH; ++x) {
                         size_t blockIndex = Chunk::localToIndex(x, y, z);
                         uint16_t blockID = currentChunkBlocks_ptr[blockIndex];
 
@@ -151,9 +151,9 @@ ModelData generateMesh(
                             bool neighborOccludesThisFace = true; // Assume occluded by default
 
                             // Check if neighbor is within the current chunk
-                            if (neighborLocalPosRelativeToCurrentChunk.x >= 0 && neighborLocalPosRelativeToCurrentChunk.x < CHUNK_WIDTH &&
-                                neighborLocalPosRelativeToCurrentChunk.y >= 0 && neighborLocalPosRelativeToCurrentChunk.y < CHUNK_HEIGHT &&
-                                neighborLocalPosRelativeToCurrentChunk.z >= 0 && neighborLocalPosRelativeToCurrentChunk.z < CHUNK_DEPTH) {
+                            if (neighborLocalPosRelativeToCurrentChunk.x >= 0 && neighborLocalPosRelativeToCurrentChunk.x < CHUNK_SIDE_LENGTH &&
+                                neighborLocalPosRelativeToCurrentChunk.y >= 0 && neighborLocalPosRelativeToCurrentChunk.y < CHUNK_SIDE_LENGTH &&
+                                neighborLocalPosRelativeToCurrentChunk.z >= 0 && neighborLocalPosRelativeToCurrentChunk.z < CHUNK_SIDE_LENGTH) {
                                 
                                 size_t neighborIdxInCurrentChunk = Chunk::localToIndex(
                                     neighborLocalPosRelativeToCurrentChunk.x,
@@ -182,9 +182,9 @@ ModelData generateMesh(
                                         // Neighbor chunk exists, is generated, and not all air. Get its block ID.
                                         // Calculate local coordinates within the *neighbor* chunk
                                         glm::ivec3 localPosInNeighborChunk(
-                                            (currentBlockLocalPos_ivec.x + neighborOffset.x + CHUNK_WIDTH) % CHUNK_WIDTH,
-                                            (currentBlockLocalPos_ivec.y + neighborOffset.y + CHUNK_HEIGHT) % CHUNK_HEIGHT,
-                                            (currentBlockLocalPos_ivec.z + neighborOffset.z + CHUNK_DEPTH) % CHUNK_DEPTH
+                                            (currentBlockLocalPos_ivec.x + neighborOffset.x + CHUNK_SIDE_LENGTH) % CHUNK_SIDE_LENGTH,
+                                            (currentBlockLocalPos_ivec.y + neighborOffset.y + CHUNK_SIDE_LENGTH) % CHUNK_SIDE_LENGTH,
+                                            (currentBlockLocalPos_ivec.z + neighborOffset.z + CHUNK_SIDE_LENGTH) % CHUNK_SIDE_LENGTH
                                         );
                                         
                                         if (cachedNeighbor.blockData) { // Check if blockData has a value

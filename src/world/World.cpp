@@ -80,19 +80,19 @@ World::~World() {
 std::optional<glm::ivec3> World::worldToChunkCoordinates(glm::i64vec3 worldPosition) {
     // Perform floored division using integer arithmetic to avoid float precision issues.
     // CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH are positive.
-    int64_t chunkX_i64 = worldPosition.x / CHUNK_WIDTH;
-    int64_t chunkY_i64 = worldPosition.y / CHUNK_HEIGHT;
-    int64_t chunkZ_i64 = worldPosition.z / CHUNK_DEPTH;
+    int64_t chunkX_i64 = worldPosition.x / CHUNK_SIDE_LENGTH;
+    int64_t chunkY_i64 = worldPosition.y / CHUNK_SIDE_LENGTH;
+    int64_t chunkZ_i64 = worldPosition.z / CHUNK_SIDE_LENGTH;
 
     // Adjust for negative coordinates if there's a non-zero remainder,
     // because integer division truncates towards zero.
-    if (worldPosition.x < 0 && (worldPosition.x % CHUNK_WIDTH != 0)) {
+    if (worldPosition.x < 0 && (worldPosition.x % CHUNK_SIDE_LENGTH != 0)) {
         chunkX_i64--;
     }
-    if (worldPosition.y < 0 && (worldPosition.y % CHUNK_HEIGHT != 0)) {
+    if (worldPosition.y < 0 && (worldPosition.y % CHUNK_SIDE_LENGTH != 0)) {
         chunkY_i64--;
     }
-    if (worldPosition.z < 0 && (worldPosition.z % CHUNK_DEPTH != 0)) {
+    if (worldPosition.z < 0 && (worldPosition.z % CHUNK_SIDE_LENGTH != 0)) {
         chunkZ_i64--;
     }
 
@@ -114,18 +114,18 @@ std::optional<glm::ivec3> World::worldToChunkCoordinates(glm::i64vec3 worldPosit
 
 std::optional<glm::ivec3> World::worldToLocalCoordinates(glm::i64vec3 worldPosition, glm::ivec3 chunkCoord) {
     glm::i64vec3 localPos_i64;
-    localPos_i64.x = worldPosition.x - static_cast<int64_t>(chunkCoord.x) * CHUNK_WIDTH;
-    localPos_i64.y = worldPosition.y - static_cast<int64_t>(chunkCoord.y) * CHUNK_HEIGHT;
-    localPos_i64.z = worldPosition.z - static_cast<int64_t>(chunkCoord.z) * CHUNK_DEPTH;
+    localPos_i64.x = worldPosition.x - static_cast<int64_t>(chunkCoord.x) * CHUNK_SIDE_LENGTH;
+    localPos_i64.y = worldPosition.y - static_cast<int64_t>(chunkCoord.y) * CHUNK_SIDE_LENGTH;
+    localPos_i64.z = worldPosition.z - static_cast<int64_t>(chunkCoord.z) * CHUNK_SIDE_LENGTH;
 
     // Check if the calculated local coordinates are within the valid range [0, CHUNK_DIMENSION - 1].
     // Mathematically, if chunkCoord was correctly derived from worldToChunkCoordinates(worldPosition),
     // these local coordinates should always be in range.
     // This check adds robustness if the function is called with inconsistent inputs,
     // or helps catch unexpected behavior.
-    if (localPos_i64.x < 0 || localPos_i64.x >= CHUNK_WIDTH ||
-        localPos_i64.y < 0 || localPos_i64.y >= CHUNK_HEIGHT ||
-        localPos_i64.z < 0 || localPos_i64.z >= CHUNK_DEPTH) {
+    if (localPos_i64.x < 0 || localPos_i64.x >= CHUNK_SIDE_LENGTH ||
+        localPos_i64.y < 0 || localPos_i64.y >= CHUNK_SIDE_LENGTH ||
+        localPos_i64.z < 0 || localPos_i64.z >= CHUNK_SIDE_LENGTH) {
         // This indicates that the provided chunkCoord was not the canonical one for worldPosition,
         // or an unexpected calculation error occurred.
         // std::cerr << "Warning: worldToLocalCoordinates produced out-of-bounds local coordinates. "
@@ -216,21 +216,21 @@ void World::setBlockID(glm::i64vec3 worldPosition, uint16_t blockID) {
         if (localPos.x == 0) {
             glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[1]; // -X
             if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
-        } else if (localPos.x == CHUNK_WIDTH - 1) {
+        } else if (localPos.x == CHUNK_SIDE_LENGTH - 1) {
             glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[0]; // +X
             if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
         }
         if (localPos.y == 0) {
             glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[3]; // -Y
             if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
-        } else if (localPos.y == CHUNK_HEIGHT - 1) {
+        } else if (localPos.y == CHUNK_SIDE_LENGTH - 1) {
             glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[2]; // +Y
             if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
         }
         if (localPos.z == 0) {
             glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[5]; // -Z
             if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
-        } else if (localPos.z == CHUNK_DEPTH - 1) {
+        } else if (localPos.z == CHUNK_SIDE_LENGTH - 1) {
             glm::ivec3 neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[4]; // +Z
             if (m_chunks.count(neighborCoord)) m_changedChunks.insert(neighborCoord);
         }
@@ -557,14 +557,14 @@ std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
     // 2. Determine the range of chunk offsets this AABB spans, relative to entityAbsoluteChunkPos.
     //    These offsets tell us which neighboring (or same) chunks the AABB touches.
     glm::ivec3 minChunkOffset(
-        static_cast<int>(std::floor(entityAABBMinInOwnChunk.x / CHUNK_WIDTH)),
-        static_cast<int>(std::floor(entityAABBMinInOwnChunk.y / CHUNK_HEIGHT)),
-        static_cast<int>(std::floor(entityAABBMinInOwnChunk.z / CHUNK_DEPTH))
+        static_cast<int>(std::floor(entityAABBMinInOwnChunk.x / CHUNK_SIDE_LENGTH)),
+        static_cast<int>(std::floor(entityAABBMinInOwnChunk.y / CHUNK_SIDE_LENGTH)),
+        static_cast<int>(std::floor(entityAABBMinInOwnChunk.z / CHUNK_SIDE_LENGTH))
     );
     glm::ivec3 maxChunkOffset(
-        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.x / CHUNK_WIDTH)),
-        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.y / CHUNK_HEIGHT)),
-        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.z / CHUNK_DEPTH))
+        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.x / CHUNK_SIDE_LENGTH)),
+        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.y / CHUNK_SIDE_LENGTH)),
+        static_cast<int>(std::floor(entityAABBMaxInOwnChunk.z / CHUNK_SIDE_LENGTH))
     );
 
     // 3. Iterate through the absolute chunk coordinates overlapped by the entity's AABB.
@@ -581,9 +581,9 @@ std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
 
                 // Pre-calculate the world origin of the current iterated chunk
                 glm::i64vec3 iterChunkWorldOrigin(
-                    static_cast<int64_t>(iterChunkAbsCoord.x) * CHUNK_WIDTH,
-                    static_cast<int64_t>(iterChunkAbsCoord.y) * CHUNK_HEIGHT,
-                    static_cast<int64_t>(iterChunkAbsCoord.z) * CHUNK_DEPTH
+                    static_cast<int64_t>(iterChunkAbsCoord.x) * CHUNK_SIDE_LENGTH,
+                    static_cast<int64_t>(iterChunkAbsCoord.y) * CHUNK_SIDE_LENGTH,
+                    static_cast<int64_t>(iterChunkAbsCoord.z) * CHUNK_SIDE_LENGTH
                 );
 
                 // 4. Transform entity's AABB into the local coordinate system of iterChunkAbsCoord.
@@ -591,9 +591,9 @@ std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
                 //    (entityAbsoluteChunkPos - iterChunkAbsCoord) * CHUNK_DIMENSIONS
                 //    which simplifies to -currentRelativeChunkOffset * CHUNK_DIMENSIONS.
                 glm::vec3 offsetToIterChunkOriginInLocalUnits(
-                    static_cast<float>(-currentRelativeChunkOffset.x * CHUNK_WIDTH),
-                    static_cast<float>(-currentRelativeChunkOffset.y * CHUNK_HEIGHT),
-                    static_cast<float>(-currentRelativeChunkOffset.z * CHUNK_DEPTH)
+                    static_cast<float>(-currentRelativeChunkOffset.x * CHUNK_SIDE_LENGTH),
+                    static_cast<float>(-currentRelativeChunkOffset.y * CHUNK_SIDE_LENGTH),
+                    static_cast<float>(-currentRelativeChunkOffset.z * CHUNK_SIDE_LENGTH)
                 );
 
                 glm::vec3 entityAABBMinInIterChunk = entityAABBMinInOwnChunk + offsetToIterChunkOriginInLocalUnits;
@@ -613,7 +613,7 @@ std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
 
                 // 6. Clamp block indices to be within the current chunk's bounds [0, CHUNK_DIM-1].
                 glm::ivec3 clampedStartBlockLocal(std::max(0, startBlockLocal.x), std::max(0, startBlockLocal.y), std::max(0, startBlockLocal.z));
-                glm::ivec3 clampedEndBlockLocal(std::min(CHUNK_WIDTH - 1, endBlockLocal.x), std::min(CHUNK_HEIGHT - 1, endBlockLocal.y), std::min(CHUNK_DEPTH - 1, endBlockLocal.z));
+                glm::ivec3 clampedEndBlockLocal(std::min(CHUNK_SIDE_LENGTH - 1, endBlockLocal.x), std::min(CHUNK_SIDE_LENGTH - 1, endBlockLocal.y), std::min(CHUNK_SIDE_LENGTH - 1, endBlockLocal.z));
 
                 // 7. Iterate over the blocks in iterChunkAbsCoord.
                 for (int ly = clampedStartBlockLocal.y; ly <= clampedEndBlockLocal.y; ++ly) {
@@ -655,18 +655,18 @@ std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {
     }
 
     // 2. Select a random XZ local block coordinate within that chunk
-    std::uniform_int_distribution<> local_block_dist(0, CHUNK_WIDTH - 1); // Assuming CHUNK_WIDTH == CHUNK_DEPTH
+    std::uniform_int_distribution<> local_block_dist(0, CHUNK_SIDE_LENGTH - 1); // Assuming CHUNK_WIDTH == CHUNK_DEPTH
     int localBlockX = local_block_dist(gen);
     int localBlockZ = local_block_dist(gen);
 
     // 3. Calculate absolute world XZ coordinates
-    int64_t worldSpawnX = static_cast<int64_t>(spawnChunkX) * CHUNK_WIDTH + localBlockX;
-    int64_t worldSpawnZ = static_cast<int64_t>(spawnChunkZ) * CHUNK_DEPTH + localBlockZ;
+    int64_t worldSpawnX = static_cast<int64_t>(spawnChunkX) * CHUNK_SIDE_LENGTH + localBlockX;
+    int64_t worldSpawnZ = static_cast<int64_t>(spawnChunkZ) * CHUNK_SIDE_LENGTH + localBlockZ;
 
     // 4. Scan downwards from a maximum height to find the highest non-air block
     //    Adjust MAX_WORLD_Y_SEARCH_SPAWN if your world can be taller.
     //    This assumes a typical Minecraft-like height range.
-    const int64_t MAX_WORLD_Y_SEARCH_SPAWN = CHUNK_HEIGHT * 8; // e.g., Y=128 if CHUNK_HEIGHT=16
+    const int64_t MAX_WORLD_Y_SEARCH_SPAWN = CHUNK_SIDE_LENGTH * 8; // e.g., Y=128 if CHUNK_HEIGHT=16
     const int64_t MIN_WORLD_Y_SEARCH_SPAWN = 0;               // Don't spawn below Y=0
 
     for (int64_t currentY = MAX_WORLD_Y_SEARCH_SPAWN; currentY >= MIN_WORLD_Y_SEARCH_SPAWN; --currentY) {
