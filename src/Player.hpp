@@ -88,6 +88,8 @@ private:
     static constexpr float COLLISION_RESOLUTION_BIAS = 0.001f; // Small bias to push player slightly further out of collision
     static constexpr float HORIZONTAL_SMOOTHING_FACTOR = 8.0f; // How quickly player reaches target horizontal speed (higher = less smoothing for acceleration)
     static constexpr float HORIZONTAL_DRAG_FACTOR = 5.0f;      // How quickly player stops when no input (higher = faster stop)
+    static constexpr float FIXED_PHYSICS_DT = 1.0f / 120.0f; // Run physics at 120 Hz
+    static constexpr int MAX_PHYSICS_SUBSTEPS = 10;          // Max substeps per frame to prevent spiral of death
 };
 
 #endif // PLAYER_HPP

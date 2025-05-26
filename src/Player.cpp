@@ -52,10 +52,25 @@ void Player::update(float deltaTime) {
         return; // Do nothing if the player hasn't been spawned yet
     }
 
-    handleMovementInput(deltaTime);
-    applyPhysics(deltaTime);
-    resolveCollisionsAndMove(deltaTime); // Handles actual movement, collision, and chunk boundary crossing
-    updateCameraPosition();
+    // Handle input once per frame based on the full deltaTime
+    handleMovementInput(deltaTime); // Sets m_wishHorizontalVelocity and handles jump impulse
+
+    // Physics sub-stepping
+    // Accumulator for time to be simulated this frame
+    float physicsTimeAccumulator = deltaTime;
+    int substepsPerformed = 0;
+
+    while (physicsTimeAccumulator >= FIXED_PHYSICS_DT && substepsPerformed < MAX_PHYSICS_SUBSTEPS) {
+        // applyPhysics and resolveCollisionsAndMove now use the fixed delta time
+        applyPhysics(FIXED_PHYSICS_DT);
+        resolveCollisionsAndMove(FIXED_PHYSICS_DT);
+
+        physicsTimeAccumulator -= FIXED_PHYSICS_DT;
+        substepsPerformed++;
+    }
+
+    updateCameraPosition(); // Update camera after all physics steps are done
+    
     // Update cooldowns
     if (m_breakCooldown > 0.0f) {
         m_breakCooldown -= deltaTime;
