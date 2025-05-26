@@ -7,6 +7,7 @@
 #include <glm/vec3.hpp>
 #include <map>    // For std::map
 #include <mutex>  // For std::mutex
+#include <queue>  // For std::queue
 #include <fstream> // For std::fstream
 #include <memory> // For std::unique_ptr
 
@@ -73,6 +74,7 @@ struct RegionCoordComparator {
 class RegionManager {
 public:
     RegionManager(const std::string& base_save_path);
+    ~RegionManager(); // Destructor to close any open files and process queue
 
     // Attempts to load chunk data from a region file.
     // - Modifies the passed 'chunk' object with loaded data.
@@ -89,7 +91,9 @@ public:
     // Decrements the active chunk counter for the chunk's region if the chunk was originally loaded from file.
     void notifyChunkUnloaded(const Chunk& unloadedChunk);
 
-    ~RegionManager(); // Destructor to close any open files
+    // Processes a limited number of compaction tasks from the queue.
+    // Returns true if any compaction was performed, false otherwise.
+    bool processCompactionQueue(int max_to_process = 1);
 
 private:
     std::string m_base_save_path;
@@ -100,10 +104,18 @@ private:
     std::fstream* getRegionFileStream(const glm::ivec3& region_coord);
 
     std::map<glm::ivec3, int, RegionCoordComparator> m_activeChunkCounters;
-    mutable std::mutex m_countersMutex; // Protects m_activeChunkCounters
+    mutable std::mutex m_countersMutex; // Protects m_activeChunkCounters and m_regionsToCompactQueue
+
+    std::queue<glm::ivec3> m_regionsToCompactQueue; // Regions whose active count reached zero
 
     std::map<glm::ivec3, std::unique_ptr<std::fstream>, RegionCoordComparator> m_openRegionFiles;
     mutable std::mutex m_openFilesMutex; // Protects m_openRegionFiles
+
+    // Workspace buffers to reduce frequent allocations in load/save operations
+    // These are mutable to be usable in const-like contexts if needed, but primarily for internal use.
+    mutable std::vector<char> m_compression_workspace;
+    mutable std::vector<char> m_decompression_workspace;
+    mutable std::mutex m_workspace_mutex; // Protects access to workspace buffers
 };
 
 } // namespace WorldSave

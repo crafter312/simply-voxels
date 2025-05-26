@@ -3,6 +3,7 @@
 #include <glm/gtc/noise.hpp> // For glm::perlin (already in hpp but good for explicitness)
 #include <iostream>  // For debugging (optional)
 #include <mutex>     // For std::unique_lock
+
 #include "../block/Blocks.hpp" // For centralized block ID definitions
 
 Chunk::Chunk(glm::ivec3 chunkCoord)
@@ -147,17 +148,6 @@ bool Chunk::isAllAir() const {
     return m_isAllAir; 
 }
 
-std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> Chunk::getBlockDataSnapshot() const {
-    std::shared_lock<std::shared_mutex> lock(m_data_mutex);
-    if (m_isAllAir || !m_blocks) {
-        // std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] getBlockDataSnapshot() returning nullptr (all_air or no_blocks)." << std::endl;
-        return nullptr; // Or return an empty (all-air) snapshot if preferred by mesher
-    }
-    // Create a copy of the block data
-    auto snapshot = std::make_unique<std::array<uint16_t, CHUNK_VOLUME>>(*m_blocks);
-    return snapshot;
-}
-
 void Chunk::generate() {
     //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] STARTING generation." << std::endl;
     // Original Perlin Noise Terrain Generation:
@@ -252,4 +242,35 @@ void Chunk::setAllAir() {
     m_blocks.reset(); // Deallocate block storage
     m_isAllAir = true;
     m_isDirty = false; // Loaded from file, not dirty initially
+}
+
+void Chunk::performLockedWrite(std::function<void(uint16_t* block_data_buffer, size_t buffer_capacity_elements)> writer_action) {
+    std::unique_lock<std::shared_mutex> lock(m_data_mutex);
+
+    // Ensure block storage is allocated.
+    // allocateBlockStorage() will create m_blocks if it's nullptr
+    // and set m_isAllAir to false.
+    if (!m_blocks) {
+        allocateBlockStorage(); // This sets m_isAllAir = false internally
+    } else if (m_isAllAir) {
+        // If m_blocks exists but chunk was marked all_air (e.g., after setAllAir()),
+        // then preparing to load data means it's no longer all_air.
+        m_isAllAir = false;
+    }
+    
+    // Call the provided writer function with the buffer and its capacity.
+    // m_blocks is guaranteed to be non-null here.
+    writer_action(m_blocks->data(), CHUNK_VOLUME);
+}
+
+void Chunk::performLockedRead(std::function<void(const uint16_t* block_data_buffer, size_t buffer_capacity_elements)> reader_action) const {
+    std::shared_lock<std::shared_mutex> lock(m_data_mutex);
+
+    if (m_isAllAir || !m_blocks) {
+        // If the chunk is all air or has no block storage, pass nullptr to the reader.
+        reader_action(nullptr, 0);
+    } else {
+        // Pass a const pointer to the block data and its capacity.
+        reader_action(m_blocks->data(), CHUNK_VOLUME);
+    }
 }

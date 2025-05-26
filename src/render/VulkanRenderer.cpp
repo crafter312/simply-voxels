@@ -911,15 +911,13 @@ void VulkanRenderer::processChunkChanges() {
     // Commented out the general "Changed chunks reported by World" as it's now conditional
 
     for (const glm::ivec3& chunkCoord : chunksToActuallyProcess) {
-        Chunk* chunk = m_world.getChunk(chunkCoord); // Check if chunk still exists
+        std::shared_ptr<Chunk> chunk_sptr = m_world.getChunk(chunkCoord); // Now returns shared_ptr
 
-        if (chunk) { // Chunk exists: modified or newly loaded, needs meshing
+        if (chunk_sptr) { // Chunk exists: modified or newly loaded, needs meshing
             if (m_pendingMeshFutures.size() < MAX_CONCURRENT_MESHING_TASKS) {
                 // Only launch a new task if one isn't already submitted for this chunk
                 if (m_submittedMeshTasks.find(chunkCoord) == m_submittedMeshTasks.end()) {
-                    auto snapshot = chunk->getBlockDataSnapshot();
-                    bool isAllAir = chunk->isAllAir(); // Get current all-air status
-                    glm::ivec3 coordForTask = chunk->getChunkCoord(); // Get coord from chunk
+                    glm::ivec3 coordForTask = chunk_sptr->getChunkCoord(); // Get coord from chunk
 
                     // Launch async task. Pass world and resourceManager by const reference.
                     // std::cref ensures they are passed as references to the async task.
@@ -931,23 +929,25 @@ void VulkanRenderer::processChunkChanges() {
                     auto mesh_future =
                         std::async(std::launch::async,
                             // Lambda function that returns ModelData
-                            [ capturedCoord = coordForTask,          // Capture chunkCoord by value for the task
-                              capturedSnapshot = std::move(snapshot), // Move chunk's own snapshot
-                              capturedIsAllAir = isAllAir,           // Capture isAllAir by value
+                            [ capturedCoord = coordForTask,          // Capture chunkCoord by value
+                              capturedChunkSptr = chunk_sptr,        // Capture the shared_ptr to keep chunk alive
                               &world_ref = m_world,                  // Capture world by reference
                               &res_man_ref = *resourceManager,       // Capture resourceManager by reference
                               &block_reg_ref = m_blockRegistryRef    // Capture blockRegistry by reference
                             ]() mutable -> ModelData { // Changed return type to ModelData
-                                ModelData meshDataResult = ChunkMesher::generateMesh(
-                                    capturedCoord,
-                                    std::move(capturedSnapshot), // Pass the moved snapshot
-                                    capturedIsAllAir,
-                                    world_ref,
-                                    res_man_ref,
-                                    block_reg_ref // Pass blockRegistry
-                                );
-                                // Return the pair
-                                return meshDataResult; // No longer returning pair
+                                // The capturedChunkSptr ensures the chunk remains alive.
+                                // We still use capturedCoord for consistency in generateMesh call.
+                                if (capturedChunkSptr) {
+                                    // Call the new ChunkMesher::generateMesh signature
+                                    return ChunkMesher::generateMesh(
+                                        capturedCoord,        // The coordinate of the chunk
+                                        *capturedChunkSptr,   // Dereference the shared_ptr to pass const Chunk&
+                                        world_ref,            // Const reference to the world
+                                        res_man_ref,          // Const reference to the resource manager
+                                        block_reg_ref         // Const reference to the block registry
+                                    );
+                                }
+                                return ModelData{}; // Return empty mesh if chunk is no longer available
                             }); // end of std::async
                         m_pendingMeshFutures.emplace_back(coordForTask, std::move(mesh_future));
                         m_world.acknowledgeChunkChangeProcessed(coordForTask); // Mark as processed by launching a task

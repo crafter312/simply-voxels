@@ -28,8 +28,7 @@ namespace ChunkMesher {
  * and adds the model data for exposed blocks.
  * 
  * @param chunkCoord The coordinates of the chunk being meshed.
- * @param blockDataSnapshot A snapshot of the chunk's block data.
- * @param isChunkAllAir True if the chunk is known to be all air.
+ * @param currentChunk The actual Chunk object to be meshed.
  * @param world The World object, used to query blocks in neighboring chunks for face culling.
  * @param resourceManager The ResourceManager, used to get block properties and texture information.
  * @param blockRegistry The BlockRegistry, used to query block face properties.
@@ -44,9 +43,8 @@ namespace ChunkMesher {
         {0, 0, 1}, {0, 0, -1}   // Front, Back
     }};
 ModelData generateMesh(
-    glm::ivec3 chunkCoord,
-    std::unique_ptr<std::array<uint16_t, CHUNK_VOLUME>> blockDataSnapshot,
-    bool isChunkAllAir,
+    glm::ivec3 chunkCoord, // Still useful for neighbor lookups and context
+    const Chunk& currentChunk,
     const World& world,
     const ResourceManager& resourceManager,
     const BlockRegistry& blockRegistry); // Added blockRegistry

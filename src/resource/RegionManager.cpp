@@ -17,6 +17,12 @@ namespace WorldSave {
 
 RegionManager::RegionManager(const std::string& base_save_path)
     : m_base_save_path(base_save_path) {
+    // Pre-size workspace buffers to maximum possible compressed chunk size
+    int uncompressed_size = static_cast<int>(CHUNK_VOLUME * sizeof(uint16_t));
+    int max_compressed_size = LZ4_compressBound(uncompressed_size);
+    m_compression_workspace.resize(max_compressed_size);
+    m_decompression_workspace.resize(uncompressed_size); // Decompression target is uncompressed size
+
     // Ensure the base save path itself exists (this is now the direct container for region files)
     std::filesystem::path save_dir_path = std::filesystem::path(m_base_save_path);
     if (!std::filesystem::exists(save_dir_path)) {
@@ -29,23 +35,11 @@ RegionManager::RegionManager(const std::string& base_save_path)
 
 RegionManager::~RegionManager() {
     std::cout << "[RegionManager] Destructor started." << std::endl;
-    // Create a list of region coordinates from m_openRegionFiles keys first,
-    // because compactRegionFile might modify m_openRegionFiles by removing entries.
-    std::vector<glm::ivec3> regions_to_process;
-    {
-        std::lock_guard<std::mutex> lock(m_openFilesMutex); // Lock to safely access m_openRegionFiles
-        for (const auto& pair : m_openRegionFiles) {
-            if (pair.second && pair.second->is_open()) { // Only consider regions with open files
-                regions_to_process.push_back(pair.first);
-            }
-        }
-    }
-    std::cout << "[RegionManager] Destructor: " << regions_to_process.size() << " regions with open files to potentially compact." << std::endl;
 
-    for (const auto& region_coord : regions_to_process) {
-        // compactRegionFile will acquire its own lock for m_openFilesMutex
-        compactRegionFile(region_coord);
-    }
+    // Process any remaining compaction tasks in the queue
+    std::cout << "[RegionManager] Destructor: Processing remaining compaction queue..." << std::endl;
+    while (processCompactionQueue(100)); // Process up to 100 at a time until queue is empty
+    std::cout << "[RegionManager] Destructor: Compaction queue processed." << std::endl;
 
     // Now close any remaining files
     std::lock_guard<std::mutex> lock(m_openFilesMutex); // Re-acquire lock
@@ -59,8 +53,6 @@ RegionManager::~RegionManager() {
     std::cout << "[RegionManager] Destructor finished." << std::endl;
 }
 
-
-
 std::string RegionManager::getRegionFilePath(const glm::ivec3& region_coord) const {
     std::filesystem::path file_path = std::filesystem::path(m_base_save_path) /
                                       ("r." + std::to_string(region_coord.x) + // Region files are directly in m_base_save_path
@@ -71,7 +63,7 @@ std::string RegionManager::getRegionFilePath(const glm::ivec3& region_coord) con
 
 size_t RegionManager::getLocalChunkIndex(const glm::ivec3& local_chunk_coord_in_region) const {
     // Assuming local_chunk_coord_in_region components are already modulo REGION_DIM_IN_CHUNKS
-    return static_cast<size_t>(local_chunk_coord_in_region.x +
+    return static_cast<size_t>(local_chunk_coord_in_region.x + // X varies fastest
                                local_chunk_coord_in_region.y * REGION_WIDTH_IN_CHUNKS +
                                local_chunk_coord_in_region.z * REGION_WIDTH_IN_CHUNKS * REGION_HEIGHT_IN_CHUNKS);
 }
@@ -80,7 +72,7 @@ void RegionManager::compactRegionFile(const glm::ivec3& region_coord) {
     std::string original_file_path_str = getRegionFilePath(region_coord);
     std::fstream* original_stream_ptr = nullptr;
 
-    // Check if the file is open in our cache
+    // Check if the file is open in our cache and remove it if it is
     {
         std::lock_guard<std::mutex> lock(m_openFilesMutex);
         auto it = m_openRegionFiles.find(region_coord);
@@ -92,8 +84,8 @@ void RegionManager::compactRegionFile(const glm::ivec3& region_coord) {
         original_stream_ptr->clear(); // Clear error flags
     }
     // Note: m_openFilesMutex is unlocked here. We have the raw pointer.
-    // This is slightly risky if another thread tries to close/remove this exact stream.
-    // However, compaction is typically called when no other active operations for this region are expected.
+    // The stream is *not* removed from the cache yet. It will be removed *after* successful compaction
+    // and renaming, to avoid issues if another thread tries to open it during compaction.
 
     // 1. Read header and all index entries from the original file
     original_stream_ptr->seekg(0);
@@ -104,6 +96,7 @@ void RegionManager::compactRegionFile(const glm::ivec3& region_coord) {
         return;
     }
 
+    // Read the entire index table into memory
     std::vector<ChunkIndexEntry> original_index_table(REGION_VOLUME_IN_CHUNKS);
     original_stream_ptr->read(reinterpret_cast<char*>(original_index_table.data()), original_index_table.size() * sizeof(ChunkIndexEntry));
     if (original_stream_ptr->gcount() != static_cast<std::streamsize>(original_index_table.size() * sizeof(ChunkIndexEntry))) {
@@ -211,13 +204,14 @@ void RegionManager::compactRegionFile(const glm::ivec3& region_coord) {
     temp_stream.close();
 
     // 4. Replace original file with temp file
-    // First, close and remove the original stream from our cache
+    // Close the original stream and remove it from our cache *before* renaming
     {
         std::lock_guard<std::mutex> lock(m_openFilesMutex);
         auto it = m_openRegionFiles.find(region_coord);
         if (it != m_openRegionFiles.end()) {
             if (it->second && it->second->is_open()) it->second->close();
             m_openRegionFiles.erase(it);
+            // std::cout << "[RegionManager] Closed and removed stream for " << original_file_path_str << " from cache before rename." << std::endl;
         }
     }
 
@@ -230,6 +224,25 @@ void RegionManager::compactRegionFile(const glm::ivec3& region_coord) {
         // Attempt to remove temp file if rename failed
         if (std::filesystem::exists(temp_file_path_str)) std::filesystem::remove(temp_file_path_str);
     }
+}
+
+bool RegionManager::processCompactionQueue(int max_to_process) {
+    glm::ivec3 region_coord_to_compact;
+    bool found_task = false;
+
+    { // Scope for m_countersMutex
+        std::lock_guard<std::mutex> lock(m_countersMutex);
+        if (!m_regionsToCompactQueue.empty() && max_to_process > 0) {
+            region_coord_to_compact = m_regionsToCompactQueue.front();
+            m_regionsToCompactQueue.pop();
+            found_task = true;
+        }
+    } // m_countersMutex is released
+
+    if (found_task) {
+        compactRegionFile(region_coord_to_compact);
+    }
+    return found_task; // Return true if a task was processed
 }
 
 std::fstream* RegionManager::getRegionFileStream(const glm::ivec3& region_coord) {
@@ -245,6 +258,15 @@ std::fstream* RegionManager::getRegionFileStream(const glm::ivec3& region_coord)
             // Stream was in map but closed or in an error state, remove to reopen
             m_openRegionFiles.erase(it);
         }
+    }
+
+    // If we are about to open a file for a region that was queued for compaction,
+    // remove it from the compaction queue as it's now active again.
+    {
+        std::lock_guard<std::mutex> counterLock(m_countersMutex);
+        // Note: Checking/removing from queue efficiently requires iterating or using a different structure (like std::set).
+        // For simplicity with std::queue, we'd need to rebuild the queue, which is inefficient.
+        // A better approach for the queue might be a std::set or std::map if frequent removal by key is needed.
     }
 
     // Stream not in cache or was invalid, try to open/create
@@ -411,65 +433,77 @@ bool RegionManager::loadChunkFromFile(Chunk& chunk_ref) {
     }
 
     // 5. Read compressed data
-    std::vector<char> compressed_data(entry.compressed_length);
-    region_file.seekg(entry.offset);
+    {
+        std::lock_guard<std::mutex> lock(m_workspace_mutex);
+        m_decompression_workspace.resize(entry.compressed_length); // Resize shared buffer
+    }
+    region_file.seekg(entry.offset); // entry.offset is from the start of the file
     if (region_file.fail()) {
         std::cerr << "[RegionManager] Error seeking to chunk data in: " << file_path_str << std::endl;
         chunk_ref.setWasLoadedFromFile(false);
         return false;
     }
-    region_file.read(compressed_data.data(), entry.compressed_length);
+    region_file.read(m_decompression_workspace.data(), entry.compressed_length); // Read into the shared workspace buffer
     if (region_file.gcount() != static_cast<std::streamsize>(entry.compressed_length)) {
         std::cerr << "[RegionManager] Error reading compressed chunk data from: " << file_path_str << std::endl;
         chunk_ref.setWasLoadedFromFile(false);
         return false;
     }
 
-    // 6. Decompress data
-    std::vector<char> uncompressed_data_char_vec(entry.uncompressed_length);
+    // 6. Decompress data directly into chunk memory using performLockedWrite
+    bool decompression_successful = false;
 
-    int decompressed_size = LZ4_decompress_safe(
-        compressed_data.data(),
-        uncompressed_data_char_vec.data(),
-        static_cast<int>(entry.compressed_length),
-        static_cast<int>(entry.uncompressed_length)
+    chunk_ref.performLockedWrite(
+        [&](uint16_t* chunk_block_ptr, size_t buffer_capacity_elements) {
+            // This lambda executes while Chunk's m_data_mutex is locked.
+            if (buffer_capacity_elements * sizeof(uint16_t) < entry.uncompressed_length) {
+                std::cerr << "[RegionManager] Error: Chunk buffer capacity ("
+                          << buffer_capacity_elements * sizeof(uint16_t)
+                          << " bytes) too small for uncompressed data ("
+                          << entry.uncompressed_length << " bytes) for chunk " << glm::to_string(chunk_coord) << std::endl;
+                return; // decompression_successful remains false
+            }
+
+            char* target_char_ptr = reinterpret_cast<char*>(chunk_block_ptr);
+            int decompressed_size_actual = LZ4_decompress_safe(
+                m_decompression_workspace.data(), // Use data from the shared workspace buffer
+                target_char_ptr,
+                static_cast<int>(entry.compressed_length),
+                static_cast<int>(entry.uncompressed_length) // Max size to write
+            );
+
+            if (decompressed_size_actual < 0) {
+                std::cerr << "[RegionManager] LZ4 decompression failed for chunk " << glm::to_string(chunk_coord)
+                          << " in file " << file_path_str << ". Error code: " << decompressed_size_actual << std::endl;
+                return; // decompression_successful remains false
+            }
+            if (static_cast<uint32_t>(decompressed_size_actual) != entry.uncompressed_length) {
+                std::cerr << "[RegionManager] LZ4 decompression size mismatch for chunk " << glm::to_string(chunk_coord)
+                          << ". Expected: " << entry.uncompressed_length << ", Got: " << decompressed_size_actual << std::endl;
+                return; // decompression_successful remains false
+            }
+            
+            decompression_successful = true; // Mark as successful
+        }
     );
 
-    if (decompressed_size < 0) {
-        std::cerr << "[RegionManager] LZ4 decompression failed for chunk " << chunk_coord.x << "," << chunk_coord.y << "," << chunk_coord.z
-                  << " in file " << file_path_str << ". Error code: " << decompressed_size << std::endl;
-        chunk_ref.setWasLoadedFromFile(false);
-        return false;
-    }
-    if (static_cast<uint32_t>(decompressed_size) != entry.uncompressed_length) {
-        std::cerr << "[RegionManager] LZ4 decompression size mismatch for chunk " << chunk_coord.x << "," << chunk_coord.y << "," << chunk_coord.z
-                  << ". Expected: " << entry.uncompressed_length << ", Got: " << decompressed_size << std::endl;
+    if (!decompression_successful) {
+        // Decompression failed or prerequisites not met within the lambda.
         chunk_ref.setWasLoadedFromFile(false);
         return false;
     }
 
-    // 7. Populate Chunk object
-    // We need to cast the char vector to an array of uint16_t.
-    // This assumes the data is correctly aligned and structured.
-    std::array<uint16_t, CHUNK_VOLUME> block_data_array;
-    // Ensure the size matches before memcpy to avoid buffer overflows
-    if (uncompressed_data_char_vec.size() == sizeof(block_data_array)) {
-        std::memcpy(block_data_array.data(), uncompressed_data_char_vec.data(), sizeof(block_data_array));
-        chunk_ref.setAllBlocks(block_data_array); // This also sets dirty to false
-        chunk_ref.markGenerated(); // Mark as "loaded"
-        chunk_ref.setWasLoadedFromFile(true);
-        {
-            std::lock_guard<std::mutex> lock(m_countersMutex);
-            m_activeChunkCounters[region_coord]++;
-            // std::cout << "[RegionManager] Incremented active count for region " << region_coord.x << "," << region_coord.y << "," << region_coord.z << " to " << m_activeChunkCounters[region_coord] << " (data load)" << std::endl;
-        }
-        // std::cout << "Successfully loaded and decompressed chunk " << chunk_coord.x << "," << chunk_coord.y << "," << chunk_coord.z << " from file." << std::endl;
-        return true;
-    } else {
-        std::cerr << "[RegionManager] Decompressed data size does not match expected block array size for chunk " << chunk_coord.x << "," << chunk_coord.y << "," << chunk_coord.z << std::endl;
-        chunk_ref.setWasLoadedFromFile(false);
-        return false;
+    // Decompression was successful, finalize chunk state
+    chunk_ref.markGenerated(); // Mark as "loaded"
+    chunk_ref.setWasLoadedFromFile(true);
+    chunk_ref.setDirty(false); // Data loaded from file is not initially dirty
+    {
+        std::lock_guard<std::mutex> lock(m_countersMutex);
+        m_activeChunkCounters[region_coord]++;
+        // std::cout << "[RegionManager] Incremented active count for region " << glm::to_string(region_coord) << " to " << m_activeChunkCounters[region_coord] << " (data load)" << std::endl;
     }
+    // std::cout << "Successfully loaded and decompressed chunk " << glm::to_string(chunk_coord) << " directly into chunk memory." << std::endl;
+    return true;
 }
 
 bool RegionManager::saveChunkToFile(Chunk& chunk_ref) {
@@ -540,79 +574,106 @@ bool RegionManager::saveChunkToFile(Chunk& chunk_ref) {
         return false;
     }
 
-    ChunkIndexEntry entry_to_write = current_disk_entry; // Work on a copy
-
     if (chunk_ref.isAllAir()) {
+        ChunkIndexEntry entry_to_write; // Create a new, clean entry
         entry_to_write.setAllAir(true);
         entry_to_write.offset = 0;
         entry_to_write.compressed_length = 0;
         entry_to_write.uncompressed_length = 0;
-    } else {
-        auto block_data_snapshot_ptr = chunk_ref.getBlockDataSnapshot();
-        if (!block_data_snapshot_ptr) {
-            std::cerr << "[RegionManager] Error: Chunk " << chunk_coord.x << "," << chunk_coord.y << "," << chunk_coord.z
-                      << " is not all_air but returned no block data for saving." << std::endl;
-            return false; // Inconsistent chunk state
-        }
-        const auto& block_data_array = *block_data_snapshot_ptr;
 
-        const char* uncompressed_data_ptr = reinterpret_cast<const char*>(block_data_array.data());
-        int uncompressed_data_size = static_cast<int>(CHUNK_VOLUME * sizeof(uint16_t));
-
-        int max_compressed_size = LZ4_compressBound(uncompressed_data_size);
-        std::vector<char> compressed_buffer(max_compressed_size);
-
-        int actual_compressed_size = LZ4_compress_default(
-            uncompressed_data_ptr,
-            compressed_buffer.data(),
-            uncompressed_data_size,
-            max_compressed_size
-        );
-
-        if (actual_compressed_size <= 0) {
-            std::cerr << "[RegionManager] LZ4 compression failed for chunk " << chunk_coord.x << "," << chunk_coord.y << "," << chunk_coord.z << std::endl;
-            return false;
-        }
-        compressed_buffer.resize(actual_compressed_size); // Trim to actual size
-
-        uint32_t target_write_offset = 0;
-
-        // Determine where to write the data
-        if (current_disk_entry.isAllAir() || (current_disk_entry.offset == 0 && !current_disk_entry.isAllAir())) {
-            // New slot or overwriting an 'all_air' marker. Append.
-            region_file.seekg(0, std::ios::end);
-            target_write_offset = static_cast<uint32_t>(region_file.tellp()); // Use tellp for output position
-        } else if (static_cast<uint32_t>(actual_compressed_size) <= current_disk_entry.compressed_length) {
-            // Fits in old spot (or smaller)
-            target_write_offset = current_disk_entry.offset;
-        } else {
-            // Grew, append. Old spot becomes dead.
-            region_file.seekg(0, std::ios::end);
-            target_write_offset = static_cast<uint32_t>(region_file.tellp()); // Use tellp for output position
-        }
-
-        // Write the compressed data
-        region_file.seekp(target_write_offset);
-        region_file.write(compressed_buffer.data(), actual_compressed_size);
+        // Write the updated index entry back to disk
+        region_file.seekp(index_entry_disk_offset);
+        region_file.write(reinterpret_cast<const char*>(&entry_to_write), sizeof(ChunkIndexEntry));
         if (region_file.fail()) {
-            std::cerr << "[RegionManager] Error writing chunk data to file: " << file_path_str << std::endl;
+            std::cerr << "[RegionManager] Error writing updated index entry (all_air) to file: " << file_path_str << std::endl;
             return false;
         }
+    } else {
+        // Use a locked read method to avoid copying the chunk data
+        bool save_successful = false;
+        chunk_ref.performLockedRead(
+            [&](const uint16_t* chunk_block_ptr, size_t buffer_capacity_elements) {
+            // This lambda executes while Chunk's m_data_mutex is locked.
+            
+            if (!chunk_block_ptr) { // Should not happen if !isAllAir(), but good to check.
+                 std::cerr << "[RegionManager] Error: Chunk " << glm::to_string(chunk_coord) << " is not all_air but performLockedRead provided null block data." << std::endl;
+                 return; // save_successful remains false
+            }
 
-        // Update the entry to write
-        entry_to_write.setAllAir(false);
-        entry_to_write.offset = target_write_offset;
-        entry_to_write.compressed_length = static_cast<uint32_t>(actual_compressed_size);
-        entry_to_write.uncompressed_length = static_cast<uint32_t>(uncompressed_data_size);
-        // entry_to_write.flags |= 0x02; // Mark as compressed if using this flag
-    }
+            const char* uncompressed_data_ptr = reinterpret_cast<const char*>(chunk_block_ptr);
+            int uncompressed_data_size = static_cast<int>(CHUNK_VOLUME * sizeof(uint16_t)); // Use defined CHUNK_VOLUME for expected size
 
-    // Write the updated index entry back to disk
-    region_file.seekp(index_entry_disk_offset);
-    region_file.write(reinterpret_cast<const char*>(&entry_to_write), sizeof(ChunkIndexEntry));
-    if (region_file.fail()) {
-        std::cerr << "[RegionManager] Error writing updated index entry to file: " << file_path_str << std::endl;
-        return false;
+            if (uncompressed_data_size != CHUNK_VOLUME * sizeof(uint16_t)) {
+                 std::cerr << "[RegionManager] Error: Chunk buffer size mismatch for chunk " << glm::to_string(chunk_coord) << std::endl;
+                 return; // save_successful remains false
+            }
+
+            int max_compressed_size = LZ4_compressBound(uncompressed_data_size);
+            {
+                std::lock_guard<std::mutex> lock(m_workspace_mutex);
+                m_compression_workspace.resize(max_compressed_size); // Resize shared buffer
+            }
+
+            int actual_compressed_size = LZ4_compress_default(
+                uncompressed_data_ptr,
+                m_compression_workspace.data(), // Compress into shared workspace buffer
+                uncompressed_data_size,
+                max_compressed_size
+            );
+
+            if (actual_compressed_size <= 0) {
+                std::cerr << "[RegionManager] LZ4 compression failed for chunk " << glm::to_string(chunk_coord) << std::endl;
+                return; // save_successful remains false
+            }
+
+            uint32_t target_write_offset = 0;
+
+            // Determine where to write the data
+            if (current_disk_entry.isAllAir() || (current_disk_entry.offset == 0 && !current_disk_entry.isAllAir())) {
+                // New slot or overwriting an 'all_air' marker. Append.
+                region_file.seekg(0, std::ios::end); // Use seekg to find end position
+                target_write_offset = static_cast<uint32_t>(region_file.tellg()); // Use tellg for position
+            } else if (static_cast<uint32_t>(actual_compressed_size) <= current_disk_entry.compressed_length) {
+                // Fits in old spot (or smaller)
+                target_write_offset = current_disk_entry.offset;
+            } else {
+                // Grew, append. Old spot becomes dead.
+                region_file.seekg(0, std::ios::end); // Use seekg to find end position
+                target_write_offset = static_cast<uint32_t>(region_file.tellg()); // Use tellg for position
+            }
+
+            // Write the compressed data
+            region_file.seekp(target_write_offset);
+            region_file.write(m_compression_workspace.data(), actual_compressed_size); // Write from shared workspace buffer
+            if (region_file.fail()) {
+                std::cerr << "[RegionManager] Error writing chunk data to file: " << file_path_str << std::endl;
+                return; // save_successful remains false
+            }
+
+            // Update the entry to write
+            ChunkIndexEntry entry_to_write; // Create a new entry for writing
+            entry_to_write.setAllAir(false);
+            entry_to_write.offset = target_write_offset;
+            entry_to_write.compressed_length = static_cast<uint32_t>(actual_compressed_size);
+            entry_to_write.uncompressed_length = static_cast<uint32_t>(uncompressed_data_size);
+            // entry_to_write.flags |= 0x02; // Mark as compressed if using this flag
+
+            // Write the updated index entry back to disk
+            region_file.seekp(index_entry_disk_offset);
+            region_file.write(reinterpret_cast<const char*>(&entry_to_write), sizeof(ChunkIndexEntry));
+            if (region_file.fail()) {
+                std::cerr << "[RegionManager] Error writing updated index entry to file: " << file_path_str << std::endl;
+                return; // save_successful remains false
+            }
+
+            save_successful = true; // Mark as successful
+        }); // Chunk's m_data_mutex is released here
+
+        if (!save_successful) {
+            std::cerr << "[RegionManager] Error: Chunk " << chunk_coord.x << "," << chunk_coord.y << "," << chunk_coord.z
+                      << " failed during locked read/compression/write." << std::endl;
+            return false;
+        }
     }
 
     region_file.flush(); // Ensure data is written from stream buffers
@@ -626,7 +687,7 @@ void RegionManager::notifyChunkUnloaded(const Chunk& unloadedChunk) {
     if (!unloadedChunk.wasLoadedFromFile()) {
         // This chunk was not loaded from a file (e.g., it was newly generated and possibly saved, but its current instance in memory didn't originate from a load operation).
         // Per requirements, do not decrement the counter.
-        // std::cout << "[RegionManager] notifyChunkUnloaded: Chunk " << unloadedChunk.getChunkCoord().x << "," << unloadedChunk.getChunkCoord().y << "," << unloadedChunk.getChunkCoord().z << " was not loaded from file. No counter change." << std::endl;
+        // std::cout << "[RegionManager] notifyChunkUnloaded: Chunk " << glm::to_string(unloadedChunk.getChunkCoord()) << " was not loaded from file. No counter change." << std::endl;
         return;
     }
 
@@ -640,7 +701,7 @@ void RegionManager::notifyChunkUnloaded(const Chunk& unloadedChunk) {
     if (chunk_coord.z < 0 && (chunk_coord.z % REGION_DEPTH_IN_CHUNKS != 0)) region_coord.z--;
 
     bool region_became_empty = false;
-    { // Scope for m_countersMutex
+    { // Scope for m_countersMutex (also protects m_regionsToCompactQueue)
         std::lock_guard<std::mutex> lock(m_countersMutex);
         auto it = m_activeChunkCounters.find(region_coord);
         if (it != m_activeChunkCounters.end()) {
@@ -648,8 +709,9 @@ void RegionManager::notifyChunkUnloaded(const Chunk& unloadedChunk) {
                 it->second--;
                 // std::cout << "[RegionManager] Decremented active count for region " << glm::to_string(region_coord) << " to " << it->second << std::endl;
                 if (it->second == 0) {
-                    std::cout << "[RegionManager] Region " << glm::to_string(region_coord) << " active chunk count reached zero. Marking for compaction and closure." << std::endl;
+                    std::cout << "[RegionManager] Region " << glm::to_string(region_coord) << " active chunk count reached zero. Queueing for compaction." << std::endl;
                     m_activeChunkCounters.erase(it); // Erase the counter entry for this region *immediately*
+                    m_regionsToCompactQueue.push(region_coord); // Add to compaction queue
                     region_became_empty = true;
                 }
             } else {
@@ -659,26 +721,5 @@ void RegionManager::notifyChunkUnloaded(const Chunk& unloadedChunk) {
             std::cerr << "[RegionManager] Warning: No active chunk counter found for region " << glm::to_string(region_coord) << " during unload of a file-loaded chunk." << std::endl;
         }
     } // m_countersMutex is released
-
-    if (region_became_empty) {
-        // Now that the region is no longer in m_activeChunkCounters, proceed with compaction and file closure.
-        // compactRegionFile handles its own locking for m_openFilesMutex and removes the stream from cache if it compacts.
-        compactRegionFile(region_coord);
-
-        // Ensure the file stream is closed and removed from the cache,
-        // especially if compactRegionFile decided no actual compaction was needed (e.g., file already minimal)
-        // but the region is indeed empty of active chunks.
-        { // Scope for m_openFilesMutex
-            std::lock_guard<std::mutex> filesLock(m_openFilesMutex);
-            auto file_it = m_openRegionFiles.find(region_coord);
-            if (file_it != m_openRegionFiles.end()) {
-                if (file_it->second && file_it->second->is_open()) {
-                    file_it->second->close();
-                }
-                m_openRegionFiles.erase(file_it);
-                // std::cout << "[RegionManager] Ensured region file " << glm::to_string(region_coord) << " is closed and removed from cache after becoming empty." << std::endl;
-            }
-        }
-    }
 }
 } // namespace WorldSave

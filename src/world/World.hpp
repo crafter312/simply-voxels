@@ -71,12 +71,12 @@ public:
 
     // Retrieves a pointer to a chunk at the given chunk coordinates.
     // Returns nullptr if the chunk does not exist.
-    Chunk* getChunk(glm::ivec3 chunkCoord);
-    const Chunk* getChunk(glm::ivec3 chunkCoord) const;
+    std::shared_ptr<Chunk> getChunk(glm::ivec3 chunkCoord);
+    std::shared_ptr<const Chunk> getChunk(glm::ivec3 chunkCoord) const;
 
     // Retrieves a reference to a chunk at the given chunk coordinates.
     // If the chunk does not exist, it is created.
-    Chunk& getOrCreateChunk(glm::ivec3 chunkCoord);
+    std::shared_ptr<Chunk> getOrCreateChunk(glm::ivec3 chunkCoord);
     bool isChunkLoaded(glm::ivec3 chunkCoord) const; // New method
 
     // Helper to convert world coordinates to chunk coordinates
@@ -85,7 +85,7 @@ public:
     static std::optional<glm::ivec3> worldToLocalCoordinates(glm::i64vec3 worldPosition, glm::ivec3 chunkCoord);
 
     // Provides access to the underlying chunk map for iteration (e.g., by the renderer)
-    const std::map<glm::ivec3, Chunk, IVec3Comparator>& getChunkMap() const;
+    const std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator>& getChunkMap() const;
 
     // Call this periodically to process loading/unloading
     void update(float deltaTime);
@@ -110,7 +110,7 @@ public:
     std::optional<glm::i64vec3> getPlayerSpawnPos() const;
 
 private:
-    std::map<glm::ivec3, Chunk, IVec3Comparator> m_chunks;
+    std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator> m_chunks;
     std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    
     std::set<glm::ivec3, IVec3Comparator> m_changedChunks; // Set of chunk coordinates that have been modified
 

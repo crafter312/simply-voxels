@@ -42,14 +42,14 @@ World::~World() {
         int isDirtyCount = 0;
 
         for (auto& pair : m_chunks) { // Use auto& to get Chunk& for pair.second
-            Chunk& chunk = pair.second; // chunk is Chunk&
-            if (chunk.isDirty()) { // Check if the chunk has unpersisted data changes
+            std::shared_ptr<Chunk>& chunk_sptr = pair.second; // chunk_sptr is std::shared_ptr<Chunk>&
+            if (chunk_sptr && chunk_sptr->isDirty()) { // Check if the chunk has unpersisted data changes
                 isDirtyCount++;
-                if (m_regionManager->saveChunkToFile(chunk)) {
+                if (m_regionManager->saveChunkToFile(*chunk_sptr)) {
                     savedCount++;
                 } else {
                     // Outputting coordinates directly to avoid needing glm::to_string and potential include issues.
-                    std::cerr << "Warning: Failed to save chunk at coordinates ("
+                    std::cerr << "World Destructor: Warning: Failed to save chunk at coordinates ("
                               << pair.first.x << ", " << pair.first.y << ", " << pair.first.z
                               << ") during shutdown." << std::endl;
                 }
@@ -139,9 +139,9 @@ uint16_t World::getBlockID(glm::i64vec3 worldPosition) const {
     { // Scope for shared_lock
         std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
         auto it = m_chunks.find(chunkCoord);
-        if (it != m_chunks.end()) {
-            const Chunk& chunk = it->second;
-            if (!chunk.isGenerated()) {
+        if (it != m_chunks.end() && it->second) {
+            const std::shared_ptr<Chunk>& chunk_sptr = it->second;
+            if (!chunk_sptr->isGenerated()) {
                 return Blocks::AIR_ID; // Chunk exists but not generated, treat as air
             }
             std::optional<glm::ivec3> optLocalPos = worldToLocalCoordinates(worldPosition, chunkCoord);
@@ -156,7 +156,7 @@ uint16_t World::getBlockID(glm::i64vec3 worldPosition) const {
                 return Blocks::AIR_ID;
             }
             glm::ivec3 localPos = *optLocalPos;
-            return chunk.getBlock(localPos.x, localPos.y, localPos.z);
+            return chunk_sptr->getBlock(localPos.x, localPos.y, localPos.z);
         }
     }
     return Blocks::AIR_ID; // Chunk doesn't exist, so it's air. Using Blocks::AIR_ID for consistency.
@@ -176,8 +176,8 @@ void World::setBlockID(glm::i64vec3 worldPosition, uint16_t blockID) {
     glm::ivec3 chunkCoord = *optChunkCoord;
 
     // getOrCreateChunk handles its own unique lock for potential modification of m_chunks
-    Chunk& chunk = getOrCreateChunk(chunkCoord);
-    std::optional<glm::ivec3> optLocalPos = worldToLocalCoordinates(worldPosition, chunkCoord);
+    std::shared_ptr<Chunk> chunk_sptr = getOrCreateChunk(chunkCoord);
+    std::optional<glm::ivec3> optLocalPos = worldToLocalCoordinates(worldPosition, chunkCoord); // chunkCoord is correct here
     if (!optLocalPos) {
         // Similar to getBlockID, this indicates a critical internal logic error.
         std::cerr << "Critical Error: In setBlockID, worldToLocalCoordinates failed for worldPos ("
@@ -188,7 +188,11 @@ void World::setBlockID(glm::i64vec3 worldPosition, uint16_t blockID) {
         return;
     }
     glm::ivec3 localPos = *optLocalPos;
-    chunk.setBlock(localPos.x, localPos.y, localPos.z, blockID); // This will call markModified on the chunk
+    if (!chunk_sptr) { // Should not happen if getOrCreateChunk works
+        std::cerr << "Critical Error: In setBlockID, getOrCreateChunk returned null for " << glm::to_string(chunkCoord) << std::endl;
+        return;
+    }
+    chunk_sptr->setBlock(localPos.x, localPos.y, localPos.z, blockID); // This will call markModified on the chunk
 
     // If the modified block is on a boundary, mark the adjacent neighbor chunk(s) as dirty too.
     // This ensures the neighbor rebuilds its mesh considering the change.
@@ -220,36 +224,37 @@ void World::setBlockID(glm::i64vec3 worldPosition, uint16_t blockID) {
     m_changedChunks.insert(chunkCoord); // Mark this chunk as changed
 }
 
-Chunk* World::getChunk(glm::ivec3 chunkCoord) {
+std::shared_ptr<Chunk> World::getChunk(glm::ivec3 chunkCoord) {
     std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
     auto it = m_chunks.find(chunkCoord);
     if (it != m_chunks.end()) {
-        return &it->second;
+        return it->second; // Returns std::shared_ptr<Chunk>
     }
-    return nullptr;
+    return nullptr; // Or std::shared_ptr<Chunk>() which is a null shared_ptr
 }
 
-const Chunk* World::getChunk(glm::ivec3 chunkCoord) const {
+std::shared_ptr<const Chunk> World::getChunk(glm::ivec3 chunkCoord) const {
     std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock
     auto it = m_chunks.find(chunkCoord);
     if (it != m_chunks.end()) {
-        return &it->second;
+        return it->second; // Returns std::shared_ptr<const Chunk> (implicitly convertible from std::shared_ptr<Chunk>)
     }
-    return nullptr;
+    return nullptr; // Or std::shared_ptr<const Chunk>()
 }
 
-Chunk& World::getOrCreateChunk(glm::ivec3 chunkCoord) {
+std::shared_ptr<Chunk> World::getOrCreateChunk(glm::ivec3 chunkCoord) {
     std::unique_lock<std::shared_mutex> lock(m_chunks_mutex); // Write lock for potential emplace
     auto it = m_chunks.find(chunkCoord);
     if (it == m_chunks.end()) {
         // Chunk does not exist, create it and emplace it into the map
         // std::piecewise_construct allows constructing key and value in-place
+        auto new_chunk_sptr = std::make_shared<Chunk>(chunkCoord);
         it = m_chunks.emplace(std::piecewise_construct, 
                               std::forward_as_tuple(chunkCoord),  // Arguments for glm::ivec3 key
-                              std::forward_as_tuple(chunkCoord)).first; // Arguments for Chunk constructor
+                              std::forward_as_tuple(new_chunk_sptr)).first; // Arguments for std::shared_ptr<Chunk>
         m_changedChunks.insert(chunkCoord); // Mark newly created chunk as changed (needs a mesh)
     }
-    return it->second;
+    return it->second; // Returns std::shared_ptr<Chunk>
 }
 
 bool World::isChunkLoaded(glm::ivec3 chunkCoord) const {
@@ -257,7 +262,7 @@ bool World::isChunkLoaded(glm::ivec3 chunkCoord) const {
     return m_chunks.count(chunkCoord) > 0;
 }
 
-const std::map<glm::ivec3, Chunk, IVec3Comparator>& World::getChunkMap() const {
+const std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator>& World::getChunkMap() const {
     // Note: Returning a reference to the map itself is tricky for thread safety
     // if the caller iterates it without holding a lock.
     // For now, assume callers (like VulkanRenderer::drawFrame) are on the main thread
@@ -348,11 +353,15 @@ void World::processLoadQueue() {
         }
 
         if (!needsLoading) continue; // skip if already loaded
-        Chunk& newChunk = getOrCreateChunk(chunkCoord); // getOrCreateChunk has own unique lock
+        std::shared_ptr<Chunk> newChunk_sptr = getOrCreateChunk(chunkCoord); // getOrCreateChunk has own unique lock
+        if (!newChunk_sptr) { // Should not happen
+            std::cerr << "World::processLoadQueue - getOrCreateChunk returned null for " << glm::to_string(chunkCoord) << std::endl;
+            continue;
+        }
 
         // Attempt to load from file first
-        loadedFromFile = m_regionManager->loadChunkFromFile(newChunk);
-        if (!loadedFromFile) newChunk.generate(); // if not loaded from file, generate it procedurally
+        loadedFromFile = m_regionManager->loadChunkFromFile(*newChunk_sptr);
+        if (!loadedFromFile) newChunk_sptr->generate(); // if not loaded from file, generate it procedurally
 
         // Mark its 6 direct neighbors as dirty so they can update their meshes
         // relative to this newly generated and loaded chunk.
@@ -382,13 +391,17 @@ void World::processUnloadQueue() {
             
             auto it = m_chunks.find(chunkCoord);
             if (it != m_chunks.end()) {
-                Chunk& chunk_to_unload = it->second;
+                std::shared_ptr<Chunk> chunk_to_unload_sptr = it->second;
+                if (!chunk_to_unload_sptr) { // Should not happen if map entry exists
+                    m_chunks.erase(it); // Clean up null entry
+                    continue;
+                }
 
                 // Notify RegionManager that this chunk is being unloaded *before* saving or erasing
-                m_regionManager->notifyChunkUnloaded(chunk_to_unload);
+                m_regionManager->notifyChunkUnloaded(*chunk_to_unload_sptr);
 
                 // Save the chunk if it needs saving before unloading
-                if (chunk_to_unload.isDirty() && !m_regionManager->saveChunkToFile(chunk_to_unload)) {
+                if (chunk_to_unload_sptr->isDirty() && !m_regionManager->saveChunkToFile(*chunk_to_unload_sptr)) {
                     std::cerr << "Warning: Failed to save chunk " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " during unload." << std::endl;
                 }
 
@@ -456,9 +469,10 @@ World::ChunkGenStatus World::getChunkGeneratedStatus(glm::ivec3 chunkCoord) cons
     if (it == m_chunks.end()) {
         return ChunkGenStatus::NOT_FOUND;
     }
+    const auto& chunk_sptr = it->second;
     // Chunk exists, check its generation status
     // The isGenerated() method on Chunk is atomic and safe to call here.
-    if (!it->second.isGenerated()) {
+    if (!chunk_sptr || !chunk_sptr->isGenerated()) {
         return ChunkGenStatus::LOADED_NOT_GENERATED;
     }
     return ChunkGenStatus::LOADED_AND_GENERATED;
@@ -509,8 +523,8 @@ std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
                 glm::ivec3 currentRelativeChunkOffset(cx_offset, cy_offset, cz_offset);
                 glm::ivec3 iterChunkAbsCoord = entityAbsoluteChunkPos + currentRelativeChunkOffset;
 
-                const Chunk* chunk = getChunk(iterChunkAbsCoord); // Read-only access
-                if (!chunk || !chunk->isGenerated()) { // Skip if chunk isn't loaded or generated
+                std::shared_ptr<const Chunk> chunk_sptr = getChunk(iterChunkAbsCoord); // Read-only access
+                if (!chunk_sptr || !chunk_sptr->isGenerated()) { // Skip if chunk isn't loaded or generated
                     continue;
                 }
 
@@ -553,8 +567,8 @@ std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
                 // 7. Iterate over the blocks in iterChunkAbsCoord.
                 for (int ly = clampedStartBlockLocal.y; ly <= clampedEndBlockLocal.y; ++ly) {
                     for (int lz = clampedStartBlockLocal.z; lz <= clampedEndBlockLocal.z; ++lz) {
-                        for (int lx = clampedStartBlockLocal.x; lx <= clampedEndBlockLocal.x; ++lx) {
-                            uint16_t blockID = chunk->getBlock(lx, ly, lz); // Direct access since we have the chunk
+                        for (int lx = clampedStartBlockLocal.x; lx <= clampedEndBlockLocal.x; ++lx) {                            
+                            uint16_t blockID = chunk_sptr->getBlock(lx, ly, lz); // Direct access since we have the chunk
                             if (blockID != Blocks::AIR_ID) {
                                 potentialBlocks.push_back({iterChunkWorldOrigin + glm::i64vec3(lx, ly, lz), blockID});
                             }
