@@ -18,13 +18,27 @@
 #include "../resource/RegionManager.hpp" // Include RegionManager definition
 
 World::World(std::shared_ptr<Camera> camera)
-    : m_camera(camera) { // m_player will be initialized below
+    : m_camera(camera), m_stopCompactionThread(false) {
     m_regionManager = std::make_unique<WorldSave::RegionManager>("../run/regions/"); // Initialize RegionManager
     // Initially, enqueue chunks around the starting camera position (which is relative to the initial rebase origin 0,0,0)
     enqueueChunksNearCamera();
+
+    // Start the compaction thread
+    m_compactionThread = std::thread(&World::compactionThreadLoop, this);
+    std::cout << "[World] Compaction thread started." << std::endl;
 }
 
 World::~World() {
+    std::cout << "[World] Destructor started." << std::endl;
+    // 1. Signal and join the compaction thread BEFORE saving chunks or destroying RegionManager
+    if (m_compactionThread.joinable()) {
+        std::cout << "[World] Stopping compaction thread..." << std::endl;
+        m_stopCompactionThread.store(true);
+        m_compactionThreadCv.notify_one(); // Notify the thread to wake up from its wait
+        m_compactionThread.join();
+        std::cout << "[World] Compaction thread joined." << std::endl;
+    }
+
     // The std::unique_ptr m_regionManager will be automatically destroyed here.
     // Before it's destroyed, we should save any modified chunks.
     std::cout << "World destructor: Attempting to save modified chunks..." << std::endl;
@@ -59,7 +73,7 @@ World::~World() {
     } else {
         std::cout << "RegionManager is null, skipping chunk saving on shutdown." << std::endl;
     }
-    std::cout << "World destruction complete." << std::endl;
+    std::cout << "[World] World destruction complete." << std::endl;
     // m_regionManager (and other members) will be destroyed automatically after this.
 }
 
@@ -278,6 +292,43 @@ void World::update(float deltaTime) {
     enqueueChunksToUnload();
     processLoadQueue();
     processUnloadQueue();
+}
+
+void World::compactionThreadLoop() {
+    std::cout << "[World] Compaction thread loop entered." << std::endl;
+    std::unique_lock<std::mutex> lock(m_compactionThreadMutex); // Lock for condition variable
+
+    while (!m_stopCompactionThread.load(std::memory_order_relaxed)) {
+        // Unlock the mutex while processing, as processCompactionQueue might take time
+        // and has its own internal locking.
+        lock.unlock();
+
+        if (m_regionManager) {
+            int processed_in_cycle = 0;
+            // Try to process up to MAX_COMPACTIONS_PER_THREAD_CYCLE tasks from the queue
+            while (processed_in_cycle < MAX_COMPACTIONS_PER_THREAD_CYCLE &&
+                   !m_stopCompactionThread.load(std::memory_order_relaxed)) { // Re-check stop flag
+                // processCompactionQueue processes one item if available and max_to_process > 0
+                if (m_regionManager->processCompactionQueue(1)) {
+                    processed_in_cycle++;
+                } else {
+                    break; // Queue is empty for now, or no task was processed
+                }
+            }
+        }
+
+        // Re-lock the mutex before waiting on the condition variable
+        lock.lock();
+        if (m_stopCompactionThread.load(std::memory_order_relaxed)) { // Check stop flag again before waiting
+            break;
+        }
+        // Wait for the interval OR until notified (e.g., by the destructor)
+        m_compactionThreadCv.wait_for(lock, COMPACTION_THREAD_INTERVAL, [this] {
+            return m_stopCompactionThread.load(std::memory_order_relaxed);
+        });
+    }
+    if(lock.owns_lock()) lock.unlock(); // Ensure lock is released if loop broke while holding it
+    std::cout << "[World] Compaction thread loop exited." << std::endl;
 }
 
 void World::enqueueChunksNearCamera() {

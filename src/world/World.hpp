@@ -8,7 +8,11 @@
 #include <optional> // For std::optional
 #include <set>    // To track changed chunks efficiently
 #include <queue> // For chunk loading/unloading queue
+#include <thread> // For std::thread
+#include <atomic> // For std::atomic<bool>
+#include <chrono> // For std::chrono
 #include <shared_mutex> // For std::shared_mutex
+#include <condition_variable> // For std::condition_variable
 #include "Chunk.hpp" // Include the Chunk definition
 
 // Forward declaration for Camera
@@ -47,6 +51,10 @@ static constexpr int SPAWN_CHUNK_RADIUS = 1;  // Max radius in chunks from origi
 static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase (remains large)
 static constexpr int UNLOAD_CHUNK_RADIUS = LOAD_CHUNK_RADIUS + 2; // Increased: Radius in chunks beyond which to unload chunks (was 3)
 static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 4; // Increased: Max chunks to process from load queue per frame (was 2)
+
+// --- Constants for Compaction Thread ---
+static constexpr std::chrono::seconds COMPACTION_THREAD_INTERVAL(300); // Check every 5 minutes (300 seconds)
+static constexpr int MAX_COMPACTIONS_PER_THREAD_CYCLE = 5; // Max regions to compact in one go by the thread
 
 static constexpr float LOAD_CHUNK_RADIUS_SQUARED = static_cast<float>(LOAD_CHUNK_RADIUS * LOAD_CHUNK_RADIUS);
 static constexpr float UNLOAD_CHUNK_RADIUS_SQUARED = static_cast<float>(UNLOAD_CHUNK_RADIUS * UNLOAD_CHUNK_RADIUS);
@@ -121,6 +129,13 @@ private:
     std::queue<glm::ivec3> m_unloadQueue;
     mutable std::shared_mutex m_chunks_mutex; // Mutex to protect m_chunks
     std::unique_ptr<WorldSave::RegionManager> m_regionManager; // Instance of RegionManager, using unique_ptr
+
+    // Background compaction thread
+    std::thread m_compactionThread;
+    std::atomic<bool> m_stopCompactionThread;
+    std::mutex m_compactionThreadMutex; // Mutex for the condition variable
+    std::condition_variable m_compactionThreadCv; // Condition variable to wake the thread
+    void compactionThreadLoop();
 
     // Internal methods for managing chunk loading/unloading
     void enqueueChunksNearCamera();
