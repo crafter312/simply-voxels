@@ -5,7 +5,6 @@
 #include "../block/BlockRegistry.hpp" // Include for BlockRegistry type
 
 #include <array>
-#include <iostream> // For debugging
 #include <optional>  // For std::optional
 
 namespace ChunkMesher {
@@ -58,13 +57,6 @@ void addBlockModelToMeshData(ModelData& chunkMeshData,
     }
 }
 
-// Helper struct to cache data for neighbor chunks
-struct CachedNeighborData {
-    std::optional<std::array<uint16_t, CHUNK_VOLUME>> blockData = std::nullopt;
-    bool isAllAir = true; // Default to true, meaning if not found or not generated, effectively air for culling
-    bool isGeneratedAndExists = false; // True if the chunk exists and has finished generation
-};
-
 ModelData generateMesh(
     glm::ivec3 chunkCoord, // Chunk coordinates of currentChunk
     const Chunk& currentChunk,
@@ -100,15 +92,36 @@ ModelData generateMesh(
             neighborCache[i].isAllAir = neighborChunk_sptr->isAllAir(); // Store this first
             if (!neighborCache[i].isAllAir) { // Only get snapshot if not all air
                 neighborChunk_sptr->performLockedRead( // Use shared_ptr here
-                    [&](const uint16_t* neighbor_block_data_ptr, size_t capacity) {
-                        if (neighbor_block_data_ptr && capacity == CHUNK_VOLUME) {
-                            neighborCache[i].blockData.emplace(); // Create the array
-                            std::memcpy(neighborCache[i].blockData->data(), neighbor_block_data_ptr, CHUNK_VOLUME * sizeof(uint16_t));
-                        } else {
+                    [&, i](const uint16_t* neighbor_full_block_data_ptr, size_t capacity) {
+                        if (!neighbor_full_block_data_ptr || capacity != CHUNK_VOLUME) {
                             // If data is null or capacity mismatch, treat as all air for safety
                             neighborCache[i].isAllAir = true;
-                            neighborCache[i].blockData = std::nullopt;
+                            neighborCache[i].boundaryPlaneData = std::nullopt;
+                            return;
                         }
+
+                        neighborCache[i].boundaryPlaneData.emplace(); // Create the plane array
+                        auto& plane_data_ref = *neighborCache[i].boundaryPlaneData;
+                        
+                        // Determine which plane to copy based on neighbor index 'i'
+                        // FaceDirection enum values match NEIGHBOR_OFFSETS indices
+                        FaceDirection dir_to_neighbor = static_cast<FaceDirection>(i); // This 'i' is the index for NEIGHBOR_OFFSETS
+                        const auto& copy_config = Detail::PLANE_COPY_CONFIGS[static_cast<size_t>(dir_to_neighbor)];
+
+                        glm::ivec3 src_coord_3d; // Reusable vector for source coordinates in neighbor
+                        src_coord_3d[copy_config.src_fixed_dim_axis] = copy_config.src_fixed_dim_value;
+
+                        for (int iter1_val = 0; iter1_val < CHUNK_SIDE_LENGTH; ++iter1_val) {
+                            src_coord_3d[copy_config.plane_iter_axis1] = iter1_val;
+                            for (int iter2_val = 0; iter2_val < CHUNK_SIDE_LENGTH; ++iter2_val) {
+                                src_coord_3d[copy_config.plane_iter_axis2] = iter2_val;
+                                // The 2D plane_data_ref is always indexed by [iter1_val * CHUNK_SIDE_LENGTH + iter2_val]
+                                // regardless of which dimensions iter1 and iter2 represent.
+                                plane_data_ref[iter1_val * CHUNK_SIDE_LENGTH + iter2_val] = 
+                                    neighbor_full_block_data_ptr[Chunk::localToIndex(src_coord_3d.x, src_coord_3d.y, src_coord_3d.z)];
+                                }
+                            }
+                        // End of data-driven plane copy
                     }
                 );
             }
@@ -180,19 +193,24 @@ ModelData generateMesh(
                                         neighborOccludesThisFace = false;
                                     } else {
                                         // Neighbor chunk exists, is generated, and not all air. Get its block ID.
-                                        // Calculate local coordinates within the *neighbor* chunk
-                                        glm::ivec3 localPosInNeighborChunk(
-                                            (currentBlockLocalPos_ivec.x + neighborOffset.x + CHUNK_SIDE_LENGTH) % CHUNK_SIDE_LENGTH,
-                                            (currentBlockLocalPos_ivec.y + neighborOffset.y + CHUNK_SIDE_LENGTH) % CHUNK_SIDE_LENGTH,
-                                            (currentBlockLocalPos_ivec.z + neighborOffset.z + CHUNK_SIDE_LENGTH) % CHUNK_SIDE_LENGTH
-                                        );
-                                        
-                                        if (cachedNeighbor.blockData) { // Check if blockData has a value
-                                            neighborBlockID_val = (*cachedNeighbor.blockData)[Chunk::localToIndex(
-                                                localPosInNeighborChunk.x,
-                                                localPosInNeighborChunk.y,
-                                                localPosInNeighborChunk.z
-                                            )];
+                                        // Access the cached boundary plane.
+                                        // The coordinates x, y, z are for the current block in the current chunk.
+                                        // These are used to index into the 2D plane.
+                                        if (cachedNeighbor.boundaryPlaneData) { // Check if boundaryPlaneData has a value
+                                            size_t plane_idx = 0;
+                                            FaceDirection dir_of_this_face = static_cast<FaceDirection>(faceIndex); // This 'faceIndex' is the face of the current block
+                                            const auto& access_config = Detail::PLANE_ACCESS_CONFIGS[static_cast<size_t>(dir_of_this_face)];
+
+                                            int u_coord_val = currentBlockLocalPos_ivec[access_config.current_block_u_coord_component];
+                                            int v_coord_val = currentBlockLocalPos_ivec[access_config.current_block_v_coord_component];
+                                            plane_idx = static_cast<size_t>(u_coord_val * CHUNK_SIDE_LENGTH + v_coord_val);
+                                            
+                                            if (plane_idx < cachedNeighbor.boundaryPlaneData->size()) { // Bounds check for safety
+                                                neighborBlockID_val = (*cachedNeighbor.boundaryPlaneData)[plane_idx];
+                                            } else { // Should not happen with cubic chunks and correct indexing
+                                                neighborBlockID_val = Blocks::AIR_ID; // Fallback
+                                            }
+
                                             if (neighborBlockID_val == Blocks::AIR_ID) { 
                                                 neighborOccludesThisFace = false;
                                             } else {
