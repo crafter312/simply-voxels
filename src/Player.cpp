@@ -11,12 +11,8 @@
 #include <iostream> // For debugging
 #include <glm/gtc/constants.hpp> // For glm::epsilon
 
-// --- Static Member Definitions ---
-const glm::vec3 Player::PLAYER_DIMENSIONS = {0.6f, 1.8f, 0.6f}; // Width, Height, Depth
-const float Player::EYE_HEIGHT = 1.6f; // Eyes are 1.6m above feet (if m_position is at feet)
-
-// --- Constants ---
-const float GRAVITY_ACCELERATION = 9.81f * 2.0f; // m/s^2, tuned for gameplay feel
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/compatibility.hpp> // For glm::lerp
 
 Player::Player(
     std::shared_ptr<Camera> camera,
@@ -33,6 +29,7 @@ Player::Player(
       m_hasSpawned(false),   // Player has not been spawned initially
       m_moveSpeed(5.0f),
       m_sprintSpeedMultiplier(1.5f), // Matches Camera's SPRINT_MULTIPLIER if it was 2.5, adjust as needed
+      m_wishHorizontalVelocity(0.0f),
       m_jumpForce(7.0f)
 {
     if (!m_camera) {
@@ -96,11 +93,10 @@ void Player::handleMovementInput(float deltaTime) {
         wishDir = glm::normalize(wishDir);
     }
 
-    // Directly set horizontal velocity based on input
-    m_velocity.x = wishDir.x * currentSpeed;
-    m_velocity.z = wishDir.z * currentSpeed;
+    // Set the desired horizontal velocity. applyPhysics will handle smoothing.
+    m_wishHorizontalVelocity = wishDir * currentSpeed; // Y component will be ignored/zeroed by this
 
-    // Jumping
+    // Jumping (direct impulse to current velocity)
     // Using isKeyDown for now. Ideally, InputManager would provide an `isKeyJustPressed`
     if (m_inputManager->isKeyDown(KeyCode::Space) && m_isGrounded) {
         m_velocity.y = m_jumpForce; // Apply an upward impulse
@@ -109,18 +105,45 @@ void Player::handleMovementInput(float deltaTime) {
 }
 
 void Player::applyPhysics(float deltaTime) {
-    m_isGrounded = false; // Reset grounded state at the start of each physics update
+    // Horizontal movement and drag are applied based on the m_isGrounded state
+    // determined at the end of the PREVIOUS frame's resolveCollisionsAndMove for some effects (like stronger ground drag),
+    // but acceleration towards wish velocity always applies.
 
-    // Apply gravity
-    if (!m_isGrounded) {
+    // Horizontal Momentum - Always apply to allow air control
+    m_velocity.x = glm::lerp(m_velocity.x, m_wishHorizontalVelocity.x, HORIZONTAL_SMOOTHING_FACTOR * deltaTime);
+    m_velocity.z = glm::lerp(m_velocity.z, m_wishHorizontalVelocity.z, HORIZONTAL_SMOOTHING_FACTOR * deltaTime); // .y of vec2 is our Z
+
+    // Apply stronger horizontal drag if grounded and there's no horizontal input wish.
+    if (glm::length(glm::vec2(m_wishHorizontalVelocity.x, m_wishHorizontalVelocity.z)) < glm::epsilon<float>()) {
+        float dragMultiplier = 1.0f - glm::clamp(HORIZONTAL_DRAG_FACTOR * deltaTime, 0.0f, 1.0f);
+        m_velocity.x *= dragMultiplier;
+        m_velocity.z *= dragMultiplier;
+    }
+
+    // Determine if gravity should be applied based on the m_isGrounded state from the previous frame.
+    bool applyDownwardGravity;
+    if (m_isGrounded) { // If WAS grounded at the end of the last frame...
+        if (m_velocity.y > glm::epsilon<float>()) { // ...and just jumped (velocity is upwards)...
+            applyDownwardGravity = true; // ...gravity should act against the jump.
+        } else { // ...and is just standing or walking (velocity.y is ~0 or negative from minor adjustments)...
+            applyDownwardGravity = false; // ...no new downward acceleration from gravity.
+            if (m_velocity.y < 0.0f) { // Correct any slight sinking if was grounded.
+                m_velocity.y = 0.0f;
+            }
+        }
+    } else { // If WAS in the air at the end of the last frame...
+        applyDownwardGravity = true; // ...gravity continues to apply.
+    }
+
+    // Reset m_isGrounded for the CURRENT frame's collision detection.
+    // It will be set to true again in resolveCollisionsAndMove if a Y-axis collision occurs.
+    m_isGrounded = false;
+
+    // Apply acceleration due to gravity (or lack thereof)
+    if (applyDownwardGravity) {
         m_acceleration.y = -GRAVITY_ACCELERATION;
     } else {
         m_acceleration.y = 0.0f;
-        // If grounded and velocity.y is negative (e.g., from a small fall before collision sets isGrounded),
-        // set it to 0 to prevent sinking.
-        if (m_velocity.y < 0.0f) {
-            m_velocity.y = 0.0f;
-        }
     }
 
     // Update vertical velocity from acceleration
@@ -200,10 +223,10 @@ void Player::resolveCollisionsAndMove(float deltaTime) {
                         // Adjust local position by penetration. Since player's AABB is centered,
                         // and m_localPositionInChunk.x is the center of the player's base X,
                         // moving the center back by `penetration` resolves it.
-                        m_localPositionInChunk.x -= penetration;
+                        m_localPositionInChunk.x -= (penetration + COLLISION_RESOLUTION_BIAS);
                     } else { // Moving left, collision with block's right face
                         float penetration = worldBlockAABB.maxExtents.x - playerWorldAABB.minExtents.x;
-                        m_localPositionInChunk.x += penetration;
+                        m_localPositionInChunk.x += (penetration + COLLISION_RESOLUTION_BIAS);
                     }
                     m_velocity.x = 0.0f;
                     normalizeAndCrossChunkBoundaryX(); // Re-normalize after collision adjustment
@@ -250,10 +273,10 @@ next_axis_y:;
                 if (checkAABBCollision(playerWorldAABB, worldBlockAABB)) {
                     if (m_velocity.y > 0) { // Moving up
                         float penetration = playerWorldAABB.maxExtents.y - worldBlockAABB.minExtents.y;
-                        m_localPositionInChunk.y -= penetration;
+                        m_localPositionInChunk.y -= (penetration + COLLISION_RESOLUTION_BIAS);
                     } else { // Moving down
                         float penetration = worldBlockAABB.maxExtents.y - playerWorldAABB.minExtents.y;
-                        m_localPositionInChunk.y += penetration;
+                        m_localPositionInChunk.y += (penetration + COLLISION_RESOLUTION_BIAS);
                         m_isGrounded = true; // Collided with something below
                     }
                     m_velocity.y = 0.0f;
@@ -308,10 +331,10 @@ next_axis_z:;
                 if (checkAABBCollision(playerWorldAABB, worldBlockAABB)) {
                     if (m_velocity.z > 0) { // Moving positive Z
                         float penetration = playerWorldAABB.maxExtents.z - worldBlockAABB.minExtents.z;
-                        m_localPositionInChunk.z -= penetration;
+                        m_localPositionInChunk.z -= (penetration + COLLISION_RESOLUTION_BIAS);
                     } else { // Moving negative Z
                         float penetration = worldBlockAABB.maxExtents.z - playerWorldAABB.minExtents.z;
-                        m_localPositionInChunk.z += penetration;
+                        m_localPositionInChunk.z += (penetration + COLLISION_RESOLUTION_BIAS);
                     }
                     m_velocity.z = 0.0f;
                     normalizeAndCrossChunkBoundaryZ();

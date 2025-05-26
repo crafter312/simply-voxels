@@ -238,7 +238,7 @@ void HelloVulkanApp::mainLoop() {
             }
         }
 
-        // Handle pause toggle
+        // Handle pause toggle first, as it might affect input processing for camera/player
         if (inputManager && inputManager->isKeyPressed(KeyCode::Escape)) {
             m_isPaused = !m_isPaused;
             if (m_isPaused) {
@@ -248,17 +248,18 @@ void HelloVulkanApp::mainLoop() {
             }
         }
 
-        // Only update camera if not paused
+        // Update player first, as player's position dictates camera's position
+        if (player && !m_isPaused) { // Check m_isPaused here for player movement
+            player->update(deltaTime); // Player logic, includes call to updateCameraPosition()
+        }
+
+        // Then update camera orientation (mouse look) if not paused
         if (camera && !m_isPaused) {
             camera->update(deltaTime); 
         }
         
         if (world) {
             world->update(deltaTime); // Update world logic (chunk loading/unloading)
-        }
-
-        if (player) {
-            player->update(deltaTime); // Update player logic
         }
 
         if (renderer) {

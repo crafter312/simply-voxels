@@ -7,6 +7,9 @@
 #include <cstring>  // For memcpy, strcmp
 #include <filesystem> // For creating directories
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp> // For glm::to_string
+
 // Include LZ4 header
 #include <lz4.h>
 
@@ -628,43 +631,52 @@ void RegionManager::notifyChunkUnloaded(const Chunk& unloadedChunk) {
     }
 
     glm::ivec3 chunk_coord = unloadedChunk.getChunkCoord();
-    // Calculate region coordinates using integer arithmetic for floored division
-    glm::ivec3 region_coord;
+    glm::ivec3 region_coord; // Calculate region_coord as before
     region_coord.x = chunk_coord.x / REGION_WIDTH_IN_CHUNKS;
     region_coord.y = chunk_coord.y / REGION_HEIGHT_IN_CHUNKS;
     region_coord.z = chunk_coord.z / REGION_DEPTH_IN_CHUNKS;
+    if (chunk_coord.x < 0 && (chunk_coord.x % REGION_WIDTH_IN_CHUNKS != 0)) region_coord.x--;
+    if (chunk_coord.y < 0 && (chunk_coord.y % REGION_HEIGHT_IN_CHUNKS != 0)) region_coord.y--;
+    if (chunk_coord.z < 0 && (chunk_coord.z % REGION_DEPTH_IN_CHUNKS != 0)) region_coord.z--;
 
-    if (chunk_coord.x < 0 && (chunk_coord.x % REGION_WIDTH_IN_CHUNKS != 0)) {
-        region_coord.x--;
-    }
-    if (chunk_coord.y < 0 && (chunk_coord.y % REGION_HEIGHT_IN_CHUNKS != 0)) {
-        region_coord.y--;
-    }
-    if (chunk_coord.z < 0 && (chunk_coord.z % REGION_DEPTH_IN_CHUNKS != 0)) {
-        region_coord.z--;
-    }
-
-    std::lock_guard<std::mutex> lock(m_countersMutex);
-    auto it = m_activeChunkCounters.find(region_coord);
-    if (it != m_activeChunkCounters.end()) {
-        if (it->second > 0) {
-            it->second--;
-            // std::cout << "[RegionManager] Decremented active count for region " << region_coord.x << "," << region_coord.y << "," << region_coord.z << " to " << it->second << std::endl;
-            if (it->second == 0) {
-                std::cout << "[RegionManager] Region " << region_coord.x << "," << region_coord.y << "," << region_coord.z << " active chunk count reached zero. Eligible for compaction check." << std::endl;
-                // Call compaction BEFORE removing from counter map and BEFORE this function closes the file from cache.
-                // compactRegionFile will handle its own file stream logic, potentially closing and removing it from m_openRegionFiles if compaction occurs.
-                compactRegionFile(region_coord);
-
-                m_activeChunkCounters.erase(it); // Remove the entry from the counter map
-                // Now close and remove the file stream from the cache
-                std::lock_guard<std::mutex> filesLock(m_openFilesMutex);
-                auto file_it = m_openRegionFiles.find(region_coord);
-                if (file_it != m_openRegionFiles.end()) {
-                    if (file_it->second && file_it->second->is_open()) file_it->second->close();
-                    m_openRegionFiles.erase(file_it);
-                    // std::cout << "[RegionManager] Closed and removed region file " << region_coord.x << "," << region_coord.y << "," << region_coord.z << " from cache." << std::endl;
+    bool region_became_empty = false;
+    { // Scope for m_countersMutex
+        std::lock_guard<std::mutex> lock(m_countersMutex);
+        auto it = m_activeChunkCounters.find(region_coord);
+        if (it != m_activeChunkCounters.end()) {
+            if (it->second > 0) {
+                it->second--;
+                // std::cout << "[RegionManager] Decremented active count for region " << glm::to_string(region_coord) << " to " << it->second << std::endl;
+                if (it->second == 0) {
+                    std::cout << "[RegionManager] Region " << glm::to_string(region_coord) << " active chunk count reached zero. Marking for compaction and closure." << std::endl;
+                    m_activeChunkCounters.erase(it); // Erase the counter entry for this region *immediately*
+                    region_became_empty = true;
                 }
+            } else {
+                 std::cerr << "[RegionManager] Warning: Active chunk counter for region " << glm::to_string(region_coord) << " was already zero or negative before decrementing." << std::endl;
+            }
+        } else {
+            std::cerr << "[RegionManager] Warning: No active chunk counter found for region " << glm::to_string(region_coord) << " during unload of a file-loaded chunk." << std::endl;
+        }
+    } // m_countersMutex is released
+
+    if (region_became_empty) {
+        // Now that the region is no longer in m_activeChunkCounters, proceed with compaction and file closure.
+        // compactRegionFile handles its own locking for m_openFilesMutex and removes the stream from cache if it compacts.
+        compactRegionFile(region_coord);
+
+        // Ensure the file stream is closed and removed from the cache,
+        // especially if compactRegionFile decided no actual compaction was needed (e.g., file already minimal)
+        // but the region is indeed empty of active chunks.
+        { // Scope for m_openFilesMutex
+            std::lock_guard<std::mutex> filesLock(m_openFilesMutex);
+            auto file_it = m_openRegionFiles.find(region_coord);
+            if (file_it != m_openRegionFiles.end()) {
+                if (file_it->second && file_it->second->is_open()) {
+                    file_it->second->close();
+                }
+                m_openRegionFiles.erase(file_it);
+                // std::cout << "[RegionManager] Ensured region file " << glm::to_string(region_coord) << " is closed and removed from cache after becoming empty." << std::endl;
             }
         }
     }

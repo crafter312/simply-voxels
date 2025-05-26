@@ -43,10 +43,13 @@ struct PotentialCollisionBlock {
 
 // --- Constants for chunk management ---
 static constexpr int LOAD_CHUNK_RADIUS = 8; // Radius in chunks around the camera to load chunks
-static constexpr int SPAWN_CHUNK_RADIUS = 4;  // Max radius in chunks from origin (0,0) to pick a spawn chunk XZ
+static constexpr int SPAWN_CHUNK_RADIUS = 1;  // Max radius in chunks from origin (0,0) to pick a spawn chunk XZ
 static constexpr int REBASE_TRIGGER_RADIUS_CHUNKS = 2048; // Radius in chunks from rebase origin to trigger a rebase (remains large)
 static constexpr int UNLOAD_CHUNK_RADIUS = LOAD_CHUNK_RADIUS + 2; // Increased: Radius in chunks beyond which to unload chunks (was 3)
 static constexpr int MAX_CHUNKS_TO_LOAD_PER_FRAME = 4; // Increased: Max chunks to process from load queue per frame (was 2)
+
+static constexpr float LOAD_CHUNK_RADIUS_SQUARED = static_cast<float>(LOAD_CHUNK_RADIUS * LOAD_CHUNK_RADIUS);
+static constexpr float UNLOAD_CHUNK_RADIUS_SQUARED = static_cast<float>(UNLOAD_CHUNK_RADIUS * UNLOAD_CHUNK_RADIUS);
 
 // Class to manage all blocks in the world
 class World {

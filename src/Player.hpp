@@ -62,7 +62,7 @@ private:
     std::optional<RaycastResult> m_currentTargetedBlockInfo; // Optional to indicate no hit
     float m_breakCooldown = 0.0f;
     float m_placeCooldown = 0.0f;
-    const float ACTION_COOLDOWN_TIME = 0.2f; // e.g., 5 actions per second
+    static constexpr float ACTION_COOLDOWN_TIME = 0.2f; // e.g., 5 actions per second
 
     // --- Physics State ---
     // Player's position is now stored as chunk coordinates + local offset
@@ -74,13 +74,20 @@ private:
     bool m_hasSpawned; // Flag to indicate if the player has been spawned/positioned in the world
 
     // --- Player Characteristics ---
-    static const glm::vec3 PLAYER_DIMENSIONS; // Width, Height, Depth
-    static const float EYE_HEIGHT;            // Y-offset from m_position to camera
+    static constexpr glm::vec3 PLAYER_DIMENSIONS = {0.6f, 1.8f, 0.6f}; // Width, Height, Depth
+    static constexpr float EYE_HEIGHT = 1.6f;            // Y-offset from player base to camera
 
     // --- Movement Parameters ---
     float m_moveSpeed;
     float m_sprintSpeedMultiplier;
     float m_jumpForce;
+    glm::vec3 m_wishHorizontalVelocity; // Target horizontal velocity based on input
+
+    // --- Physics Constants ---
+    static constexpr float GRAVITY_ACCELERATION = 9.81f * 2.0f; // m/s^2, tuned for gameplay feel
+    static constexpr float COLLISION_RESOLUTION_BIAS = 0.001f; // Small bias to push player slightly further out of collision
+    static constexpr float HORIZONTAL_SMOOTHING_FACTOR = 8.0f; // How quickly player reaches target horizontal speed (higher = less smoothing for acceleration)
+    static constexpr float HORIZONTAL_DRAG_FACTOR = 5.0f;      // How quickly player stops when no input (higher = faster stop)
 };
 
 #endif // PLAYER_HPP
