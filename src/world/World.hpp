@@ -12,6 +12,7 @@
 #include <atomic> // For std::atomic<bool>
 #include <chrono> // For std::chrono
 #include <shared_mutex> // For std::shared_mutex
+#include <future> // For std::future
 #include <condition_variable> // For std::condition_variable
 #include "Chunk.hpp" // Include the Chunk definition
 
@@ -19,6 +20,7 @@
 class Camera;
 
 namespace WorldSave { // Forward declare RegionManager in its namespace
+struct LoadResult; // Forward declaration for LoadResult
 class RegionManager;
 }
 
@@ -62,9 +64,6 @@ static constexpr float UNLOAD_CHUNK_RADIUS_SQUARED = static_cast<float>(UNLOAD_C
 // Class to manage all blocks in the world
 class World {
 public:
-    // Enum to describe the generation status of a chunk for meshing decisions
-    enum class ChunkGenStatus { NOT_FOUND, LOADED_NOT_GENERATED, LOADED_AND_GENERATED };
-
     ~World(); // Declare the destructor
     World(std::shared_ptr<Camera> camera);
 
@@ -104,7 +103,6 @@ public:
     const std::set<glm::ivec3, IVec3Comparator>& getChangedChunks() const; // IVec3Comparator for std::set
     void acknowledgeChunkChangeProcessed(const glm::ivec3& chunkCoord); // New method
     void markAllChunksDirty(); // Mark all loaded chunks for mesh regeneration (e.g., texture change)
-    ChunkGenStatus getChunkGeneratedStatus(glm::ivec3 chunkCoord) const;
     bool rebaseOccurredLastFrame() const; // Check if a rebase happened
 
     // Retrieves a list of blocks (and their IDs) that potentially intersect with an AABB
@@ -131,6 +129,10 @@ private:
     std::unique_ptr<WorldSave::RegionManager> m_regionManager; // Instance of RegionManager, using unique_ptr
 
     // Background compaction thread
+    // For asynchronous chunk loading
+    std::vector<std::pair<glm::ivec3, std::future<WorldSave::LoadResult>>> m_pendingLoadFutures;
+    mutable std::mutex m_pendingLoadFuturesMutex; // Mutex to protect m_pendingLoadFutures
+
     std::thread m_compactionThread;
     std::atomic<bool> m_stopCompactionThread;
     std::mutex m_compactionThreadMutex; // Mutex for the condition variable
@@ -141,6 +143,7 @@ private:
     void enqueueChunksNearCamera();
     void enqueueChunksToUnload();
     void processLoadQueue();
+    void processCompletedLoads(); // New method to handle finished async loads
     void processUnloadQueue();
     void checkAndRebase(); // Check if rebase is needed and perform it
 };

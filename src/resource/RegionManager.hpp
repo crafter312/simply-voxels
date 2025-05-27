@@ -11,6 +11,9 @@
 #include <fstream> // For std::fstream
 #include <memory> // For std::unique_ptr
 
+#include <future>   // For std::future
+#include <optional> // For std::optional
+#include <atomic>   // For std::atomic
 // Forward declaration
 class Chunk;
 
@@ -70,6 +73,21 @@ struct RegionCoordComparator {
     }
 };
 
+// Struct to hold the result of an asynchronous chunk load operation
+struct LoadResult {
+    glm::ivec3 chunkCoord = {0,0,0};             // The coordinates of the chunk that was attempted to be loaded
+    std::vector<uint16_t> uncompressedBlockData; // Holds CHUNK_VOLUME of block IDs if successful and not all_air
+    bool success = false;                        // True if the operation (read/decompress) was successful
+    bool wasAllAir = false;                      // True if the chunk was successfully identified as all_air from the file
+    std::string errorMessage;                    // Contains an error message if success is false
+
+    LoadResult() = default;                                    // Default constructor
+    LoadResult(const glm::ivec3& coord) : chunkCoord(coord) {} // Constructor to set coordinates
+};
+
+// Value determined at runtime based on hardware_concurrency.
+// Declared here, defined in RegionManager.cpp
+extern const size_t MAX_CONCURRENT_LOADING_TASKS;
 
 class RegionManager {
 public:
@@ -79,6 +97,10 @@ public:
     // Attempts to load chunk data from a region file.
     // - Modifies the passed 'chunk' object with loaded data.
     // - Returns true if the chunk was successfully loaded from file, false otherwise
+    //   (e.g., file not found, chunk not saved in file, read error, decompression error).
+    // This is the new asynchronous version.
+    std::optional<std::future<LoadResult>> asyncLoadChunkFromFile(glm::ivec3 chunkCoord);
+    // The old synchronous version:
     //   (e.g., file not found, chunk not saved in file, read error, decompression error).
     bool loadChunkFromFile(Chunk& chunk);
 
@@ -90,6 +112,10 @@ public:
     // Called by World when a chunk is being unloaded from memory.
     // Decrements the active chunk counter for the chunk's region if the chunk was originally loaded from file.
     void notifyChunkUnloaded(const Chunk& unloadedChunk);
+
+    // Called by World when an asynchronous load task for a chunk completes successfully and data is integrated.
+    // Increments the active chunk counter for the chunk's region.
+    void notifyChunkDataLoaded(const glm::ivec3& chunkCoord);
 
     // Processes a limited number of compaction tasks from the queue.
     // Returns true if any compaction was performed, false otherwise.
@@ -116,6 +142,8 @@ private:
     mutable std::vector<char> m_compression_workspace;
     mutable std::vector<char> m_decompression_workspace;
     mutable std::mutex m_workspace_mutex; // Protects access to workspace buffers
+
+    std::atomic<size_t> m_activeLoadTasks{0}; // Counter for active async loading tasks
 };
 
 } // namespace WorldSave

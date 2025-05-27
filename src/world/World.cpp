@@ -156,7 +156,7 @@ uint16_t World::getBlockID(glm::i64vec3 worldPosition) const {
         if (it != m_chunks.end() && it->second) {
             const std::shared_ptr<Chunk>& chunk_sptr = it->second;
             if (!chunk_sptr->isGenerated()) {
-                return Blocks::AIR_ID; // Chunk exists but not generated, treat as air
+                return Blocks::AIR_ID; // Chunk exists but not generated/loaded, treat as air
             }
             std::optional<glm::ivec3> optLocalPos = worldToLocalCoordinates(worldPosition, chunkCoord);
             if (!optLocalPos) {
@@ -291,6 +291,7 @@ void World::update(float deltaTime) {
     enqueueChunksNearCamera();
     enqueueChunksToUnload();
     processLoadQueue();
+    processCompletedLoads(); // Process results of async loads
     processUnloadQueue();
 }
 
@@ -391,42 +392,50 @@ void World::enqueueChunksToUnload() {
 
 void World::processLoadQueue() {
     glm::ivec3 chunkCoord, neighborCoord;
-    bool needsLoading, loadedFromFile;
-    int loadedCount = 0;
-    while (!m_loadQueue.empty() && (loadedCount < MAX_CHUNKS_TO_LOAD_PER_FRAME)) {
+    int tasksSubmittedThisFrame = 0;
+
+    while (!m_loadQueue.empty() && (tasksSubmittedThisFrame < MAX_CHUNKS_TO_LOAD_PER_FRAME)) {
         chunkCoord = m_loadQueue.front();
         m_loadQueue.pop();
 
-        // Check if the chunk is already loaded (shouldn't be, but double-check)
+        // Check if the chunk is already loaded and in a final state, or already awaiting file data
         {
             std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock for find
-            needsLoading = (m_chunks.find(chunkCoord) == m_chunks.end());
-        }
-
-        if (!needsLoading) continue; // skip if already loaded
-        std::shared_ptr<Chunk> newChunk_sptr = getOrCreateChunk(chunkCoord); // getOrCreateChunk has own unique lock
-        if (!newChunk_sptr) { // Should not happen
-            std::cerr << "World::processLoadQueue - getOrCreateChunk returned null for " << glm::to_string(chunkCoord) << std::endl;
-            continue;
-        }
-
-        // Attempt to load from file first
-        loadedFromFile = m_regionManager->loadChunkFromFile(*newChunk_sptr);
-        if (!loadedFromFile) newChunk_sptr->generate(); // if not loaded from file, generate it procedurally
-
-        // Mark its 6 direct neighbors as dirty so they can update their meshes
-        // relative to this newly generated and loaded chunk.
-        {
-            std::shared_lock<std::shared_mutex> lock(m_chunks_mutex); // Read lock for neighbor checks
-            for (size_t i = 0; i < NUM_NEIGHBORS; ++i) {
-                neighborCoord = chunkCoord + NEIGHBOR_OFFSETS[i];
-                if (!m_chunks.count(neighborCoord)) continue; // Skip if neighbor chunk doesn't exist
-                m_changedChunks.insert(neighborCoord);
+            auto it = m_chunks.find(chunkCoord);
+            if (it != m_chunks.end() && it->second) {
+                Chunk::LoadState currentState = it->second->getLoadState();
+                if (currentState == Chunk::LoadState::READY || 
+                    currentState == Chunk::LoadState::AWAITING_FILE_DATA ||
+                    currentState == Chunk::LoadState::GENERATING_PROCEDURALLY) {
+                    continue; // Already loaded/being processed, skip.
+                }
             }
         }
 
-        loadedCount++; 
-        // m_changedChunks is already updated by getOrCreateChunk if it's new
+        // Attempt to launch an asynchronous load task
+        std::optional<std::future<WorldSave::LoadResult>> load_future_opt = 
+            m_regionManager->asyncLoadChunkFromFile(chunkCoord);
+
+        if (load_future_opt) { // Task was successfully launched
+            std::shared_ptr<Chunk> chunk_sptr = getOrCreateChunk(chunkCoord); // Ensures chunk object exists
+            if (chunk_sptr) {
+                chunk_sptr->setLoadState(Chunk::LoadState::AWAITING_FILE_DATA);
+                // std::cout << "World: Submitted async load for chunk " << glm::to_string(chunkCoord) << std::endl;
+
+                { // Lock to add to m_pendingLoadFutures
+                    std::lock_guard<std::mutex> lock(m_pendingLoadFuturesMutex);
+                    m_pendingLoadFutures.emplace_back(chunkCoord, std::move(*load_future_opt));
+                }
+                tasksSubmittedThisFrame++;
+            } else {
+                 std::cerr << "World::processLoadQueue - getOrCreateChunk returned null for " << glm::to_string(chunkCoord) << " after async submit." << std::endl;
+            }
+        } else {
+            // Task was not launched (e.g., max concurrent tasks reached in RegionManager)
+            // Re-queue the chunk to try again later.
+            m_loadQueue.push(chunkCoord); // Push to back
+            break; // Stop processing load queue for this frame to avoid busy-looping if RM is full
+        }
     }
 }
 
@@ -512,21 +521,6 @@ void World::checkAndRebase() {
 
 bool World::rebaseOccurredLastFrame() const {
     return m_rebaseOccurredThisFrame;
-}
-
-World::ChunkGenStatus World::getChunkGeneratedStatus(glm::ivec3 chunkCoord) const {
-    std::shared_lock<std::shared_mutex> lock(m_chunks_mutex);
-    auto it = m_chunks.find(chunkCoord);
-    if (it == m_chunks.end()) {
-        return ChunkGenStatus::NOT_FOUND;
-    }
-    const auto& chunk_sptr = it->second;
-    // Chunk exists, check its generation status
-    // The isGenerated() method on Chunk is atomic and safe to call here.
-    if (!chunk_sptr || !chunk_sptr->isGenerated()) {
-        return ChunkGenStatus::LOADED_NOT_GENERATED;
-    }
-    return ChunkGenStatus::LOADED_AND_GENERATED;
 }
 
 std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
@@ -650,8 +644,10 @@ std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {
     // Terrain generation is primarily XZ dependent, so checking one chunk in the column is usually sufficient.
     // If your world has distinct generation patterns at different Y chunk levels, you might need a more sophisticated check.
     glm::ivec3 representativeChunkCoordForGenCheck(spawnChunkX, 0, spawnChunkZ); // Using Y=0 as representative
-    if (getChunkGeneratedStatus(representativeChunkCoordForGenCheck) != ChunkGenStatus::LOADED_AND_GENERATED) {
-        return std::nullopt; // Chosen spawn chunk area is not yet generated
+    std::shared_ptr<const Chunk> chunk_sptr = getChunk(representativeChunkCoordForGenCheck);
+
+    if (!chunk_sptr || chunk_sptr->getLoadState() != Chunk::LoadState::READY) {
+        return std::nullopt; // Chosen spawn chunk area is not ready (not found, not loaded, or not generated)
     }
 
     // 2. Select a random XZ local block coordinate within that chunk
@@ -684,4 +680,102 @@ std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {
 
     // Fallback: If no suitable ground found (e.g., over a void), return nullopt.
     return std::nullopt;
+}
+
+void World::processCompletedLoads() {
+    // Process completed load futures
+    // Iterate backwards to allow safe removal
+    std::lock_guard<std::mutex> lock(m_pendingLoadFuturesMutex); // Lock the vector of futures
+
+    for (auto i = m_pendingLoadFutures.size(); i-- > 0;) {
+        auto& future_entry = m_pendingLoadFutures[i];
+        const glm::ivec3& future_chunk_coord = future_entry.first;
+        std::future<WorldSave::LoadResult>& future_obj = future_entry.second;
+
+        // Check if the future is ready without blocking
+        if (future_obj.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            try {
+                WorldSave::LoadResult load_result = future_obj.get(); // Get the result (might throw)
+
+                // Get the chunk object using getChunk (read lock is sufficient here as we're just getting the shared_ptr)
+                // getChunk itself uses a shared_lock on m_chunks_mutex.
+                std::shared_ptr<Chunk> chunk_sptr = getChunk(load_result.chunkCoord);
+
+                if (chunk_sptr) { // Ensure the chunk still exists in the map (wasn't unloaded while loading)
+                    if (load_result.success) {
+                        // Data successfully loaded/decompressed or identified as all_air
+                        if (load_result.wasAllAir) {
+                            chunk_sptr->setAllAir(); // Sets isAllAir, isDirty=false, markGenerated, setLoadState(READY)
+                        } else {
+                            // Use performLockedWrite to copy data into the chunk's buffer
+                            chunk_sptr->performLockedWrite(
+                                [&](uint16_t* buffer, size_t capacity) {
+                                    if (buffer && capacity >= load_result.uncompressedBlockData.size()) {
+                                        std::memcpy(buffer, load_result.uncompressedBlockData.data(), load_result.uncompressedBlockData.size() * sizeof(uint16_t));
+                                    } else {
+                                        std::cerr << "World::processCompletedLoads: Buffer mismatch during locked write for chunk " << glm::to_string(load_result.chunkCoord) << std::endl;
+                                        // Handle error: Maybe set chunk state to FAILED_TO_LOAD or trigger generation
+                                    }
+                                }
+                            );
+                            // After successful write, finalize chunk state
+                            chunk_sptr->setLoadState(Chunk::LoadState::READY); // Set state to READY
+                            chunk_sptr->markGenerated(); // Mark as generated (should align with READY)
+                            chunk_sptr->setWasLoadedFromFile(true); // Indicate it came from file
+                            chunk_sptr->setDirty(false); // Loaded data is not dirty
+                        }
+                        // Mark the chunk and its neighbors as changed for meshing
+                        m_changedChunks.insert(load_result.chunkCoord);
+                        // Mark neighbors dirty (similar logic to setBlockID)
+                        // This requires a shared_lock on m_chunks_mutex to check if neighbors exist
+                        {
+                             std::shared_lock<std::shared_mutex> chunks_read_lock(m_chunks_mutex);
+                             for (size_t j = 0; j < NUM_NEIGHBORS; ++j) {
+                                 glm::ivec3 neighborCoord = load_result.chunkCoord + NEIGHBOR_OFFSETS[j];
+                                 if (m_chunks.count(neighborCoord)) { // Check if the neighbor exists
+                                     m_changedChunks.insert(neighborCoord);
+                                 }
+                             }
+                        }
+
+                        // Notify RegionManager about the completed load (increment active counter)
+                        // This needs a new public method in RegionManager or careful access to its counters.
+                        // For now, let's assume RegionManager handles its internal counters based on async task completion.
+                        // If RegionManager::m_activeChunkCounters needs updating here, add a method like:
+                        // m_regionManager->notifyChunkDataLoaded(load_result.chunkCoord);
+                        // And implement it to calculate region_coord and increment the counter.
+                        // Let's add this notification to RegionManager.
+                        m_regionManager->notifyChunkDataLoaded(load_result.chunkCoord); // New method needed in RegionManager
+
+                    } else {
+                        // Load failed (file error, decompression error, etc.)
+                        std::cerr << "World::processCompletedLoads: Failed to load chunk " << glm::to_string(load_result.chunkCoord) << ": " << load_result.errorMessage << std::endl;
+                        chunk_sptr->setLoadState(Chunk::LoadState::FAILED_TO_LOAD); // Mark as failed
+                        // Fallback: Trigger procedural generation if file load failed
+                        // This will set the state to GENERATING_PROCEDURALLY and then READY
+                        chunk_sptr->generate(); 
+                        m_changedChunks.insert(load_result.chunkCoord); // Mark as changed for meshing after generation
+                    }
+                } else {
+                    // Chunk was unloaded while the async task was running.
+                    // The LoadResult is discarded. The RegionManager counter was handled during unload.
+                    std::cout << "World::processCompletedLoads: Chunk " << glm::to_string(load_result.chunkCoord) << " completed loading but was already unloaded." << std::endl;
+                }
+
+            } catch (const std::exception& e) {
+                std::cerr << "World::processCompletedLoads: Exception getting load future result for chunk [" << future_chunk_coord.x << "," << future_chunk_coord.y << "," << future_chunk_coord.z << "]: " << e.what() << std::endl;
+                // If an exception occurs getting the future, the chunk might still be in AWAITING_FILE_DATA state.
+                // We should probably mark it as failed or trigger generation.
+                std::shared_ptr<Chunk> chunk_sptr = getChunk(future_chunk_coord);
+                 if (chunk_sptr) {
+                     chunk_sptr->setLoadState(Chunk::LoadState::FAILED_TO_LOAD);
+                     // Fallback: Trigger procedural generation
+                     chunk_sptr->generate();
+                     m_changedChunks.insert(future_chunk_coord);
+                 }
+            }
+            // Remove the processed future regardless of success/failure
+            m_pendingLoadFutures.erase(m_pendingLoadFutures.begin() + i);
+        }
+    }
 }
