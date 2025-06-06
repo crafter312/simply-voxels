@@ -749,7 +749,7 @@ void World::processCompletedLoads() {
 
                     } else {
                         // Load failed (file error, decompression error, etc.)
-                        std::cerr << "World::processCompletedLoads: Failed to load chunk " << glm::to_string(load_result.chunkCoord) << ": " << load_result.errorMessage << std::endl;
+                        //std::cerr << "World::processCompletedLoads: Failed to load chunk " << glm::to_string(load_result.chunkCoord) << ": " << load_result.errorMessage << std::endl;
                         chunk_sptr->setLoadState(Chunk::LoadState::FAILED_TO_LOAD); // Mark as failed
                         // Fallback: Trigger procedural generation if file load failed
                         // This will set the state to GENERATING_PROCEDURALLY and then READY
