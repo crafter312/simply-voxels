@@ -30,15 +30,6 @@ constexpr int DIRT_LAYER_THICKNESS = 3;   // Number of dirt blocks on top of sto
 
 class Chunk {
 public:
-    // Enum to describe the loading/generation state of a chunk
-    enum class LoadState : uint8_t {
-        UNINITIALIZED,         // Default state, not yet processed
-        AWAITING_FILE_DATA,    // Asynchronous load from file initiated
-        GENERATING_PROCEDURALLY, // Procedural generation has been initiated or is in progress
-        READY,                 // Data is populated (either from file or generation) and meshed
-        FAILED_TO_LOAD         // Attempt to load from file failed
-    };
-public:
     Chunk(glm::ivec3 chunkCoord); // Parameter now represents chunk coordinates
     ~Chunk();
 
@@ -89,9 +80,6 @@ public:
     // and its capacity in elements.
     void performLockedRead(std::function<void(const uint16_t* block_data_buffer, size_t buffer_capacity_elements)> reader_action) const;
 
-    LoadState getLoadState() const;
-    void setLoadState(LoadState newState);
-
     // Helper to convert 3D local coordinates to a 1D array index
     // Made public static so it can be used by external functions like ChunkMesher
     static inline size_t localToIndex(int x, int y, int z) {
@@ -113,7 +101,6 @@ private:
     bool m_isDirty;  // True if the chunk's geometry needs to be rebuilt (for rendering)
     std::atomic<bool> m_isGenerated; // True if the chunk has completed its initial procedural generation
     mutable std::shared_mutex m_data_mutex; // To protect m_blocks, m_isAllAir, and m_isDirty
-    std::atomic<LoadState> m_loadState; // Tracks the current loading/generation state of the chunk
     bool m_wasLoadedFromFile = false; // True if this chunk instance's data was populated by RegionManager::loadChunkFromFile
 
     void allocateBlockStorage();

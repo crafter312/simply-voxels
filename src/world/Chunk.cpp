@@ -10,8 +10,7 @@ Chunk::Chunk(glm::ivec3 chunkCoord)
     : m_chunkCoord(chunkCoord),
       m_blocks(nullptr), // Start with no block data allocated
       m_isAllAir(true),  // Assume all air initially
-      m_isDirty(false),   // New chunks are not dirty, only once generated or modified
-      m_loadState(LoadState::UNINITIALIZED)
+      m_isDirty(false)   // New chunks are not dirty, only once generated or modified
       // m_isGenerated is default-initialized for std::atomic<bool> to false
 {
     //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] CONSTRUCTOR called." << std::endl;
@@ -29,7 +28,6 @@ Chunk::Chunk(Chunk&& other) noexcept
       m_blocks(std::move(other.m_blocks)), // Transfer ownership of the block data
       m_isAllAir(other.m_isAllAir),
       m_isDirty(other.m_isDirty),
-      m_loadState(other.m_loadState.load(std::memory_order_relaxed)), // Copy atomic state
       m_wasLoadedFromFile(other.m_wasLoadedFromFile) // Move the new flag
       // m_isGenerated: std::atomic is not trivially move-constructible in the same way.
       // We need to load from other and store into this.
@@ -37,7 +35,6 @@ Chunk::Chunk(Chunk&& other) noexcept
     m_isGenerated.store(other.m_isGenerated.load(std::memory_order_relaxed), std::memory_order_relaxed);
     // other's m_isGenerated can be left or reset, typically reset if it's a true move.
     other.m_isGenerated.store(false, std::memory_order_relaxed);
-    other.m_loadState.store(LoadState::UNINITIALIZED, std::memory_order_relaxed); // Reset other's load state
 }
 
 // Move assignment operator
@@ -48,13 +45,11 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
         m_isAllAir = other.m_isAllAir;
         m_isDirty = other.m_isDirty;
         m_isGenerated.store(other.m_isGenerated.load(std::memory_order_relaxed), std::memory_order_relaxed);
-        m_loadState.store(other.m_loadState.load(std::memory_order_relaxed), std::memory_order_relaxed);
         m_wasLoadedFromFile = other.m_wasLoadedFromFile; // Move the new flag
         
         // Reset other's relevant state if needed (unique_ptr is handled by move)
         other.m_isGenerated.store(false, std::memory_order_relaxed);
         other.m_wasLoadedFromFile = false; // Reset other's flag
-        other.m_loadState.store(LoadState::UNINITIALIZED, std::memory_order_relaxed);
     }
     return *this;
 }
@@ -154,8 +149,6 @@ bool Chunk::isAllAir() const {
 }
 
 void Chunk::generate() {
-    setLoadState(LoadState::GENERATING_PROCEDURALLY); // Set state at the beginning
-
     //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] STARTING generation." << std::endl;
     // Original Perlin Noise Terrain Generation:
     // Terrain generation parameters
@@ -223,8 +216,7 @@ void Chunk::generate() {
         }
         m_isDirty = true; // Generation makes the chunk dirty, requiring a mesh rebuild.
     }
-    // Set state to READY and then mark as generated after data is populated
-    setLoadState(LoadState::READY);
+    //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] FINISHED generation, calling markGenerated(). isAllAir: " << m_isAllAir << std::endl;
     markGenerated(); // Mark this chunk as having completed its initial generation
 }
 
@@ -243,8 +235,6 @@ void Chunk::setAllBlocks(const std::array<uint16_t, CHUNK_VOLUME>& new_blocks_da
     *m_blocks = new_blocks_data; // Direct copy
     m_isAllAir = false;
     m_isDirty = false; // Loaded from file, not dirty initially
-    setLoadState(LoadState::READY); // Set state to READY first
-    markGenerated(); // Data is now populated, mark as generated
 }
 
 void Chunk::setAllAir() {
@@ -252,8 +242,6 @@ void Chunk::setAllAir() {
     m_blocks.reset(); // Deallocate block storage
     m_isAllAir = true;
     m_isDirty = false; // Loaded from file, not dirty initially
-    setLoadState(LoadState::READY); // Set state to READY first
-    markGenerated(); // All-air is also considered "generated" or "loaded" for meshing
 }
 
 void Chunk::performLockedWrite(std::function<void(uint16_t* block_data_buffer, size_t buffer_capacity_elements)> writer_action) {
@@ -285,12 +273,4 @@ void Chunk::performLockedRead(std::function<void(const uint16_t* block_data_buff
         // Pass a const pointer to the block data and its capacity.
         reader_action(m_blocks->data(), CHUNK_VOLUME);
     }
-}
-
-Chunk::LoadState Chunk::getLoadState() const {
-    return m_loadState.load(std::memory_order_acquire);
-}
-
-void Chunk::setLoadState(LoadState newState) {
-    m_loadState.store(newState, std::memory_order_release);
 }
