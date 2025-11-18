@@ -70,12 +70,10 @@ ExternalProject_Add(lz4_external
         -DBUILD_SHARED_LIBS=OFF
         -DLZ4_BUILD_CLI=OFF
         -DLZ4_SKIP_TESTS=ON
-    # We only need to build and install, not test
-    # By explicitly using CMAKE_MAKE_PROGRAM and VERBOSE=1, we can force
-    # verbose output from the sub-build, which is crucial for debugging silent failures in IDEs.
-    # This is more reliable for diagnostics than `cmake --build`.
-    BUILD_COMMAND   ${CMAKE_MAKE_PROGRAM} -C <BINARY_DIR> VERBOSE=1
-    INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} -C <BINARY_DIR> install VERBOSE=1
+    # Use the modern, generator-agnostic build command.
+    # The $<CONFIG> generator expression ensures the correct build type (Debug/Release) is passed down.
+    BUILD_COMMAND   ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target install
     TEST_COMMAND ""
 )
  
