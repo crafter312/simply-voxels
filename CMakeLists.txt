@@ -18,55 +18,66 @@ include(FetchContent)
 # Explicitly set where FetchContent stores its stuff (usually defaults to build/_deps)
 set(FETCHCONTENT_BASE_DIR ${CMAKE_BINARY_DIR}/_deps)
 
-# Declare the dependency
+# --- Declare all dependencies ---
+
+# GLM
 FetchContent_Declare(
   glm
   GIT_REPOSITORY https://github.com/g-truc/glm.git
   GIT_TAG 1.0.1 # Try the latest stable release tag
 )
+# Explicitly prevent find_package from finding the system GLM
+set(glm_DIR "" CACHE INTERNAL "Prevent find_package for system GLM")
 
+# GLFW
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "Build GLFW examples" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "Build GLFW tests" FORCE)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "Build GLFW documentation" FORCE)
 FetchContent_Declare(
   glfw
   GIT_REPOSITORY https://github.com/glfw/glfw.git
   GIT_TAG 3.4 # Using latest release tag for GLFW
 )
 
-# Explicitly prevent find_package from finding the system GLM
-set(glm_DIR "" CACHE INTERNAL "Prevent find_package for system GLM")
-
-# Make it available (downloads/configures if needed)
-FetchContent_MakeAvailable(glm)
-
-# GLFW options (to build only the library, not examples/tests/docs)
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "Build GLFW examples" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "Build GLFW tests" FORCE)
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "Build GLFW documentation" FORCE)
-FetchContent_MakeAvailable(glfw)
-
-# LZ4 options (to build only the static library, disable CLI and tests)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build LZ4 as a shared library" FORCE)
-set(LZ4_BUILD_CLI OFF CACHE BOOL "Build LZ4 command line interface" FORCE)
-set(LZ4_SKIP_TESTS ON CACHE BOOL "Skip LZ4 tests" FORCE)
-
-# Populate LZ4 directly, providing all details.
-# This avoids the deprecation warning associated with calling FetchContent_Populate
-# on a previously declared FetchContent_Declare name.
-FetchContent_Populate(
-  lz4  # This name is used to derive lz4_SOURCE_DIR and lz4_BINARY_DIR
-  GIT_REPOSITORY https://github.com/lz4/lz4.git
-  GIT_TAG        v1.9.4
-  GIT_SHALLOW    FALSE
-  GIT_PROGRESS   TRUE
+# --- Make all declared dependencies available ---
+# Make glm and glfw available normally
+FetchContent_MakeAvailable(glm glfw)
+ 
+# --- Handle lz4 dependency with ExternalProject ---
+# lz4's CMake scripts are too old for FetchContent/add_subdirectory.
+# We build it as a truly external project.
+include(ExternalProject)
+ 
+set(LZ4_INSTALL_DIR ${CMAKE_BINARY_DIR}/lz4-install)
+set(LZ4_INCLUDE_DIR ${LZ4_INSTALL_DIR}/include)
+set(LZ4_LIBRARY_DIR ${LZ4_INSTALL_DIR}/lib)
+ 
+ExternalProject_Add(lz4_external
+    GIT_REPOSITORY https://github.com/lz4/lz4.git
+    GIT_TAG        v1.9.4
+    SOURCE_SUBDIR  build/cmake
+    CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LZ4_INSTALL_DIR}
+        # This is the crucial flag to allow lz4's old CMake script to be processed.
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DBUILD_SHARED_LIBS=OFF
+        -DLZ4_BUILD_CLI=OFF
+        -DLZ4_SKIP_TESTS=ON
+    # We only need to build and install, not test
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
+    TEST_COMMAND ""
 )
-
-set(LZ4_CMAKE_SUBDIR "build/cmake") # LZ4's CMakeLists.txt is in a subdirectory
-
-cmake_policy(PUSH) # Save current policy settings
-cmake_policy(VERSION ${CMAKE_VERSION}) # Set policy version to current CMake version
-add_subdirectory(${lz4_SOURCE_DIR}/${LZ4_CMAKE_SUBDIR} ${lz4_BINARY_DIR}/lz4-build) # Explicitly add lz4 as a subproject, adjust binary dir
-cmake_policy(POP) # Restore previous policy settings
-
-# --- Manage stb_image.h ---
+ 
+# Define the path to the library that ExternalProject will create.
+# We use a generator expression to handle different library names on different platforms.
+if(WIN32)
+    set(LZ4_LIBRARY ${LZ4_LIBRARY_DIR}/lz4_static.lib)
+else()
+    set(LZ4_LIBRARY ${LZ4_LIBRARY_DIR}/liblz4.a)
+endif()
+ 
 # Define where stb_image.h will be stored locally
 set(STB_IMAGE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
 set(STB_IMAGE_HEADER ${STB_IMAGE_DIR}/stb_image.h)
@@ -220,8 +231,14 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WI
 # Link libraries
 # Link Vulkan, GLFW, and the fetched GLM target.
 # The target name provided by FetchContent for GLM is typically 'glm'.
-# Note: GLM, stb_image, and tinygltf are header-only (or nearly so), but we set up INTERFACE library targets for include management. LZ4 is found via pkg-config.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4_static)
+# Note: GLM, stb_image, and tinygltf are header-only, but we set up INTERFACE library targets for include management.
+
+# Add lz4 include directory. This is not checked for existence at configure time.
+target_include_directories(SimpleVulkanWindow PRIVATE ${LZ4_INCLUDE_DIR})
+
+# Link all libraries, including the lz4 library file that will be built by ExternalProject.
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf ${LZ4_LIBRARY})
+add_dependencies(SimpleVulkanWindow lz4_external) # Ensure lz4 is built before SimpleVulkanWindow
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
