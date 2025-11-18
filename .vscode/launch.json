@@ -8,7 +8,8 @@
             "name": "(gdb Linux) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/SimpleVulkanWindow",
+            "preLaunchTask": "CMake: build", // Run the default CMake build task before launching
+            "program": "${workspaceFolder}/build/SimpleVulkanWindow", // Path to your executable
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
@@ -33,7 +34,8 @@
             "name": "(gdb Windows) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/SimpleVulkanWindow",
+            "preLaunchTask": "CMake: build", // Run the default CMake build task before launching
+            "program": "${workspaceFolder}/build/SimpleVulkanWindow.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build", // Current working directory

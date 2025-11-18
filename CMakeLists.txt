@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.11 FATAL_ERROR) # FetchContent requires at least 3.11
 
+# --- Best Practice: Prevent In-Source Builds ---
+# This ensures that the build directory is different from the source directory.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    message(FATAL_ERROR "In-source builds are not allowed. Please create a separate build directory (e.g., 'build') and run cmake from there.")
+endif()
+
 # Project name and language
 project(SimpleVulkanWindow LANGUAGES CXX)
 
@@ -65,19 +71,27 @@ ExternalProject_Add(lz4_external
         -DLZ4_BUILD_CLI=OFF
         -DLZ4_SKIP_TESTS=ON
     # We only need to build and install, not test
-    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
-    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
+    # By explicitly using CMAKE_MAKE_PROGRAM and VERBOSE=1, we can force
+    # verbose output from the sub-build, which is crucial for debugging silent failures in IDEs.
+    # This is more reliable for diagnostics than `cmake --build`.
+    BUILD_COMMAND   ${CMAKE_MAKE_PROGRAM} -C <BINARY_DIR> VERBOSE=1
+    INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} -C <BINARY_DIR> install VERBOSE=1
     TEST_COMMAND ""
 )
  
-# Define the path to the library that ExternalProject will create.
-# We use a generator expression to handle different library names on different platforms.
-if(WIN32)
-    set(LZ4_LIBRARY ${LZ4_LIBRARY_DIR}/lz4_static.lib)
-else()
-    set(LZ4_LIBRARY ${LZ4_LIBRARY_DIR}/liblz4.a)
-endif()
+# Create an IMPORTED library target for lz4.
+# This acts as a placeholder for CMake, so it knows about the library at configure time.
+add_library(lz4_imported STATIC IMPORTED)
  
+# Define the path to the library that ExternalProject will create. We use a
+# generator expression to handle different library names on different platforms.
+if(WIN32)
+    set(LZ4_LIBRARY_FILE ${LZ4_LIBRARY_DIR}/lz4_static.lib)
+else()
+    set(LZ4_LIBRARY_FILE ${LZ4_LIBRARY_DIR}/liblz4.a)
+endif()
+set_target_properties(lz4_imported PROPERTIES IMPORTED_LOCATION "${LZ4_LIBRARY_FILE}")
+
 # Define where stb_image.h will be stored locally
 set(STB_IMAGE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
 set(STB_IMAGE_HEADER ${STB_IMAGE_DIR}/stb_image.h)
@@ -236,8 +250,8 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WI
 # Add lz4 include directory. This is not checked for existence at configure time.
 target_include_directories(SimpleVulkanWindow PRIVATE ${LZ4_INCLUDE_DIR})
 
-# Link all libraries, including the lz4 library file that will be built by ExternalProject.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf ${LZ4_LIBRARY})
+# Link all libraries, including our imported lz4 target.
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4_imported)
 add_dependencies(SimpleVulkanWindow lz4_external) # Ensure lz4 is built before SimpleVulkanWindow
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
