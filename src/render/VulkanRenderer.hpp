@@ -14,19 +14,20 @@
 #include <optional>
 #include <set>      // For tracking pending mesh tasks
 #include <map> // To store per-chunk render data
+#include <queue>    // For work queues
 #include <stdexcept>
 #include <string>   // For shader file loading
 #include <fstream>  // For shader file loading
 #include <array>    // For Vertex attributes
 #include <cstdint>  // Required for uint32_t
+#include <atomic>   // For std::atomic_bool
 
 #include <thread>   // For std::thread::hardware_concurrency()
 #include <algorithm> // For std::max
-#include <future>   // For std::future (asynchronous meshing)
 #include "../world/ChunkMesher.hpp" // For ChunkMesher::MeshData
 #include "../resource/ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
 #include "VulkanDescriptorSetManager.hpp" // Include the new manager
-
+#include "VulkanThreadManager.hpp" // Include the new thread manager
 
 // Forward declare HelloVulkanApp types needed here
 class VulkanDevice; // Forward declaration for our wrapper
@@ -85,9 +86,6 @@ private:
 
     // --- Constants ---
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-    // MAX_REBASE_MESH_UPDATES_PER_FRAME is no longer needed as rebase only updates model matrices immediately.
-    // Value determined at runtime based on hardware_concurrency.
-    static const size_t MAX_CONCURRENT_MESHING_TASKS;
 
     std::unique_ptr<VulkanSwapChain> swapChainManager;
     std::unique_ptr<VulkanBufferManager> bufferManager;
@@ -96,6 +94,7 @@ private:
     // std::unique_ptr<VulkanTextureLoader> textureLoader; // Replaced by ResourceManager
     std::unique_ptr<ResourceManager> resourceManager; // Manages models and textures
     std::shared_ptr<Camera> m_camera; // Store the camera
+    std::unique_ptr<VulkanThreadManager> m_threadManager; // New thread manager
     BlockRegistry& m_blockRegistryRef; // Reference to the block registry
     World& m_world; // Reference to the world data
     Player& m_playerRef; // Reference to the player object
@@ -131,10 +130,8 @@ private:
     };
     std::map<glm::ivec3, ChunkRenderData, struct IVec3Comparator> m_chunkRenderData; // Map chunk coordinates to render data
 
-    // For asynchronous chunk meshing
-    // Store chunkCoord with the future to correctly manage m_submittedMeshTasks on exception
-    std::vector<std::pair<glm::ivec3, std::future<ModelData>>> m_pendingMeshFutures;
-    std::set<glm::ivec3, IVec3Comparator> m_submittedMeshTasks; // Chunks for which a mesh task has been launched
+    // --- Asynchronous Chunk Meshing ---
+    std::set<glm::ivec3, IVec3Comparator> m_meshingTasksInProgress;
     std::vector<std::vector<ResourceToDelete>> m_deletionQueues; // Indexed by frame in flight for deferred deletion
 
     // Helper to destroy chunk buffers

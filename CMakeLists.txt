@@ -170,6 +170,7 @@ add_executable(SimpleVulkanWindow
     src/render/VulkanBufferManager.cpp
     src/render/VulkanDescriptorSetManager.cpp
     src/render/VulkanPipelineFactory.cpp
+    src/render/VulkanThreadManager.cpp
     src/resource/VulkanTextureLoader.cpp # Add the new texture loader
     src/resource/ModelLoader.cpp         # Add the new model loader
     src/resource/ResourceManager.cpp     # Add ResourceManager
