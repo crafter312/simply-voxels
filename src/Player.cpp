@@ -57,15 +57,15 @@ void Player::update(float deltaTime) {
 
     // Physics sub-stepping
     // Accumulator for time to be simulated this frame
-    float physicsTimeAccumulator = deltaTime;
+    m_physicsTimeAccumulator += deltaTime;
     int substepsPerformed = 0;
 
-    while (physicsTimeAccumulator >= FIXED_PHYSICS_DT && substepsPerformed < MAX_PHYSICS_SUBSTEPS) {
+    while (m_physicsTimeAccumulator >= FIXED_PHYSICS_DT && substepsPerformed < MAX_PHYSICS_SUBSTEPS) {
         // applyPhysics and resolveCollisionsAndMove now use the fixed delta time
         applyPhysics(FIXED_PHYSICS_DT);
         resolveCollisionsAndMove(FIXED_PHYSICS_DT);
 
-        physicsTimeAccumulator -= FIXED_PHYSICS_DT;
+        m_physicsTimeAccumulator -= FIXED_PHYSICS_DT;
         substepsPerformed++;
     }
 
@@ -247,12 +247,12 @@ void Player::resolveCollisionsAndMove(float deltaTime) {
                     normalizeAndCrossChunkBoundaryX(); // Re-normalize after collision adjustment
                     playerWorldAABB = {getAABBMin(), getAABBMax()}; // Update player AABB for next potential check
                                                                   // (though we break, good practice if not breaking)
-                    goto next_axis_y; // Break out of all block/AABB loops for X-axis
+                    break; // Break from the inner aabbsToTest loop
                 }
             }
+            if (m_velocity.x == 0.0f) break; // Break from the outer nearbyBlocks loop if collision was resolved
         }
     }
-next_axis_y:;
 
     // --- Y-AXIS MOVEMENT AND COLLISION ---
     m_localPositionInChunk.y += m_velocity.y * deltaTime;
@@ -298,20 +298,16 @@ next_axis_y:;
                     y_collision_resolved_this_frame = true;
                     normalizeAndCrossChunkBoundaryY();
                     playerWorldAABB = {getAABBMin(), getAABBMax()};
-                    goto next_axis_z;
+                    break; // Break from the inner aabbsToTest loop
                 }
             }
+            if (y_collision_resolved_this_frame) break; // Break from the outer nearbyBlocks loop if collision was resolved
         }
     }
     // If player was moving downwards and no collision was resolved on Y, they are not grounded.
     // (m_isGrounded was reset in applyPhysics)
     // If m_velocity.y was 0 or positive, m_isGrounded remains false unless a collision happened.
-    if (m_velocity.y < 0.0f && !y_collision_resolved_this_frame && !m_isGrounded) {
-         // This case means we were falling, attempted to move, but didn't hit anything.
-         // m_isGrounded should remain false. It was set false in applyPhysics.
-    }
-
-next_axis_z:;
+    // No special logic needed here, m_isGrounded is correctly false if no downward collision occurred.
 
     // --- Z-AXIS MOVEMENT AND COLLISION ---
     m_localPositionInChunk.z += m_velocity.z * deltaTime;
@@ -354,12 +350,12 @@ next_axis_z:;
                     m_velocity.z = 0.0f;
                     normalizeAndCrossChunkBoundaryZ();
                     // playerWorldAABB = {getAABBMin(), getAABBMax()}; // Not strictly needed due to goto
-                    goto end_collision_resolution;
+                    break; // Break from the inner aabbsToTest loop
                 }
             }
+            if (m_velocity.z == 0.0f) break; // Break from the outer nearbyBlocks loop if collision was resolved
         }
     }
-end_collision_resolution:;
 }
 
 void Player::handleBlockInteraction() {

@@ -72,6 +72,7 @@ private:
     glm::vec3 m_acceleration;
     bool m_isGrounded;
     bool m_hasSpawned; // Flag to indicate if the player has been spawned/positioned in the world
+    float m_physicsTimeAccumulator = 0.0f; // Accumulator for fixed-step physics
 
     // --- Player Characteristics ---
     static constexpr glm::vec3 PLAYER_DIMENSIONS = {0.6f, 1.8f, 0.6f}; // Width, Height, Depth
