@@ -49,54 +49,55 @@ FetchContent_Declare(
 # Make glm and glfw available normally
 FetchContent_MakeAvailable(glm glfw)
  
-# --- Handle lz4 dependency with platform-specific strategies ---
-if(WIN32)
-    # On Windows, build lz4 from source using ExternalProject for maximum reliability.
-    # This avoids issues with finding pre-built libraries or package managers.
+# --- Handle lz4 dependency ---
+# 1. Declare the dependency with FetchContent to manage the download.
+FetchContent_Declare(
+    lz4
+    GIT_REPOSITORY https://github.com/lz4/lz4.git
+    GIT_TAG        v1.9.4
+)
 
-    # 1. Declare the dependency with FetchContent to manage the download.
-    FetchContent_Declare(
-        lz4
-        GIT_REPOSITORY https://github.com/lz4/lz4.git
-        GIT_TAG        v1.9.4
-    )
-    FetchContent_MakeAvailable(lz4) # This populates lz4_SOURCE_DIR
-
-    # 2. Build lz4 using ExternalProject_Add for isolation.
-    include(ExternalProject)
-    set(LZ4_INSTALL_DIR ${CMAKE_BINARY_DIR}/lz4-install)
-
-    ExternalProject_Add(lz4_external
-        SOURCE_DIR     ${lz4_SOURCE_DIR}/build/cmake
-        CMAKE_ARGS
-            -DCMAKE_INSTALL_PREFIX=${LZ4_INSTALL_DIR}
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-            -DBUILD_SHARED_LIBS=OFF
-            -DLZ4_BUILD_CLI=OFF
-            -DLZ4_SKIP_TESTS=ON
-        BUILD_COMMAND   ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
-        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target install
-        TEST_COMMAND ""
-        DOWNLOAD_COMMAND ""
-        UPDATE_COMMAND ""
-    )
-
-    # 3. Create a proper INTERFACE target to represent the built lz4 library.
-    add_library(lz4_lib INTERFACE)
-    add_dependencies(lz4_lib lz4_external)
-    target_include_directories(lz4_lib INTERFACE ${LZ4_INSTALL_DIR}/include)
-    target_link_directories(lz4_lib INTERFACE ${LZ4_INSTALL_DIR}/lib)
-    target_link_libraries(lz4_lib INTERFACE lz4) # Links -llz4
-
-else()
-    # On Linux, use pkg-config to find the system-installed lz4 library.
-    # This is the standard, reliable method on Linux and was used in your original script.
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LZ4 REQUIRED IMPORTED_TARGET lz4)
-    # Create an alias for consistency with the Windows target name.
-    add_library(lz4_lib ALIAS PkgConfig::LZ4)
+# 2. Ensure the source code is available.
+FetchContent_GetProperties(lz4)
+if(NOT lz4_POPULATED)
+    FetchContent_Populate(lz4)
 endif()
+
+# 3. Build lz4 using ExternalProject_Add for maximum isolation.
+# This avoids the policy issues from add_subdirectory while giving us a reliable build.
+include(ExternalProject)
+set(LZ4_INSTALL_DIR ${CMAKE_BINARY_DIR}/lz4-install)
+
+ExternalProject_Add(lz4_external
+    SOURCE_DIR     ${lz4_SOURCE_DIR}/build/cmake # Use the source code from FetchContent
+    CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LZ4_INSTALL_DIR}
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DBUILD_SHARED_LIBS=OFF
+        -DLZ4_BUILD_CLI=OFF
+        -DLZ4_SKIP_TESTS=ON
+    BUILD_COMMAND   ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target install
+    TEST_COMMAND ""
+    # By specifying SOURCE_DIR, we prevent ExternalProject from re-downloading.
+    DOWNLOAD_COMMAND ""
+    UPDATE_COMMAND ""
+)
+ 
+# 4. Create a proper INTERFACE target to represent the built lz4 library.
+# This is the robust pattern that works on both Windows (MinGW) and Linux.
+add_library(lz4_lib INTERFACE)
+add_dependencies(lz4_lib lz4_external) # Crucial: lz4_lib depends on the external build finishing.
+
+target_include_directories(lz4_lib INTERFACE ${LZ4_INSTALL_DIR}/include)
+
+# Add the library search path. This adds the "-L" flag for the linker.
+target_link_directories(lz4_lib INTERFACE ${LZ4_INSTALL_DIR}/lib)
+
+# Tell the linker to find the 'lz4' library. This adds the "-llz4" flag.
+# The lz4 build script produces 'liblz4.a' on both MinGW and Linux, so 'lz4' is the correct name.
+target_link_libraries(lz4_lib INTERFACE lz4)
 
 # Define where stb_image.h will be stored locally
 set(STB_IMAGE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
