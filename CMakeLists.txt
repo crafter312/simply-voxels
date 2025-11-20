@@ -49,46 +49,55 @@ FetchContent_Declare(
 # Make glm and glfw available normally
 FetchContent_MakeAvailable(glm glfw)
  
-# --- Handle lz4 dependency with ExternalProject ---
-# lz4's CMake scripts are too old for FetchContent/add_subdirectory.
-# We build it as a truly external project.
-include(ExternalProject)
- 
-set(LZ4_INSTALL_DIR ${CMAKE_BINARY_DIR}/lz4-install)
-set(LZ4_INCLUDE_DIR ${LZ4_INSTALL_DIR}/include)
-set(LZ4_LIBRARY_DIR ${LZ4_INSTALL_DIR}/lib)
- 
-ExternalProject_Add(lz4_external
+# --- Handle lz4 dependency ---
+# 1. Declare the dependency with FetchContent to manage the download.
+FetchContent_Declare(
+    lz4
     GIT_REPOSITORY https://github.com/lz4/lz4.git
     GIT_TAG        v1.9.4
-    SOURCE_SUBDIR  build/cmake
+)
+
+# 2. Ensure the source code is available.
+FetchContent_GetProperties(lz4)
+if(NOT lz4_POPULATED)
+    FetchContent_Populate(lz4)
+endif()
+
+# 3. Build lz4 using ExternalProject_Add for maximum isolation.
+# This avoids the policy issues from add_subdirectory while giving us a reliable build.
+include(ExternalProject)
+set(LZ4_INSTALL_DIR ${CMAKE_BINARY_DIR}/lz4-install)
+
+ExternalProject_Add(lz4_external
+    SOURCE_DIR     ${lz4_SOURCE_DIR}/build/cmake # Use the source code from FetchContent
     CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LZ4_INSTALL_DIR}
-        # This is the crucial flag to allow lz4's old CMake script to be processed.
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DBUILD_SHARED_LIBS=OFF
         -DLZ4_BUILD_CLI=OFF
         -DLZ4_SKIP_TESTS=ON
-    # Use the modern, generator-agnostic build command.
-    # The $<CONFIG> generator expression ensures the correct build type (Debug/Release) is passed down.
     BUILD_COMMAND   ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
     INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target install
     TEST_COMMAND ""
+    # By specifying SOURCE_DIR, we prevent ExternalProject from re-downloading.
+    DOWNLOAD_COMMAND ""
+    UPDATE_COMMAND ""
 )
  
-# Create an IMPORTED library target for lz4.
-# This acts as a placeholder for CMake, so it knows about the library at configure time.
-add_library(lz4_imported STATIC IMPORTED)
- 
-# Define the path to the library that ExternalProject will create. We use a
-# generator expression to handle different library names on different platforms.
-if(WIN32)
-    set(LZ4_LIBRARY_FILE ${LZ4_LIBRARY_DIR}/lz4_static.lib)
-else()
-    set(LZ4_LIBRARY_FILE ${LZ4_LIBRARY_DIR}/liblz4.a)
-endif()
-set_target_properties(lz4_imported PROPERTIES IMPORTED_LOCATION "${LZ4_LIBRARY_FILE}")
+# 4. Create a proper INTERFACE target to represent the built lz4 library.
+# This is the robust pattern that works on both Windows (MinGW) and Linux.
+add_library(lz4_lib INTERFACE)
+add_dependencies(lz4_lib lz4_external) # Crucial: lz4_lib depends on the external build finishing.
+
+target_include_directories(lz4_lib INTERFACE ${LZ4_INSTALL_DIR}/include)
+
+# Add the library search path. This adds the "-L" flag for the linker.
+target_link_directories(lz4_lib INTERFACE ${LZ4_INSTALL_DIR}/lib)
+
+# Tell the linker to find the 'lz4' library. This adds the "-llz4" flag.
+# The lz4 build script produces 'liblz4.a' on both MinGW and Linux, so 'lz4' is the correct name.
+target_link_libraries(lz4_lib INTERFACE lz4)
 
 # Define where stb_image.h will be stored locally
 set(STB_IMAGE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
@@ -246,12 +255,13 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WI
 # The target name provided by FetchContent for GLM is typically 'glm'.
 # Note: GLM, stb_image, and tinygltf are header-only, but we set up INTERFACE library targets for include management.
 
-# Add lz4 include directory. This is not checked for existence at configure time.
-target_include_directories(SimpleVulkanWindow PRIVATE ${LZ4_INCLUDE_DIR})
+# Link all libraries. By linking our modern `lz4_lib` target, CMake handles all
+# include paths, library paths, and build dependencies correctly.
+target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4_lib)
 
-# Link all libraries, including our imported lz4 target.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4_imported)
-add_dependencies(SimpleVulkanWindow lz4_external) # Ensure lz4 is built before SimpleVulkanWindow
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_link_libraries(SimpleVulkanWindow PRIVATE stdc++fs)
+endif()
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
