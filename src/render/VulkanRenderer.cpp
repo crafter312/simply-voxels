@@ -67,20 +67,28 @@ VulkanRenderer::~VulkanRenderer() {
     // Note: vkDeviceWaitIdle should be called before this destructor is invoked (e.g., in HelloVulkanApp::cleanup)
 
     // Destroy all per-chunk render data first. This will queue their Vulkan buffers for deletion.
-    destroyAllChunkRenderData();
+    // This now just clears the map. The BufferManager's destructor handles the pool cleanup.
+    m_chunkRenderData.clear();
 
     // Process any remaining items in deletion queues.
     // Assuming vkDeviceWaitIdle has been called externally or we'd call it here.
     std::cout << "VulkanRenderer Destructor: Processing final deletion queues..." << std::endl;
     for (size_t i = 0; i < m_deletionQueues.size(); ++i) {
         for (const auto& resource : m_deletionQueues[i]) {
-            if (resource.buffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.buffer, nullptr);
-            if (resource.memory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memory, nullptr);
+            // At shutdown, we only care about destroying full buffers (like wireframe).
+            // BufferRegions are part of the pools that the BufferManager will destroy entirely.
+            // We do not need to free them individually here.
+            if (resource.type == ResourceToDelete::Type::Buffer) {
+                if (resource.bufferHandle != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.bufferHandle, nullptr);
+                if (resource.memoryHandle != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memoryHandle, nullptr);
+            }
         }
         m_deletionQueues[i].clear();
     }
 
-    // Swap chain resources are cleaned up by swapChainManager's destructor
+    // Now that all sub-allocations are returned (or will be ignored as the pools are destroyed),
+    // we can safely destroy the buffer manager.
+    bufferManager.reset();
     // Descriptor set manager resources are cleaned up by its destructor
     descriptorSetManager.reset();
     resourceManager.reset(); // Clean up resource manager
@@ -132,10 +140,10 @@ VulkanRenderer::~VulkanRenderer() {
     }
 
     // Destroy wireframe buffers
-    if (m_wireframeVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBuffer, nullptr);
-    if (m_wireframeVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeVertexBufferMemory, nullptr);
-    if (m_wireframeIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBuffer, nullptr);
-    if (m_wireframeIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), m_wireframeIndexBufferMemory, nullptr);
+    // The wireframe buffers are now sub-allocated from pools managed by VulkanBufferManager.
+    // The manager's destructor is responsible for cleaning up the entire pool.
+    // We no longer need to manually destroy these buffers here.
+
     if (m_wireframePipeline != VK_NULL_HANDLE) vkDestroyPipeline(m_vulkanDeviceRef.getLogicalDevice(), m_wireframePipeline, nullptr);
     if (m_wireframePipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), m_wireframePipelineLayout, nullptr);
 
@@ -510,9 +518,12 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     for (const auto& pair : m_chunkRenderData) {
         const ChunkRenderData& chunkData = pair.second;
         if (chunkData.vertexBuffer != VK_NULL_HANDLE && chunkData.indexBuffer != VK_NULL_HANDLE && chunkData.indexCount > 0) {
-            VkBuffer vertexBuffers[] = {chunkData.vertexBuffer};
-            VkDeviceSize offsets[] = {0};
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            // Bind the one large vertex buffer. The offset is handled in the draw call.
+            VkBuffer vertexBuffers[] = { chunkData.vertexBuffer };
+            VkDeviceSize bindOffsets[] = { 0 }; // This offset is for the bind command itself, not the data within the buffer.
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, bindOffsets);
+
+            // Bind the one large index buffer. The offset is handled in the draw call.
             vkCmdBindIndexBuffer(commandBuffer, chunkData.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
             
             // Push model matrix for vertex shader
@@ -524,7 +535,10 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
                 sizeof(glm::mat4), // size
                 &chunkData.modelMatrix
             );
-            vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, 0, 0, 0); // firstIndex and vertexOffset are 0
+            // Use the offsets when drawing
+            uint32_t firstIndex = static_cast<uint32_t>(chunkData.indexOffset / sizeof(uint32_t));
+            int32_t vertexOffset = static_cast<int32_t>(chunkData.vertexOffset / sizeof(Vertex));
+            vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, firstIndex, vertexOffset, 0);
         }
     }
 
@@ -534,11 +548,15 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
         // Descriptor set for UBO (view/proj) is already bound from main pass
 
         VkBuffer wireframeVertexBuffers[] = {m_wireframeVertexBuffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, wireframeVertexBuffers, offsets);
+        VkDeviceSize bindOffsets[] = {0}; // This offset is for the vkCmdBindVertexBuffers command, not the draw call. It's always 0 for us.
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, wireframeVertexBuffers, bindOffsets);
         vkCmdBindIndexBuffer(commandBuffer, m_wireframeIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdPushConstants(commandBuffer, m_wireframePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_wireframeModelMatrix);
-        vkCmdDrawIndexed(commandBuffer, m_wireframeIndexCount, 1, 0, 0, 0);
+
+        // Use the offsets when drawing the wireframe
+        uint32_t firstIndex = static_cast<uint32_t>(m_wireframeIndexOffset / sizeof(uint32_t));
+        int32_t vertexOffset = static_cast<int32_t>(m_wireframeVertexOffset / sizeof(WireframeMesher::WireframeVertex));
+        vkCmdDrawIndexed(commandBuffer, m_wireframeIndexCount, 1, firstIndex, vertexOffset, 0); // Use calculated offsets
     }
 
     vkCmdEndRenderPass(commandBuffer);
@@ -551,13 +569,33 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 }
 
 void VulkanRenderer::drawFrame() {
+    // Wait for the resources of the current frame-in-flight to be available.
+    // This ensures we don't overwrite the command buffer or UBO while it's still in use.
     vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-    // Process deletions for the frame whose fence just signaled
+    uint32_t imageIndex;
+    VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreateSwapChainResources();
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("Failed to acquire swap chain image!");
+    }
+
+    // --- Corrected Deferred Deletion ---
+    // At the start of the frame, we have already waited on inFlightFences[currentFrame].
+    // This means the GPU has finished with the resources from the last time this frame index was used.
+    // It is now safe to process the deletion queue for the current frame index.
     for (const auto& resource : m_deletionQueues[currentFrame]) {
-        // std::cout << "Deleting buffer: " << resource.buffer << " memory: " << resource.memory << " for frame " << currentFrame << std::endl;
-        if (resource.buffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.buffer, nullptr);
-        if (resource.memory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memory, nullptr);
+        if (resource.type == ResourceToDelete::Type::VertexBufferRegion) {
+            bufferManager->freeVertexBuffer(resource.bufferHandle, resource.offset, resource.size);
+        } else if (resource.type == ResourceToDelete::Type::IndexBufferRegion) {
+            bufferManager->freeIndexBuffer(resource.bufferHandle, resource.offset, resource.size);
+        } else if (resource.type == ResourceToDelete::Type::Buffer) {
+            if (resource.bufferHandle != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.bufferHandle, nullptr);
+            if (resource.memoryHandle != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memoryHandle, nullptr);
+        }
     }
     m_deletionQueues[currentFrame].clear();
 
@@ -581,32 +619,24 @@ void VulkanRenderer::drawFrame() {
     // Update the wireframe for the targeted block
     updateTargetedBlockWireframe();
 
-    uint32_t imageIndex;
-    VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreateSwapChainResources();
-        return;
-    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        throw std::runtime_error("Failed to acquire swap chain image!");
-    }
-
-    // Check if a previous frame is using this image (i.e. there is its fence to wait on)
+    // After acquiring the image, we might have waited on an old fence.
+    // Now, mark the image as being in use by the *current* frame's fence.
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
         vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
     }
-    // Mark the image as now being in use by this frame's fence
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
-    // Update uniform buffer for the current frame *before* recording command buffer
+    // --- CRITICAL FIX ---
+    // All per-frame resources (UBO, descriptor sets, command buffers) must use the same index.
+    // The correct index is `currentFrame`, which corresponds to our set of in-flight resources.
+    // `imageIndex` is only for the swapchain image/framebuffer.
     updateUniformBuffer(currentFrame);
 
-    // Only reset the fence if we are submitting commands to it.
-    // This fence has been waited upon (top of drawFrame) and is now associated with imagesInFlight[imageIndex].
-    // It needs to be reset before being signaled by vkQueueSubmit.
+    // Reset the fence for the current frame, as we are about to submit work that will signal it.
     vkResetFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame]);
 
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+    // Record the command buffer for the current frame, telling it to render to the framebuffer of the acquired imageIndex.
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
     VkSubmitInfo submitInfo{};
@@ -618,8 +648,9 @@ void VulkanRenderer::drawFrame() {
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
-    // Signal only the per-image presentation semaphore.
-    // The inFlightFences[currentFrame] handles the frame-in-flight GPU completion.
+    
+    // When rendering to `imageIndex` is complete, we must signal the semaphore
+    // that corresponds to that specific image.
     VkSemaphore signalSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
     submitInfo.signalSemaphoreCount = 1; 
     submitInfo.pSignalSemaphores = signalSemaphores;
@@ -627,11 +658,10 @@ void VulkanRenderer::drawFrame() {
     if (vkQueueSubmit(m_vulkanDeviceRef.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
-
+    
     VkPresentInfoKHR presentInfo{}; // Get handle from manager
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    // Wait on the per-image presentation semaphore
     VkSemaphore presentWaitSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
     presentInfo.pWaitSemaphores = presentWaitSemaphores;    VkSwapchainKHR swapChains[] = {swapChainManager->getSwapChainHandle()}; // Get handle from manager
     presentInfo.swapchainCount = 1;
@@ -673,8 +703,14 @@ void VulkanRenderer::recreateSwapChainResources() {
     std::cout << "RecreateSwapChainResources: Processing all deletion queues..." << std::endl;
     for (size_t i = 0; i < m_deletionQueues.size(); ++i) {
         for (const auto& resource : m_deletionQueues[i]) {
-            if (resource.buffer != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.buffer, nullptr);
-            if (resource.memory != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memory, nullptr);
+            if (resource.type == ResourceToDelete::Type::Buffer) {
+                if (resource.bufferHandle != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.bufferHandle, nullptr);
+                if (resource.memoryHandle != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memoryHandle, nullptr);
+            } else if (resource.type == ResourceToDelete::Type::VertexBufferRegion) {
+                bufferManager->freeVertexBuffer(resource.bufferHandle, resource.offset, resource.size);
+            } else if (resource.type == ResourceToDelete::Type::IndexBufferRegion) {
+                bufferManager->freeIndexBuffer(resource.bufferHandle, resource.offset, resource.size);
+            }
         }
         m_deletionQueues[i].clear();
     }
@@ -779,29 +815,20 @@ void VulkanRenderer::recreateSwapChainResources() {
 
 void VulkanRenderer::destroyChunkRenderData(ChunkRenderData& data) {
     if (data.vertexBuffer != VK_NULL_HANDLE) {
-        m_deletionQueues[currentFrame].push_back({data.vertexBuffer, data.vertexBufferMemory});
-        // std::cout << "Queueing VB for deletion: " << data.vertexBuffer << " on frame " << currentFrame << std::endl;
+        // Queue the REGION for deletion, not the whole buffer.
+        m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::VertexBufferRegion, data.vertexBuffer, VK_NULL_HANDLE, data.vertexOffset, data.vertexSize});
         data.vertexBuffer = VK_NULL_HANDLE;
-        data.vertexBufferMemory = VK_NULL_HANDLE;
     }
     if (data.indexBuffer != VK_NULL_HANDLE) {
-        m_deletionQueues[currentFrame].push_back({data.indexBuffer, data.indexBufferMemory});
-        // std::cout << "Queueing IB for deletion: " << data.indexBuffer << " on frame " << currentFrame << std::endl;
+        // Queue the REGION for deletion.
+        m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::IndexBufferRegion, data.indexBuffer, VK_NULL_HANDLE, data.indexOffset, data.indexSize});
         data.indexBuffer = VK_NULL_HANDLE;
-        data.indexBufferMemory = VK_NULL_HANDLE;
     }
     data.indexCount = 0;
 }
 
-void VulkanRenderer::destroyAllChunkRenderData() {
-    for (auto& pair : m_chunkRenderData) {
-        destroyChunkRenderData(pair.second);
-    }
-    m_chunkRenderData.clear();
-}
-
 // This function now takes MeshData directly, to be called when an async task completes.
-void VulkanRenderer::createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ModelData& meshData) {
+void VulkanRenderer::createChunkRenderDataFromMeshData(VkCommandBuffer& transferCommandBuffer, const glm::ivec3& chunkCoord, const ModelData& meshData) {
     if (!bufferManager || !resourceManager) {
         std::cerr << "VulkanRenderer::createChunkRenderDataFromMeshData: Missing bufferManager or resourceManager." << std::endl;
         return;
@@ -818,8 +845,13 @@ void VulkanRenderer::createChunkRenderDataFromMeshData(const glm::ivec3& chunkCo
 
     if (!meshData.vertices.empty() && !meshData.indices.empty()) {
         ChunkRenderData& renderData = m_chunkRenderData[chunkCoord]; // Creates if not exists, or gets reference
-        bufferManager->createVertexBuffer(meshData.vertices, renderData.vertexBuffer, renderData.vertexBufferMemory);
-        bufferManager->createIndexBuffer(meshData.indices, renderData.indexBuffer, renderData.indexBufferMemory);
+        renderData.vertexSize = sizeof(meshData.vertices[0]) * meshData.vertices.size();
+        renderData.indexSize = sizeof(meshData.indices[0]) * meshData.indices.size();
+
+        // Allocate regions from the buffer manager
+        renderData.vertexBuffer = bufferManager->createVertexBuffer(transferCommandBuffer, meshData.vertices, renderData.vertexOffset);
+        renderData.indexBuffer = bufferManager->createIndexBuffer(transferCommandBuffer, meshData.indices, renderData.indexOffset);
+        
         renderData.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
         // Calculate the chunk's position relative to the current rebase origin
@@ -849,11 +881,47 @@ void VulkanRenderer::processChunkChanges() {
     // vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Kept for now for safety, but a target for future optimization.
     if (!m_threadManager) return;
 
+    bool hasChunkMeshResults = m_threadManager->hasMeshResults();
+
+    // --- Batch Upload Logic ---
+    // A batch operation is needed if we have new chunk meshes OR if the wireframe needs an update.
+    VkCommandBuffer transferCommandBuffer = VK_NULL_HANDLE;
+    if (hasChunkMeshResults || m_wireframeMeshNeedsUpdate) {
+        transferCommandBuffer = bufferManager->beginTransferCommands();
+    }
+
     // --- Stage 1: Process completed meshes from the thread manager ---
-    while (auto resultOpt = m_threadManager->getMeshResult()) {
-        const auto& result = *resultOpt;
-        createChunkRenderDataFromMeshData(result.chunkCoord, result.meshData);
-        m_meshingTasksInProgress.erase(result.chunkCoord);
+    if (hasChunkMeshResults) {
+        while (auto resultOpt = m_threadManager->getMeshResult()) {
+            const auto& result = *resultOpt;
+            createChunkRenderDataFromMeshData(transferCommandBuffer, result.chunkCoord, result.meshData); // Pass by reference
+            m_meshingTasksInProgress.erase(result.chunkCoord);
+        }
+    }
+
+    // --- Stage 1.5: Process wireframe update if needed, using the same command buffer ---
+    if (m_wireframeMeshNeedsUpdate && transferCommandBuffer != VK_NULL_HANDLE) {
+        // This logic is moved from updateTargetedBlockWireframe to be part of the batch.
+        const auto& targetedBlockInfoOpt = m_playerRef.getCurrentTargetedBlockInfo();
+        if (targetedBlockInfoOpt && targetedBlockInfoOpt->hit) {
+            uint16_t blockID = m_world.getBlockID(targetedBlockInfoOpt->blockPosition);
+            const Block* blockDef = m_blockRegistryRef.getBlockDefinition(blockID);
+            Physics::VoxelShape shapeToMesh = (blockDef && blockDef->getCustomShape())
+                                              ? *(blockDef->getCustomShape())
+                                              : Physics::VoxelShape::createCuboidShape(0.0f, 0.0f, 0.0f, 16.0f, 16.0f, 16.0f);
+
+            WireframeMesher::WireframeMeshData meshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
+
+            if (!meshData.vertices.empty() && !meshData.indices.empty()) {
+                m_wireframeVertexBuffer = bufferManager->createVertexBuffer(transferCommandBuffer, meshData.vertices, m_wireframeVertexOffset);
+                m_wireframeIndexBuffer = bufferManager->createIndexBuffer(transferCommandBuffer, meshData.indices, m_wireframeIndexOffset);
+            }
+        }
+        m_wireframeMeshNeedsUpdate = false; // Mark as updated
+    }
+
+    if (transferCommandBuffer != VK_NULL_HANDLE) {
+        bufferManager->endAndSubmitTransferCommands(transferCommandBuffer);
     }
 
     // --- Stage 2: Submit new meshing jobs to the thread manager ---
@@ -899,15 +967,14 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
             
             // vkDeviceWaitIdle removed. Queue wireframe buffers for deferred deletion.
             if (m_wireframeVertexBuffer != VK_NULL_HANDLE) {
-                m_deletionQueues[currentFrame].push_back({m_wireframeVertexBuffer, m_wireframeVertexBufferMemory});
-                m_wireframeVertexBuffer = VK_NULL_HANDLE;
-                m_wireframeVertexBufferMemory = VK_NULL_HANDLE;
+                // Queue the old REGION for deletion
+                m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::VertexBufferRegion, m_wireframeVertexBuffer, VK_NULL_HANDLE, m_wireframeVertexOffset, m_wireframeVertexSize});
             }
             if (m_wireframeIndexBuffer != VK_NULL_HANDLE) {
-                m_deletionQueues[currentFrame].push_back({m_wireframeIndexBuffer, m_wireframeIndexBufferMemory});
-                m_wireframeIndexBuffer = VK_NULL_HANDLE;
-                m_wireframeIndexBufferMemory = VK_NULL_HANDLE;
+                m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::IndexBufferRegion, m_wireframeIndexBuffer, VK_NULL_HANDLE, m_wireframeIndexOffset, m_wireframeIndexSize});
             }
+            m_wireframeVertexBuffer = VK_NULL_HANDLE;
+            m_wireframeIndexBuffer = VK_NULL_HANDLE;
             m_wireframeIndexCount = 0;
         }
         return; // Early return as there's no wireframe to update or draw
@@ -926,6 +993,9 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
 
     // --- Proceed with updating the wireframe mesh and buffers ---
     m_lastTargetedBlockPos = targetedBlockInfo.blockPosition;
+    m_wireframeMeshNeedsUpdate = true; // Set the flag so processChunkChanges will handle the update.
+
+    // The rest of this function now only queues old buffers for deletion and sets the model matrix.
 
     // Query the World for the block ID using the position from RaycastResult
     uint16_t blockID_from_world = m_world.getBlockID(targetedBlockInfo.blockPosition);
@@ -939,31 +1009,23 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
         shapeToMesh = Physics::VoxelShape::createCuboidShape(0.0f, 0.0f, 0.0f, 16.0f, 16.0f, 16.0f);
     }
 
-    WireframeMesher::WireframeMeshData meshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
-
-    // vkDeviceWaitIdle removed. BufferManager handles staging for creation.
-    // Old buffers are queued for deferred deletion.
-
-    // Destroy old buffers
+    // Queue old buffer regions for deletion
     if (m_wireframeVertexBuffer != VK_NULL_HANDLE) {
-        m_deletionQueues[currentFrame].push_back({m_wireframeVertexBuffer, m_wireframeVertexBufferMemory});
-        m_wireframeVertexBuffer = VK_NULL_HANDLE;
-        m_wireframeVertexBufferMemory = VK_NULL_HANDLE;
+        m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::VertexBufferRegion, m_wireframeVertexBuffer, VK_NULL_HANDLE, m_wireframeVertexOffset, m_wireframeVertexSize});
     }
-    // m_wireframeVertexBufferMemory is handled with m_wireframeVertexBuffer
-
     if (m_wireframeIndexBuffer != VK_NULL_HANDLE) {
-        m_deletionQueues[currentFrame].push_back({m_wireframeIndexBuffer, m_wireframeIndexBufferMemory});
-        m_wireframeIndexBuffer = VK_NULL_HANDLE;
-        m_wireframeIndexBufferMemory = VK_NULL_HANDLE;
+        m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::IndexBufferRegion, m_wireframeIndexBuffer, VK_NULL_HANDLE, m_wireframeIndexOffset, m_wireframeIndexSize});
     }
-    // m_wireframeIndexBufferMemory is handled with m_wireframeIndexBuffer
-
-    m_wireframeIndexCount = 0;
-
+    
+    // Generate mesh data to get the new index count for the next draw call.
+    WireframeMesher::WireframeMeshData meshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
     if (!meshData.vertices.empty() && !meshData.indices.empty()) {
-        bufferManager->createVertexBuffer(meshData.vertices, m_wireframeVertexBuffer, m_wireframeVertexBufferMemory);
-        bufferManager->createIndexBuffer(meshData.indices, m_wireframeIndexBuffer, m_wireframeIndexBufferMemory);
+        // Store the size of the data we are about to allocate
+        m_wireframeVertexSize = sizeof(meshData.vertices[0]) * meshData.vertices.size();
+        m_wireframeIndexSize = sizeof(meshData.indices[0]) * meshData.indices.size();
+
+        // Create new regions using the sub-allocator
+
         m_wireframeIndexCount = static_cast<uint32_t>(meshData.indices.size());
     }
 
@@ -974,5 +1036,5 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
     glm::i64vec3 relativeBlockPos_i64 = worldBlockPos_i64 - rebaseOriginWorldPos_i64;
     m_wireframeModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(relativeBlockPos_i64));
     
-    m_wireframeMeshNeedsUpdate = false;
+    // m_wireframeMeshNeedsUpdate = false; // This is now set to true above and cleared in processChunkChanges
 }

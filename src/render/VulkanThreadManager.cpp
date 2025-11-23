@@ -54,6 +54,11 @@ std::optional<VulkanThreadManager::MeshResult> VulkanThreadManager::getMeshResul
     return result;
 }
 
+bool VulkanThreadManager::hasMeshResults() {
+    std::unique_lock<std::mutex> lock(m_resultsQueueMutex);
+    return !m_meshResultsQueue.empty();
+}
+
 void VulkanThreadManager::mesherThreadLoop() {
     while (!m_stopMesherThread.load()) {
         glm::ivec3 chunkCoordToMesh;

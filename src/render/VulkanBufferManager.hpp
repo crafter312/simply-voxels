@@ -14,22 +14,27 @@ public:
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
                       VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 
-    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+    // Modified to take an external command buffer
+    void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);
 
-    void createVertexBuffer(const std::vector<Vertex>& vertices,
-                            VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory);
+    VkBuffer createVertexBuffer(VkCommandBuffer& commandBuffer, const std::vector<Vertex>& vertices,
+                                VkDeviceSize& outVertexOffset);
 
     // Overload for WireframeVertex data
-    void createVertexBuffer(const std::vector<WireframeMesher::WireframeVertex>& vertices,
-                            VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory);
+    VkBuffer createVertexBuffer(VkCommandBuffer& commandBuffer, const std::vector<WireframeMesher::WireframeVertex>& vertices,
+                                VkDeviceSize& outVertexOffset);
 
-    void createIndexBuffer(const std::vector<uint32_t>& indices, // Changed from uint16_t to uint32_t
-                           VkBuffer& outIndexBuffer, VkDeviceMemory& outIndexBufferMemory);
+    VkBuffer createIndexBuffer(VkCommandBuffer& commandBuffer, const std::vector<uint32_t>& indices,
+                               VkDeviceSize& outIndexOffset);
 
     void createUniformBuffers(uint32_t numBuffers, VkDeviceSize bufferSize,
                               std::vector<VkBuffer>& outUniformBuffers,
                               std::vector<VkDeviceMemory>& outUniformBuffersMemory,
                               std::vector<void*>& outUniformBuffersMapped);
+
+    // New methods for freeing sub-allocated regions
+    void freeVertexBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size);
+    void freeIndexBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size);
 
     // New method for creating depth buffer resources
     void createDepthResources(VkExtent2D swapChainExtent,
@@ -38,15 +43,58 @@ public:
                               VkImageView& outDepthImageView,
                               VkFormat& outDepthFormat); // Output: the chosen depth format
 
+    // --- New methods for managing a transfer command buffer ---
+    VkCommandBuffer beginTransferCommands();
+    void endAndSubmitTransferCommands(VkCommandBuffer commandBuffer);
+    void waitForTransfersToFinish();
+
+
 private:
     VkDevice deviceRef;
     VkPhysicalDevice physicalDeviceRef;
     VkCommandPool commandPoolRef;
     VkQueue graphicsQueueRef;
 
+    // --- Reusable Staging Buffer ---
+    VkBuffer m_stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_stagingBufferMemory = VK_NULL_HANDLE;
+    VkDeviceSize m_stagingBufferSize = 0;
+    void* m_stagingBufferMapped = nullptr;
+    VkDeviceSize m_stagingBufferCurrentOffset = 0; // New: Tracks current position in staging buffer for batching
+
+    VkFence m_transferFence = VK_NULL_HANDLE; // Fence to manage staging buffer reuse for transfers
+
+    // --- New members for sub-allocation ---
+
+    // A simple struct to track free regions in a ManagedBuffer
+    struct FreeBlock {
+        VkDeviceSize offset;
+        VkDeviceSize size;
+    };
+
+    // Represents a large, managed GPU buffer from which smaller allocations are made.
+    struct ManagedBuffer {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VkDeviceSize totalSize = 0;
+        VkBufferUsageFlags usage = 0;
+        VkDeviceSize currentOffset = 0; // For bump allocation
+        std::vector<FreeBlock> freeList; // For freed block reuse
+        // Debug: track active allocations (offset/size) to detect overlaps in debug runs
+        std::vector<FreeBlock> activeAllocations;
+    };
+
+    std::vector<ManagedBuffer> m_vertexBufferPool;
+    std::vector<ManagedBuffer> m_indexBufferPool;
+
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-    VkCommandBuffer beginSingleTimeCommands();
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+    // VkCommandBuffer beginSingleTimeCommands(); // Replaced by beginTransferCommands
+    // void endSingleTimeCommands(VkCommandBuffer commandBuffer); // Replaced by endAndSubmitTransferCommands
+
+    VkBuffer allocateBufferRegion(VkDeviceSize size, VkDeviceSize& outOffset, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage);
+    void createNewManagedBuffer(VkDeviceSize size, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage);
+    void freeBufferRegion(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, std::vector<ManagedBuffer>& pool);
+    void resizeStagingBuffer(VkDeviceSize newSize); // Will be made private in implementation but kept here for diff clarity
 
     // Helper methods for image creation
     void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,

@@ -51,9 +51,13 @@ struct UniformBufferObject {
 };
 
 // --- Structure for Deferred Deletion ---
+// Updated to handle both full buffers and sub-allocated buffer regions.
 struct ResourceToDelete {
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
+    enum class Type { Buffer, VertexBufferRegion, IndexBufferRegion } type;
+    VkBuffer bufferHandle = VK_NULL_HANDLE;
+    VkDeviceMemory memoryHandle = VK_NULL_HANDLE; // For old-style full buffer deletion
+    VkDeviceSize offset = 0; // For BufferRegion
+    VkDeviceSize size = 0;   // For BufferRegion
 };
 
 // Forward declare VulkanSwapChain
@@ -120,12 +124,15 @@ private:
 
     // --- Aggregated Chunk Mesh Buffers ---
     struct ChunkRenderData {
-        VkBuffer vertexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
-        VkBuffer indexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;
+        VkBuffer vertexBuffer = VK_NULL_HANDLE; // Handle to the large pool buffer
+        VkDeviceSize vertexOffset = 0;
+        VkDeviceSize vertexSize = 0;
+
+        VkBuffer indexBuffer = VK_NULL_HANDLE; // Handle to the large pool buffer
+        VkDeviceSize indexOffset = 0;
+        VkDeviceSize indexSize = 0;
+
         uint32_t indexCount;
-        // No need for firstIndex or vertexOffset with per-chunk buffers
         glm::mat4 modelMatrix; // Model matrix for this chunk
     };
     std::map<glm::ivec3, ChunkRenderData, struct IVec3Comparator> m_chunkRenderData; // Map chunk coordinates to render data
@@ -136,7 +143,6 @@ private:
 
     // Helper to destroy chunk buffers
     void destroyChunkRenderData(ChunkRenderData& data);
-    void destroyAllChunkRenderData();
 
     // --- Graphics Pipeline ---
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
@@ -146,9 +152,11 @@ private:
     VkPipelineLayout m_wireframePipelineLayout = VK_NULL_HANDLE;
     VkPipeline m_wireframePipeline = VK_NULL_HANDLE;
     VkBuffer m_wireframeVertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_wireframeVertexBufferMemory = VK_NULL_HANDLE;
+    VkDeviceSize m_wireframeVertexOffset = 0;
+    VkDeviceSize m_wireframeVertexSize = 0;
     VkBuffer m_wireframeIndexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_wireframeIndexBufferMemory = VK_NULL_HANDLE;
+    VkDeviceSize m_wireframeIndexOffset = 0;
+    VkDeviceSize m_wireframeIndexSize = 0;
     uint32_t m_wireframeIndexCount = 0;
     glm::mat4 m_wireframeModelMatrix; // Model matrix to position the wireframe
     std::optional<glm::i64vec3> m_lastTargetedBlockPos; // To track if the targeted block changed
@@ -181,7 +189,7 @@ private:
     // Renamed and modified to process changes
     void processChunkChanges();
     // void createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk); // Old synchronous version
-    void createChunkRenderDataFromMeshData(const glm::ivec3& chunkCoord, const ModelData& meshData); // New version
+    void createChunkRenderDataFromMeshData(VkCommandBuffer& transferCommandBuffer, const glm::ivec3& chunkCoord, const ModelData& meshData);
     void updateTargetedBlockWireframe(); // New function for wireframe
 };
 

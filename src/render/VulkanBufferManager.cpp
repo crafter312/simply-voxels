@@ -1,17 +1,265 @@
 #include "VulkanBufferManager.hpp"
 #include <stdexcept>
 #include <cstring> // For memcpy
+#include <algorithm> // For std::sort and std::max
+#include <iostream> // For std::cerr (debugging)
 
 VulkanBufferManager::VulkanBufferManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue graphicsQueue)
     : deviceRef(device), physicalDeviceRef(physicalDevice), commandPoolRef(commandPool), graphicsQueueRef(graphicsQueue) {
     if (deviceRef == VK_NULL_HANDLE || physicalDeviceRef == VK_NULL_HANDLE || commandPoolRef == VK_NULL_HANDLE || graphicsQueueRef == VK_NULL_HANDLE) {
         throw std::runtime_error("VulkanBufferManager received null handles during construction!");
     }
+
+    // --- Initialize Buffer Pools ---
+    // Define a large size for our pooled buffers, e.g., 256MB
+    const VkDeviceSize poolSize = 256 * 1024 * 1024;
+    createNewManagedBuffer(poolSize, m_vertexBufferPool, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    createNewManagedBuffer(poolSize, m_indexBufferPool, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+
+    // --- Initialize reusable staging buffer ---
+    m_stagingBufferSize = 16 * 1024 * 1024; // 16MB initial size
+    createBuffer(m_stagingBufferSize,
+                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 m_stagingBuffer,
+                 m_stagingBufferMemory);
+
+    // Create the fence for transfer operations, initially in a signaled state
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Start as signaled so the first transfer doesn't wait
+    if (vkCreateFence(deviceRef, &fenceInfo, nullptr, &m_transferFence) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create transfer fence!");
+    }
+
+    vkMapMemory(deviceRef, m_stagingBufferMemory, 0, m_stagingBufferSize, 0, &m_stagingBufferMapped);
 }
 
 VulkanBufferManager::~VulkanBufferManager() {
-    // This manager doesn't own the buffers/memory it creates for VulkanRenderer,
-    // so VulkanRenderer is responsible for their destruction.
+    if (m_stagingBufferMapped) {
+        vkUnmapMemory(deviceRef, m_stagingBufferMemory);
+    }
+    vkDestroyBuffer(deviceRef, m_stagingBuffer, nullptr);
+    vkFreeMemory(deviceRef, m_stagingBufferMemory, nullptr);
+
+    for (auto& managedBuffer : m_vertexBufferPool) {
+        vkDestroyBuffer(deviceRef, managedBuffer.buffer, nullptr);
+        vkFreeMemory(deviceRef, managedBuffer.memory, nullptr);
+    }
+    for (auto& managedBuffer : m_indexBufferPool) {
+        vkDestroyBuffer(deviceRef, managedBuffer.buffer, nullptr);
+        vkFreeMemory(deviceRef, managedBuffer.memory, nullptr);
+    }
+    if (m_transferFence != VK_NULL_HANDLE) {
+        vkDestroyFence(deviceRef, m_transferFence, nullptr);
+        m_transferFence = VK_NULL_HANDLE;
+    }
+}
+
+void VulkanBufferManager::createNewManagedBuffer(VkDeviceSize size, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage) {
+    ManagedBuffer newManagedBuffer;
+    newManagedBuffer.totalSize = size;
+
+    // Ensure all buffers in a pool have the same usage flags.
+    // If the pool isn't empty, use the usage from the first buffer. Otherwise, use the provided usage.
+    if (!pool.empty()) {
+        newManagedBuffer.usage = pool.front().usage;
+    } else {
+        // All our mesh buffers need to be transfer destinations.
+        newManagedBuffer.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage;
+    }
+
+    createBuffer(newManagedBuffer.totalSize,
+                 newManagedBuffer.usage,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                 newManagedBuffer.buffer,
+                 newManagedBuffer.memory);
+
+    pool.push_back(newManagedBuffer);
+}
+
+void VulkanBufferManager::freeBufferRegion(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, std::vector<ManagedBuffer>& pool) {
+    for (auto& managedBuffer : pool) {
+        if (managedBuffer.buffer == buffer) {
+            // Found the right ManagedBuffer. Add a new free block.
+            auto& freeList = managedBuffer.freeList;
+            freeList.push_back({offset, size});
+
+            // Sort by offset to make merging easier.
+            std::sort(freeList.begin(), freeList.end(), [](const FreeBlock& a, const FreeBlock& b) {
+                return a.offset < b.offset;
+            });
+
+            // --- Corrected Merge Logic ---
+            // The previous in-place erase loop was buggy. A safer approach is to build a new merged list.
+            if (freeList.size() > 1) {
+                std::vector<FreeBlock> mergedList;
+                mergedList.push_back(freeList[0]);
+
+                for (size_t i = 1; i < freeList.size(); ++i) {
+                    FreeBlock& last = mergedList.back();
+                    const FreeBlock& current = freeList[i];
+
+                    if (last.offset + last.size >= current.offset) {
+                        // Merge current into last
+                        VkDeviceSize newEnd = std::max(last.offset + last.size, current.offset + current.size);
+                        last.size = newEnd - last.offset;
+                    } else {
+                        // No overlap, just add the new block
+                        mergedList.push_back(current);
+                    }
+                }
+                freeList = std::move(mergedList); // Replace old list with the new merged one
+            }
+            // Debug: remove the allocation record matching this freed region
+            for (auto itAlloc = managedBuffer.activeAllocations.begin(); itAlloc != managedBuffer.activeAllocations.end(); ++itAlloc) {
+                if (itAlloc->offset == offset && itAlloc->size == size) {
+                    managedBuffer.activeAllocations.erase(itAlloc);
+                    break;
+                }
+            }
+            return; // Done
+        }
+    }
+    // If we get here, the buffer handle was not found in this specific pool.
+    // This is not an error, as we might be trying to free a vertex buffer from the index pool, or vice-versa.
+    // Simply return.
+}
+
+void VulkanBufferManager::freeVertexBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
+    freeBufferRegion(buffer, offset, size, m_vertexBufferPool);
+}
+
+void VulkanBufferManager::freeIndexBuffer(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
+    freeBufferRegion(buffer, offset, size, m_indexBufferPool);
+}
+
+VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSize& outOffset, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage) {
+    // Vulkan has alignment requirements for buffer offsets. 256 is a common and safe alignment.
+    const VkDeviceSize alignment = 256;
+
+    for (auto& managedBuffer : pool) {
+        // --- 1. Check the free list for a suitable block (First-Fit) ---
+        for (auto it = managedBuffer.freeList.begin(); it != managedBuffer.freeList.end(); ++it) {
+            // Copy the block data locally to avoid holding a reference into the vector
+            // because we may mutate the vector (swap/pop) below which would invalidate
+            // references/iterators.
+            FreeBlock block = *it;
+
+            // Align the start of the free block's offset
+            VkDeviceSize alignedOffset = (block.offset + alignment - 1) & ~(alignment - 1);
+            VkDeviceSize alignmentPadding = alignedOffset - block.offset;
+
+            if (block.size >= size + alignmentPadding) {
+                // This block is large enough.
+                outOffset = alignedOffset;
+
+                VkDeviceSize tailOffset = alignedOffset + size;
+                VkDeviceSize tailSize = (block.offset + block.size) - tailOffset;
+
+                // Remove the old free block and insert any leading/tailing fragments to
+                // keep the free list in a sensible order. Using erase/insert keeps the
+                // list deterministic and avoids surprises from swapping with back().
+                size_t index = static_cast<size_t>(std::distance(managedBuffer.freeList.begin(), it));
+                managedBuffer.freeList.erase(managedBuffer.freeList.begin() + index);
+
+                if (alignmentPadding > 0) {
+                    // Insert leading fragment at the original position
+                    managedBuffer.freeList.insert(managedBuffer.freeList.begin() + index, {block.offset, alignmentPadding});
+                    ++index; // Keep index pointing after the inserted leading fragment for tail insert
+                }
+
+                if (tailSize > 16) { // Use a threshold to avoid tiny fragments
+                    managedBuffer.freeList.insert(managedBuffer.freeList.begin() + index, {tailOffset, tailSize});
+                }
+
+                // Debug: ensure we do not overlap an existing active allocation
+                for (const auto& a : managedBuffer.activeAllocations) {
+                    VkDeviceSize aStart = a.offset;
+                    VkDeviceSize aEnd = a.offset + a.size;
+                    VkDeviceSize newStart = outOffset;
+                    VkDeviceSize newEnd = outOffset + size;
+                    if (!(newEnd <= aStart || newStart >= aEnd)) {
+                        std::cerr << "Allocation overlap detected in free-list path: new[" << newStart << "," << newEnd << "] overlaps existing[" << aStart << "," << aEnd << "]\n";
+                        throw std::runtime_error("Detected overlapping allocation (debug)");
+                    }
+                }
+                managedBuffer.activeAllocations.push_back({outOffset, size});
+                return managedBuffer.buffer;
+            }
+        }
+
+        // --- 2. If no free block found, use the bump allocator ---
+        VkDeviceSize alignedBumpOffset = (managedBuffer.currentOffset + alignment - 1) & ~(alignment - 1);
+
+            if (alignedBumpOffset + size <= managedBuffer.totalSize) {
+            // We found space at the end of the buffer
+            outOffset = alignedBumpOffset;
+            managedBuffer.currentOffset = alignedBumpOffset + size;
+                // Debug: ensure we do not overlap an existing active allocation
+                for (const auto& a : managedBuffer.activeAllocations) {
+                    VkDeviceSize aStart = a.offset;
+                    VkDeviceSize aEnd = a.offset + a.size;
+                    VkDeviceSize newStart = outOffset;
+                    VkDeviceSize newEnd = outOffset + size;
+                    if (!(newEnd <= aStart || newStart >= aEnd)) {
+                        std::cerr << "Allocation overlap detected in bump path: new[" << newStart << "," << newEnd << "] overlaps existing[" << aStart << "," << aEnd << "]\n";
+                        throw std::runtime_error("Detected overlapping allocation (debug)");
+                    }
+                }
+                managedBuffer.activeAllocations.push_back({outOffset, size});
+                return managedBuffer.buffer;
+        }
+    }
+
+    // --- 3. If no space anywhere in existing buffers, create a new ManagedBuffer ---
+    const VkDeviceSize defaultPoolSize = 256 * 1024 * 1024;
+    VkDeviceSize newPoolSize = std::max(defaultPoolSize, size);
+    createNewManagedBuffer(newPoolSize, pool, usage);
+
+    // Allocate from the beginning of the new buffer
+    // The offset is 0, which is always aligned.
+    ManagedBuffer& newBuffer = pool.back(); // Get a reference to the new buffer
+    outOffset = 0;
+    // Align the bump offset for the new buffer
+    VkDeviceSize alignedSize = (size + alignment - 1) & ~(alignment - 1);
+    newBuffer.currentOffset = alignedSize;
+
+    // Debug: ensure no overlap in the new buffer
+    for (const auto& a : newBuffer.activeAllocations) {
+        VkDeviceSize aStart = a.offset;
+        VkDeviceSize aEnd = a.offset + a.size;
+        VkDeviceSize newStart = outOffset;
+        VkDeviceSize newEnd = outOffset + size;
+        if (!(newEnd <= aStart || newStart >= aEnd)) {
+            std::cerr << "Allocation overlap detected in new-buffer path: new[" << newStart << "," << newEnd << "] overlaps existing[" << aStart << "," << aEnd << "]\n";
+            throw std::runtime_error("Detected overlapping allocation (debug)");
+        }
+    }
+    newBuffer.activeAllocations.push_back({outOffset, size});
+
+    // It's important to return the buffer from the back of the vector, which is the one we just added.
+    return newBuffer.buffer;
+}
+
+void VulkanBufferManager::resizeStagingBuffer(VkDeviceSize newSize) {
+    // Wait for any pending copies using the graphics queue to finish.
+    // Using vkQueueWaitIdle is safer than vkDeviceWaitIdle, especially during shutdown.
+    vkQueueWaitIdle(graphicsQueueRef);
+
+    // Cleanup old buffer
+    vkUnmapMemory(deviceRef, m_stagingBufferMemory);
+    vkDestroyBuffer(deviceRef, m_stagingBuffer, nullptr);
+    vkFreeMemory(deviceRef, m_stagingBufferMemory, nullptr);
+
+    // Create new, larger buffer
+    m_stagingBufferSize = newSize;
+    createBuffer(m_stagingBufferSize,
+                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 m_stagingBuffer,
+                 m_stagingBufferMemory);
+    vkMapMemory(deviceRef, m_stagingBufferMemory, 0, m_stagingBufferSize, 0, &m_stagingBufferMapped);
 }
 
 uint32_t VulkanBufferManager::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -51,8 +299,18 @@ void VulkanBufferManager::createBuffer(VkDeviceSize size, VkBufferUsageFlags usa
     vkBindBufferMemory(deviceRef, buffer, bufferMemory, 0);
 }
 
-VkCommandBuffer VulkanBufferManager::beginSingleTimeCommands() {
+VkCommandBuffer VulkanBufferManager::beginTransferCommands() {
+    // Wait for the *previous* transfer to finish before we start a new one.
+    // This ensures we don't overwrite the staging buffer while it's still being read by the GPU.
+    // The timeout is set to a huge value to effectively wait indefinitely.
+    vkWaitForFences(deviceRef, 1, &m_transferFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(deviceRef, 1, &m_transferFence);
+    
+    // Reset the staging buffer offset for a new batch of transfers.
+    m_stagingBufferCurrentOffset = 0;
+
     VkCommandBufferAllocateInfo allocInfo{};
+    // This is now just a helper to allocate and begin a command buffer.
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandPool = commandPoolRef;
@@ -69,7 +327,7 @@ VkCommandBuffer VulkanBufferManager::beginSingleTimeCommands() {
     return commandBuffer;
 }
 
-void VulkanBufferManager::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
+void VulkanBufferManager::endAndSubmitTransferCommands(VkCommandBuffer commandBuffer) {
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo{};
@@ -77,95 +335,137 @@ void VulkanBufferManager::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    vkQueueSubmit(graphicsQueueRef, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(graphicsQueueRef);
+    // Submit the command buffer and signal m_transferFence when it's done.
+    // The next call to beginTransferCommands will wait on this fence.
+    vkQueueSubmit(graphicsQueueRef, 1, &submitInfo, m_transferFence);
+
+    // CRITICAL FIX: We must wait for this transfer to complete before freeing the command buffer.
+    // Not waiting here caused a deadlock, as the command buffer could be freed while in use.
+    // This also ensures that by the time this function returns, the data is on the GPU.
+    vkWaitForFences(deviceRef, 1, &m_transferFence, VK_TRUE, UINT64_MAX);
 
     vkFreeCommandBuffers(deviceRef, commandPoolRef, 1, &commandBuffer);
 }
 
-void VulkanBufferManager::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+void VulkanBufferManager::waitForTransfersToFinish() {
+    // This function can be called during cleanup or before operations that
+    // need to ensure all pending transfers are complete.
+    if (m_transferFence != VK_NULL_HANDLE) {
+        vkWaitForFences(deviceRef, 1, &m_transferFence, VK_TRUE, UINT64_MAX);
+    }
+}
 
+
+void VulkanBufferManager::copyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size) {
     VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = srcOffset;
+    copyRegion.dstOffset = dstOffset;
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    endSingleTimeCommands(commandBuffer);
 }
 
-void VulkanBufferManager::createVertexBuffer(const std::vector<Vertex>& vertices, VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory) {
+VkBuffer VulkanBufferManager::createVertexBuffer(VkCommandBuffer& commandBuffer, const std::vector<Vertex>& vertices, VkDeviceSize& outVertexOffset) {
+    if (vertices.empty()) {
+        outVertexOffset = 0;
+        return VK_NULL_HANDLE;
+    }
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    // Get the current offset in the staging buffer before this copy
+    VkDeviceSize stagingOffset = m_stagingBufferCurrentOffset;
 
-    void* data;
-    vkMapMemory(deviceRef, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
-    vkUnmapMemory(deviceRef, stagingBufferMemory);
+    // Safely resize staging buffer if needed
+    if (stagingOffset + bufferSize > m_stagingBufferSize) {
+        // 1. Flush and submit the current command buffer to finish all pending copies.
+        endAndSubmitTransferCommands(commandBuffer);
+        // 2. Now it's safe to resize the staging buffer.
+        resizeStagingBuffer(std::max(m_stagingBufferSize * 2, stagingOffset + bufferSize));
+        // 3. Begin a new command buffer for subsequent transfers and update the caller's handle.
+        commandBuffer = beginTransferCommands();
+        stagingOffset = m_stagingBufferCurrentOffset; // The offset is now 0.
+    }
 
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outVertexBuffer, outVertexBufferMemory);
-    copyBuffer(stagingBuffer, outVertexBuffer, bufferSize);
+    // Get a region in the device-local vertex buffer pool
+    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outVertexOffset, m_vertexBufferPool, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
-    vkDestroyBuffer(deviceRef, stagingBuffer, nullptr);
-    vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
+    // Copy data to staging buffer
+    memcpy(static_cast<char*>(m_stagingBufferMapped) + stagingOffset, vertices.data(), (size_t)bufferSize);
+    m_stagingBufferCurrentOffset += bufferSize; // Bump the offset
+
+    // Copy from staging buffer to the allocated region in the device-local buffer
+    copyBuffer(commandBuffer, m_stagingBuffer, poolBuffer, stagingOffset, outVertexOffset, bufferSize);
+    return poolBuffer;
 }
 
-void VulkanBufferManager::createVertexBuffer(
+VkBuffer VulkanBufferManager::createVertexBuffer(
+    VkCommandBuffer& commandBuffer,
     const std::vector<WireframeMesher::WireframeVertex>& vertices,
-    VkBuffer& outVertexBuffer, VkDeviceMemory& outVertexBufferMemory) {
+    VkDeviceSize& outVertexOffset) {
 
     if (vertices.empty()) {
-        // Handle empty vertex list: either throw, log, or create a dummy buffer.
-        // For now, let's just return and leave the output buffers as VK_NULL_HANDLE.
-        outVertexBuffer = VK_NULL_HANDLE;
-        outVertexBufferMemory = VK_NULL_HANDLE;
-        // std::cout << "Warning: Attempted to create a vertex buffer with no wireframe vertices." << std::endl;
-        return;
+        outVertexOffset = 0;
+        return VK_NULL_HANDLE;
     }
 
     VkDeviceSize bufferSize = sizeof(WireframeMesher::WireframeVertex) * vertices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 stagingBuffer, stagingBufferMemory);
+    // Get the current offset in the staging buffer before this copy
+    VkDeviceSize stagingOffset = m_stagingBufferCurrentOffset;
 
-    void* data;
-    vkMapMemory(deviceRef, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
-    vkUnmapMemory(deviceRef, stagingBufferMemory);
+    // Safely resize staging buffer if needed
+    if (stagingOffset + bufferSize > m_stagingBufferSize) {
+        // 1. Flush and submit the current command buffer.
+        endAndSubmitTransferCommands(commandBuffer);
+        // 2. Resize the staging buffer.
+        resizeStagingBuffer(std::max(m_stagingBufferSize * 2, stagingOffset + bufferSize));
+        // 3. Begin a new command buffer and update the caller's handle.
+        commandBuffer = beginTransferCommands();
+        stagingOffset = m_stagingBufferCurrentOffset; // The offset is now 0.
+    }
 
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outVertexBuffer, outVertexBufferMemory);
-    copyBuffer(stagingBuffer, outVertexBuffer, bufferSize);
+    // Get a region in the device-local vertex buffer pool
+    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outVertexOffset, m_vertexBufferPool, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
-    vkDestroyBuffer(deviceRef, stagingBuffer, nullptr);
-    vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
+    // Copy data to staging buffer
+    memcpy(static_cast<char*>(m_stagingBufferMapped) + stagingOffset, vertices.data(), (size_t)bufferSize);
+    m_stagingBufferCurrentOffset += bufferSize; // Bump the offset
+
+    // Copy from staging buffer to the allocated region in the device-local buffer
+    copyBuffer(commandBuffer, m_stagingBuffer, poolBuffer, stagingOffset, outVertexOffset, bufferSize);
+    return poolBuffer;
 }
 
-void VulkanBufferManager::createIndexBuffer(const std::vector<uint32_t>& indices, VkBuffer& outIndexBuffer, VkDeviceMemory& outIndexBufferMemory) {
+VkBuffer VulkanBufferManager::createIndexBuffer(VkCommandBuffer& commandBuffer, const std::vector<uint32_t>& indices, VkDeviceSize& outIndexOffset) {
     if (indices.empty()) {
-        throw std::runtime_error("Cannot create index buffer from empty indices vector.");
+        outIndexOffset = 0;
+        return VK_NULL_HANDLE;
     }
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    // Get the current offset in the staging buffer before this copy
+    VkDeviceSize stagingOffset = m_stagingBufferCurrentOffset;
 
-    void* data;
-    vkMapMemory(deviceRef, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, indices.data(), (size_t)bufferSize);
-    vkUnmapMemory(deviceRef, stagingBufferMemory);
+    // Safely resize staging buffer if needed
+    if (stagingOffset + bufferSize > m_stagingBufferSize) {
+        // 1. Flush and submit the current command buffer.
+        endAndSubmitTransferCommands(commandBuffer);
+        // 2. Resize the staging buffer.
+        resizeStagingBuffer(std::max(m_stagingBufferSize * 2, stagingOffset + bufferSize));
+        // 3. Begin a new command buffer and update the caller's handle.
+        commandBuffer = beginTransferCommands();
+        stagingOffset = m_stagingBufferCurrentOffset; // The offset is now 0.
+    }
 
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outIndexBuffer, outIndexBufferMemory);
-    copyBuffer(stagingBuffer, outIndexBuffer, bufferSize);
+    // Get a region in the device-local index buffer pool
+    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outIndexOffset, m_indexBufferPool, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
-    vkDestroyBuffer(deviceRef, stagingBuffer, nullptr);
-    vkFreeMemory(deviceRef, stagingBufferMemory, nullptr);
+    // Copy data to staging buffer
+    memcpy(static_cast<char*>(m_stagingBufferMapped) + stagingOffset, indices.data(), (size_t)bufferSize);
+    m_stagingBufferCurrentOffset += bufferSize; // Bump the offset
+
+    // Copy from staging buffer to the allocated region in the device-local buffer
+    copyBuffer(commandBuffer, m_stagingBuffer, poolBuffer, stagingOffset, outIndexOffset, bufferSize);
+    return poolBuffer;
 }
 
 void VulkanBufferManager::createUniformBuffers(uint32_t numBuffers, VkDeviceSize bufferSize, std::vector<VkBuffer>& outUniformBuffers, std::vector<VkDeviceMemory>& outUniformBuffersMemory, std::vector<void*>& outUniformBuffersMapped) {

@@ -45,6 +45,7 @@ public:
 
     void submitMeshJob(const glm::ivec3& chunkCoord);
     std::optional<MeshResult> getMeshResult();
+    bool hasMeshResults();
 
 private:
     void mesherThreadLoop();
