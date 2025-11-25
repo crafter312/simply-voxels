@@ -520,11 +520,18 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
         if (chunkData.vertexBuffer != VK_NULL_HANDLE && chunkData.indexBuffer != VK_NULL_HANDLE && chunkData.indexCount > 0) {
             // Bind the one large vertex buffer. The offset is handled in the draw call.
             VkBuffer vertexBuffers[] = { chunkData.vertexBuffer };
-            VkDeviceSize bindOffsets[] = { 0 }; // This offset is for the bind command itself, not the data within the buffer.
+            VkDeviceSize bindOffsets[] = { chunkData.vertexOffset }; // Bind at correct offset, draw at 0 offset
+            // Sanity checks (optional, keep for debugging)
+            if (chunkData.vertexOffset % sizeof(Vertex) != 0) {
+                std::cerr << "[VulkanRenderer] Warning: vertexOffset not multiple of sizeof(Vertex): " << chunkData.vertexOffset << std::endl;
+            }
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, bindOffsets);
 
-            // Bind the one large index buffer. The offset is handled in the draw call.
-            vkCmdBindIndexBuffer(commandBuffer, chunkData.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            // Bind the index buffer at the sub-allocation byte offset (must be multiple of index size)
+            if (chunkData.indexOffset % sizeof(uint32_t) != 0) {
+                std::cerr << "[VulkanRenderer] Warning: indexOffset not multiple of 4: " << chunkData.indexOffset << std::endl;
+            }
+            vkCmdBindIndexBuffer(commandBuffer, chunkData.indexBuffer, chunkData.indexOffset, VK_INDEX_TYPE_UINT32);
             
             // Push model matrix for vertex shader
             vkCmdPushConstants(
@@ -536,9 +543,9 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
                 &chunkData.modelMatrix
             );
             // Use the offsets when drawing
-            uint32_t firstIndex = static_cast<uint32_t>(chunkData.indexOffset / sizeof(uint32_t));
-            int32_t vertexOffset = static_cast<int32_t>(chunkData.vertexOffset / sizeof(Vertex));
-            vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, firstIndex, vertexOffset, 0);
+            //uint32_t firstIndex = static_cast<uint32_t>(chunkData.indexOffset / sizeof(uint32_t));
+            //int32_t vertexOffset = static_cast<int32_t>(chunkData.vertexOffset / sizeof(Vertex));
+            vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, 0, 0, 0);
         }
     }
 
@@ -617,7 +624,7 @@ void VulkanRenderer::drawFrame() {
     processChunkChanges();
 
     // Update the wireframe for the targeted block
-    updateTargetedBlockWireframe();
+    //updateTargetedBlockWireframe();
 
     // After acquiring the image, we might have waited on an old fence.
     // Now, mark the image as being in use by the *current* frame's fence.

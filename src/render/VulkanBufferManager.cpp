@@ -4,6 +4,11 @@
 #include <algorithm> // For std::sort and std::max
 #include <iostream> // For std::cerr (debugging)
 
+static inline VkDeviceSize alignUp(VkDeviceSize value, VkDeviceSize alignment) {
+    if (alignment == 0) return value;
+    return ((value + alignment - 1) / alignment) * alignment;
+}
+
 VulkanBufferManager::VulkanBufferManager(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue graphicsQueue)
     : deviceRef(device), physicalDeviceRef(physicalDevice), commandPoolRef(commandPool), graphicsQueueRef(graphicsQueue) {
     if (deviceRef == VK_NULL_HANDLE || physicalDeviceRef == VK_NULL_HANDLE || commandPoolRef == VK_NULL_HANDLE || graphicsQueueRef == VK_NULL_HANDLE) {
@@ -75,6 +80,11 @@ void VulkanBufferManager::createNewManagedBuffer(VkDeviceSize size, std::vector<
                  newManagedBuffer.buffer,
                  newManagedBuffer.memory);
 
+    // Initialize allocator bookkeeping to safe defaults
+    newManagedBuffer.currentOffset = 0;
+    newManagedBuffer.freeList.clear();            // no free-list fragments yet (bump alloc used initially)
+    newManagedBuffer.activeAllocations.clear();   // no active allocations
+
     pool.push_back(newManagedBuffer);
 }
 
@@ -136,18 +146,26 @@ void VulkanBufferManager::freeIndexBuffer(VkBuffer buffer, VkDeviceSize offset, 
 
 VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSize& outOffset, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage) {
     // Vulkan has alignment requirements for buffer offsets. 256 is a common and safe alignment.
-    const VkDeviceSize alignment = 256;
+    const VkDeviceSize baseAlignment = 256;
 
     for (auto& managedBuffer : pool) {
         // --- 1. Check the free list for a suitable block (First-Fit) ---
         for (auto it = managedBuffer.freeList.begin(); it != managedBuffer.freeList.end(); ++it) {
-            // Copy the block data locally to avoid holding a reference into the vector
-            // because we may mutate the vector (swap/pop) below which would invalidate
-            // references/iterators.
             FreeBlock block = *it;
 
-            // Align the start of the free block's offset
-            VkDeviceSize alignedOffset = (block.offset + alignment - 1) & ~(alignment - 1);
+            // Align the start of the free block's offset to base alignment
+            VkDeviceSize alignedOffset = alignUp(block.offset, baseAlignment);
+
+            // Enforce the element-specific alignment for vertex/index usages
+            if (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
+                VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(Vertex));
+                alignedOffset = alignUp(alignedOffset, eAlign);
+            }
+            if (usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
+                VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(uint32_t));
+                alignedOffset = alignUp(alignedOffset, eAlign);
+            }
+
             VkDeviceSize alignmentPadding = alignedOffset - block.offset;
 
             if (block.size >= size + alignmentPadding) {
@@ -169,9 +187,8 @@ VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSi
                     ++index; // Keep index pointing after the inserted leading fragment for tail insert
                 }
 
-                if (tailSize > 16) { // Use a threshold to avoid tiny fragments
+                if (tailSize > 16) // Use a threshold to avoid tiny fragments
                     managedBuffer.freeList.insert(managedBuffer.freeList.begin() + index, {tailOffset, tailSize});
-                }
 
                 // Debug: ensure we do not overlap an existing active allocation
                 for (const auto& a : managedBuffer.activeAllocations) {
@@ -190,25 +207,35 @@ VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSi
         }
 
         // --- 2. If no free block found, use the bump allocator ---
-        VkDeviceSize alignedBumpOffset = (managedBuffer.currentOffset + alignment - 1) & ~(alignment - 1);
+        VkDeviceSize alignedBumpOffset = alignUp(managedBuffer.currentOffset, baseAlignment);
 
-            if (alignedBumpOffset + size <= managedBuffer.totalSize) {
+        // Enforce element-specific alignment for bump allocation too
+        if (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
+            VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(Vertex));
+            alignedBumpOffset = alignUp(alignedBumpOffset, eAlign);
+        }
+        if (usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
+            VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(uint32_t));
+            alignedBumpOffset = alignUp(alignedBumpOffset, eAlign);
+        }
+
+        if (alignedBumpOffset + size <= managedBuffer.totalSize) {
             // We found space at the end of the buffer
             outOffset = alignedBumpOffset;
             managedBuffer.currentOffset = alignedBumpOffset + size;
-                // Debug: ensure we do not overlap an existing active allocation
-                for (const auto& a : managedBuffer.activeAllocations) {
-                    VkDeviceSize aStart = a.offset;
-                    VkDeviceSize aEnd = a.offset + a.size;
-                    VkDeviceSize newStart = outOffset;
-                    VkDeviceSize newEnd = outOffset + size;
-                    if (!(newEnd <= aStart || newStart >= aEnd)) {
-                        std::cerr << "Allocation overlap detected in bump path: new[" << newStart << "," << newEnd << "] overlaps existing[" << aStart << "," << aEnd << "]\n";
-                        throw std::runtime_error("Detected overlapping allocation (debug)");
-                    }
+            // Debug: ensure we do not overlap an existing active allocation
+            for (const auto& a : managedBuffer.activeAllocations) {
+                VkDeviceSize aStart = a.offset;
+                VkDeviceSize aEnd = a.offset + a.size;
+                VkDeviceSize newStart = outOffset;
+                VkDeviceSize newEnd = outOffset + size;
+                if (!(newEnd <= aStart || newStart >= aEnd)) {
+                    std::cerr << "Allocation overlap detected in bump path: new[" << newStart << "," << newEnd << "] overlaps existing[" << aStart << "," << aEnd << "]\n";
+                    throw std::runtime_error("Detected overlapping allocation (debug)");
                 }
-                managedBuffer.activeAllocations.push_back({outOffset, size});
-                return managedBuffer.buffer;
+            }
+            managedBuffer.activeAllocations.push_back({outOffset, size});
+            return managedBuffer.buffer;
         }
     }
 
@@ -218,12 +245,27 @@ VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSi
     createNewManagedBuffer(newPoolSize, pool, usage);
 
     // Allocate from the beginning of the new buffer
-    // The offset is 0, which is always aligned.
     ManagedBuffer& newBuffer = pool.back(); // Get a reference to the new buffer
     outOffset = 0;
     // Align the bump offset for the new buffer
-    VkDeviceSize alignedSize = (size + alignment - 1) & ~(alignment - 1);
+    VkDeviceSize alignedSize = alignUp(size, baseAlignment);
+    if (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
+        VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(Vertex));
+        alignedSize = alignUp(alignedSize, eAlign);
+    }
+    if (usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
+        VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(uint32_t));
+        alignedSize = alignUp(alignedSize, eAlign);
+    }
+
+    // mark consumed region and update freeList for the remainder
     newBuffer.currentOffset = alignedSize;
+
+    // Update freeList to reflect that the [0, alignedSize) region is now used.
+    newBuffer.freeList.clear();
+    if (alignedSize < newBuffer.totalSize) {
+        newBuffer.freeList.push_back({ alignedSize, newBuffer.totalSize - alignedSize });
+    }
 
     // Debug: ensure no overlap in the new buffer
     for (const auto& a : newBuffer.activeAllocations) {
