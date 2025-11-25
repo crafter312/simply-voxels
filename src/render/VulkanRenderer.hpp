@@ -28,6 +28,7 @@
 #include "../resource/ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
 #include "VulkanDescriptorSetManager.hpp" // Include the new manager
 #include "VulkanThreadManager.hpp" // Include the new thread manager
+#include "../physics/WireframeMesher.hpp" // For WireframeMesher
 
 // Forward declare HelloVulkanApp types needed here
 class VulkanDevice; // Forward declaration for our wrapper
@@ -161,6 +162,7 @@ private:
     glm::mat4 m_wireframeModelMatrix; // Model matrix to position the wireframe
     std::optional<glm::i64vec3> m_lastTargetedBlockPos; // To track if the targeted block changed
     bool m_wireframeMeshNeedsUpdate = true; // Flag to rebuild wireframe mesh
+    std::optional<WireframeMesher::WireframeMeshData> m_pendingWireframeMeshData; // Store generated mesh data to avoid regeneration
 
 
     // --- Descriptors for Uniforms ---

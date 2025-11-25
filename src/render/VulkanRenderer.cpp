@@ -11,7 +11,6 @@
 #include "../Camera.hpp"            // Include the Camera class definition
 #include "../block/Blocks.hpp"      // Include the Blocks class for block IDs
 #include "../block/Block.hpp"       // For Block definition
-#include "../physics/WireframeMesher.hpp" // For WireframeMesher
 #include "../physics/VoxelShape.hpp"    // For VoxelShape
 #include "../Player.hpp"            // Include the Player class definition
 #include "../util/Raycaster.hpp" // For RaycastResult
@@ -620,11 +619,11 @@ void VulkanRenderer::drawFrame() {
         }
     }
 
+    // Update the wireframe for the targeted block FIRST to generate mesh data if needed
+    updateTargetedBlockWireframe();
+
     // Process chunk changes (mesh rebuilds for modified/new chunks, cleanup for unloaded)
     processChunkChanges();
-
-    // Update the wireframe for the targeted block
-    updateTargetedBlockWireframe();
 
     // After acquiring the image, we might have waited on an old fence.
     // Now, mark the image as being in use by the *current* frame's fence.
@@ -908,16 +907,9 @@ void VulkanRenderer::processChunkChanges() {
 
     // --- Stage 1.5: Process wireframe update if needed, using the same command buffer ---
     if (m_wireframeMeshNeedsUpdate && transferCommandBuffer != VK_NULL_HANDLE) {
-        // This logic is moved from updateTargetedBlockWireframe to be part of the batch.
-        const auto& targetedBlockInfoOpt = m_playerRef.getCurrentTargetedBlockInfo();
-        if (targetedBlockInfoOpt && targetedBlockInfoOpt->hit) {
-            uint16_t blockID = m_world.getBlockID(targetedBlockInfoOpt->blockPosition);
-            const Block* blockDef = m_blockRegistryRef.getBlockDefinition(blockID);
-            Physics::VoxelShape shapeToMesh = (blockDef && blockDef->getCustomShape())
-                                              ? *(blockDef->getCustomShape())
-                                              : Physics::VoxelShape::createCuboidShape(0.0f, 0.0f, 0.0f, 16.0f, 16.0f, 16.0f);
-
-            WireframeMesher::WireframeMeshData meshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
+        // Use the mesh data that was generated and stored by updateTargetedBlockWireframe.
+        if (m_pendingWireframeMeshData) {
+            const auto& meshData = *m_pendingWireframeMeshData;
 
             if (!meshData.vertices.empty() && !meshData.indices.empty()) {
                 m_wireframeVertexBuffer = bufferManager->createVertexBuffer(transferCommandBuffer, meshData.vertices, m_wireframeVertexOffset);
@@ -925,6 +917,7 @@ void VulkanRenderer::processChunkChanges() {
             }
         }
         m_wireframeMeshNeedsUpdate = false; // Mark as updated
+        m_pendingWireframeMeshData.reset(); // Clear the stored data
     }
 
     if (transferCommandBuffer != VK_NULL_HANDLE) {
@@ -1024,16 +1017,18 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
         m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::IndexBufferRegion, m_wireframeIndexBuffer, VK_NULL_HANDLE, m_wireframeIndexOffset, m_wireframeIndexSize});
     }
     
-    // Generate mesh data to get the new index count for the next draw call.
-    WireframeMesher::WireframeMeshData meshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
-    if (!meshData.vertices.empty() && !meshData.indices.empty()) {
+    // Generate the mesh data ONCE and store it for processChunkChanges to use.
+    m_pendingWireframeMeshData = WireframeMesher::generateVoxelShapeMesh(shapeToMesh);
+    if (m_pendingWireframeMeshData && !m_pendingWireframeMeshData->indices.empty()) {
         // Store the size of the data we are about to allocate
-        m_wireframeVertexSize = sizeof(meshData.vertices[0]) * meshData.vertices.size();
-        m_wireframeIndexSize = sizeof(meshData.indices[0]) * meshData.indices.size();
+        m_wireframeVertexSize = sizeof(m_pendingWireframeMeshData->vertices[0]) * m_pendingWireframeMeshData->vertices.size();
+        m_wireframeIndexSize = sizeof(m_pendingWireframeMeshData->indices[0]) * m_pendingWireframeMeshData->indices.size();
 
         // Create new regions using the sub-allocator
 
-        m_wireframeIndexCount = static_cast<uint32_t>(meshData.indices.size());
+        m_wireframeIndexCount = static_cast<uint32_t>(m_pendingWireframeMeshData->indices.size());
+    } else {
+        m_wireframeIndexCount = 0;
     }
 
     // Calculate model matrix
@@ -1042,6 +1037,4 @@ void VulkanRenderer::updateTargetedBlockWireframe() {
     glm::i64vec3 rebaseOriginWorldPos_i64 = glm::i64vec3(rebaseOriginChunkCoord_ivec3) * glm::i64vec3(CHUNK_SIDE_LENGTH, CHUNK_SIDE_LENGTH, CHUNK_SIDE_LENGTH);
     glm::i64vec3 relativeBlockPos_i64 = worldBlockPos_i64 - rebaseOriginWorldPos_i64;
     m_wireframeModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(relativeBlockPos_i64));
-    
-    // m_wireframeMeshNeedsUpdate = false; // This is now set to true above and cleared in processChunkChanges
 }
