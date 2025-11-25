@@ -624,7 +624,7 @@ void VulkanRenderer::drawFrame() {
     processChunkChanges();
 
     // Update the wireframe for the targeted block
-    //updateTargetedBlockWireframe();
+    updateTargetedBlockWireframe();
 
     // After acquiring the image, we might have waited on an old fence.
     // Now, mark the image as being in use by the *current* frame's fence.

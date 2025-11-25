@@ -91,7 +91,7 @@ private:
     // VkCommandBuffer beginSingleTimeCommands(); // Replaced by beginTransferCommands
     // void endSingleTimeCommands(VkCommandBuffer commandBuffer); // Replaced by endAndSubmitTransferCommands
 
-    VkBuffer allocateBufferRegion(VkDeviceSize size, VkDeviceSize& outOffset, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage);
+    VkBuffer allocateBufferRegion(VkDeviceSize size, VkDeviceSize& outOffset, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage, VkDeviceSize elementSize);
     void createNewManagedBuffer(VkDeviceSize size, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage);
     void freeBufferRegion(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, std::vector<ManagedBuffer>& pool);
     void resizeStagingBuffer(VkDeviceSize newSize); // Will be made private in implementation but kept here for diff clarity

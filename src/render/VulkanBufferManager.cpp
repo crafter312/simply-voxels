@@ -144,7 +144,7 @@ void VulkanBufferManager::freeIndexBuffer(VkBuffer buffer, VkDeviceSize offset, 
     freeBufferRegion(buffer, offset, size, m_indexBufferPool);
 }
 
-VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSize& outOffset, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage) {
+VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSize& outOffset, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage, VkDeviceSize elementSize) {
     // Vulkan has alignment requirements for buffer offsets. 256 is a common and safe alignment.
     const VkDeviceSize baseAlignment = 256;
 
@@ -158,10 +158,9 @@ VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSi
 
             // Enforce the element-specific alignment for vertex/index usages
             if (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
-                VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(Vertex));
-                alignedOffset = alignUp(alignedOffset, eAlign);
+                alignedOffset = alignUp(alignedOffset, elementSize); // onus is on caller to provide correct element size
             }
-            if (usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
+            else if (usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
                 VkDeviceSize eAlign = static_cast<VkDeviceSize>(sizeof(uint32_t));
                 alignedOffset = alignUp(alignedOffset, eAlign);
             }
@@ -428,7 +427,7 @@ VkBuffer VulkanBufferManager::createVertexBuffer(VkCommandBuffer& commandBuffer,
     }
 
     // Get a region in the device-local vertex buffer pool
-    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outVertexOffset, m_vertexBufferPool, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outVertexOffset, m_vertexBufferPool, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, static_cast<VkDeviceSize>(sizeof(Vertex)));
 
     // Copy data to staging buffer
     memcpy(static_cast<char*>(m_stagingBufferMapped) + stagingOffset, vertices.data(), (size_t)bufferSize);
@@ -466,7 +465,7 @@ VkBuffer VulkanBufferManager::createVertexBuffer(
     }
 
     // Get a region in the device-local vertex buffer pool
-    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outVertexOffset, m_vertexBufferPool, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outVertexOffset, m_vertexBufferPool, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, static_cast<VkDeviceSize>(sizeof(WireframeMesher::WireframeVertex)));
 
     // Copy data to staging buffer
     memcpy(static_cast<char*>(m_stagingBufferMapped) + stagingOffset, vertices.data(), (size_t)bufferSize);
@@ -499,7 +498,7 @@ VkBuffer VulkanBufferManager::createIndexBuffer(VkCommandBuffer& commandBuffer, 
     }
 
     // Get a region in the device-local index buffer pool
-    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outIndexOffset, m_indexBufferPool, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    VkBuffer poolBuffer = allocateBufferRegion(bufferSize, outIndexOffset, m_indexBufferPool, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, static_cast<VkDeviceSize>(sizeof(uint32_t)));
 
     // Copy data to staging buffer
     memcpy(static_cast<char*>(m_stagingBufferMapped) + stagingOffset, indices.data(), (size_t)bufferSize);
