@@ -257,7 +257,7 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WI
 
 # Link all libraries. By linking our modern `lz4_lib` target, CMake handles all
 # include paths, library paths, and build dependencies correctly.
-target_link_libraries(SimpleVulkanWindow PRIVATE Vulkan::Vulkan glfw glm stb_image tinygltf lz4_lib)
+target_link_libraries(SimpleVulkanWindow PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_image tinygltf lz4_lib)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_link_libraries(SimpleVulkanWindow PRIVATE stdc++fs)

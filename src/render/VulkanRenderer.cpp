@@ -887,6 +887,10 @@ void VulkanRenderer::processChunkChanges() {
     // vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice()); // Kept for now for safety, but a target for future optimization.
     if (!m_threadManager) return;
 
+    // At the start of processing changes, check for and clean up any transfers that have finished.
+    // This recycles command buffers and fences for future use.
+    bufferManager->checkAndCleanupCompletedTransfers();
+
     bool hasChunkMeshResults = m_threadManager->hasMeshResults();
 
     // --- Batch Upload Logic ---

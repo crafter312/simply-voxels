@@ -29,18 +29,13 @@ VulkanBufferManager::VulkanBufferManager(VkDevice device, VkPhysicalDevice physi
                  m_stagingBuffer,
                  m_stagingBufferMemory);
 
-    // Create the fence for transfer operations, initially in a signaled state
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Start as signaled so the first transfer doesn't wait
-    if (vkCreateFence(deviceRef, &fenceInfo, nullptr, &m_transferFence) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create transfer fence!");
-    }
-
     vkMapMemory(deviceRef, m_stagingBufferMemory, 0, m_stagingBufferSize, 0, &m_stagingBufferMapped);
 }
 
 VulkanBufferManager::~VulkanBufferManager() {
+    // Wait for all pending transfers to complete before destroying any resources.
+    waitForTransfersToFinish();
+
     if (m_stagingBufferMapped) {
         vkUnmapMemory(deviceRef, m_stagingBufferMemory);
     }
@@ -55,10 +50,12 @@ VulkanBufferManager::~VulkanBufferManager() {
         vkDestroyBuffer(deviceRef, managedBuffer.buffer, nullptr);
         vkFreeMemory(deviceRef, managedBuffer.memory, nullptr);
     }
-    if (m_transferFence != VK_NULL_HANDLE) {
-        vkDestroyFence(deviceRef, m_transferFence, nullptr);
-        m_transferFence = VK_NULL_HANDLE;
+    // Clean up any remaining in-flight transfer resources
+    for (const auto& transfer : m_inFlightTransfers) {
+        vkDestroyFence(deviceRef, transfer.fence, nullptr);
+        // Command buffers are freed from the pool they were allocated from
     }
+    m_inFlightTransfers.clear();
 }
 
 void VulkanBufferManager::createNewManagedBuffer(VkDeviceSize size, std::vector<ManagedBuffer>& pool, VkBufferUsageFlags usage) {
@@ -284,9 +281,9 @@ VkBuffer VulkanBufferManager::allocateBufferRegion(VkDeviceSize size, VkDeviceSi
 }
 
 void VulkanBufferManager::resizeStagingBuffer(VkDeviceSize newSize) {
-    // Wait for any pending copies using the graphics queue to finish.
-    // Using vkQueueWaitIdle is safer than vkDeviceWaitIdle, especially during shutdown.
-    vkQueueWaitIdle(graphicsQueueRef);
+    // Wait for all our tracked in-flight transfers to finish before resizing the staging buffer.
+    // This is much more efficient than vkQueueWaitIdle, which stalls the entire GPU.
+    waitForTransfersToFinish();
 
     // Cleanup old buffer
     vkUnmapMemory(deviceRef, m_stagingBufferMemory);
@@ -341,11 +338,10 @@ void VulkanBufferManager::createBuffer(VkDeviceSize size, VkBufferUsageFlags usa
 }
 
 VkCommandBuffer VulkanBufferManager::beginTransferCommands() {
-    // Wait for the *previous* transfer to finish before we start a new one.
-    // This ensures we don't overwrite the staging buffer while it's still being read by the GPU.
-    // The timeout is set to a huge value to effectively wait indefinitely.
-    vkWaitForFences(deviceRef, 1, &m_transferFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(deviceRef, 1, &m_transferFence);
+    // Wait for ALL previously submitted transfers to finish before starting a new batch.
+    // This is the critical step that prevents us from overwriting the staging buffer
+    // while the GPU is still reading from it from a previous frame's submission.
+    waitForTransfersToFinish();
     
     // Reset the staging buffer offset for a new batch of transfers.
     m_stagingBufferCurrentOffset = 0;
@@ -368,6 +364,29 @@ VkCommandBuffer VulkanBufferManager::beginTransferCommands() {
     return commandBuffer;
 }
 
+void VulkanBufferManager::checkAndCleanupCompletedTransfers() {
+    // Iterate through the in-flight transfers and clean up any that have finished.
+    // We use a manual iterator loop which allows for safe removal of elements.
+    auto it = m_inFlightTransfers.begin();
+    while (it != m_inFlightTransfers.end()) {
+        // Check the status of the fence without waiting.
+        VkResult fenceStatus = vkGetFenceStatus(deviceRef, it->fence);
+
+        if (fenceStatus == VK_SUCCESS) {
+            // This transfer is complete. Destroy its resources.
+            vkDestroyFence(deviceRef, it->fence, nullptr);
+            vkFreeCommandBuffers(deviceRef, commandPoolRef, 1, &it->commandBuffer);
+
+            // Erase the element from the vector. erase() returns an iterator to the next element.
+            it = m_inFlightTransfers.erase(it);
+        } else {
+            // If the fence is not ready (VK_NOT_READY) or an error occurred,
+            // just move to the next one.
+            ++it;
+        }
+    }
+}
+
 void VulkanBufferManager::endAndSubmitTransferCommands(VkCommandBuffer commandBuffer) {
     vkEndCommandBuffer(commandBuffer);
 
@@ -375,25 +394,36 @@ void VulkanBufferManager::endAndSubmitTransferCommands(VkCommandBuffer commandBu
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
+    
+    // Create a new fence for this submission. It starts in the unsignaled state.
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence newFence;
+    if (vkCreateFence(deviceRef, &fenceInfo, nullptr, &newFence) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create fence for an in-flight transfer!");
+    }
 
-    // Submit the command buffer and signal m_transferFence when it's done.
-    // The next call to beginTransferCommands will wait on this fence.
-    vkQueueSubmit(graphicsQueueRef, 1, &submitInfo, m_transferFence);
+    // Submit the command buffer to the GPU, and signal 'newFence' when it's done.
+    vkQueueSubmit(graphicsQueueRef, 1, &submitInfo, newFence);
 
-    // CRITICAL FIX: We must wait for this transfer to complete before freeing the command buffer.
-    // Not waiting here caused a deadlock, as the command buffer could be freed while in use.
-    // This also ensures that by the time this function returns, the data is on the GPU.
-    vkWaitForFences(deviceRef, 1, &m_transferFence, VK_TRUE, UINT64_MAX);
-
-    vkFreeCommandBuffers(deviceRef, commandPoolRef, 1, &commandBuffer);
+    // Add the command buffer and its fence to our tracking list.
+    // We will check this fence later to know when we can free the command buffer.
+    m_inFlightTransfers.push_back({commandBuffer, newFence});
 }
 
 void VulkanBufferManager::waitForTransfersToFinish() {
     // This function can be called during cleanup or before operations that
     // need to ensure all pending transfers are complete.
-    if (m_transferFence != VK_NULL_HANDLE) {
-        vkWaitForFences(deviceRef, 1, &m_transferFence, VK_TRUE, UINT64_MAX);
+    if (m_inFlightTransfers.empty()) {
+        return;
     }
+
+    std::vector<VkFence> fences;
+    for (const auto& transfer : m_inFlightTransfers) {
+        fences.push_back(transfer.fence);
+    }
+
+    vkWaitForFences(deviceRef, static_cast<uint32_t>(fences.size()), fences.data(), VK_TRUE, UINT64_MAX);
 }
 
 

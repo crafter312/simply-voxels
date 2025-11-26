@@ -45,6 +45,7 @@ public:
 
     // --- New methods for managing a transfer command buffer ---
     VkCommandBuffer beginTransferCommands();
+    void checkAndCleanupCompletedTransfers();
     void endAndSubmitTransferCommands(VkCommandBuffer commandBuffer);
     void waitForTransfersToFinish();
 
@@ -62,7 +63,15 @@ private:
     void* m_stagingBufferMapped = nullptr;
     VkDeviceSize m_stagingBufferCurrentOffset = 0; // New: Tracks current position in staging buffer for batching
 
-    VkFence m_transferFence = VK_NULL_HANDLE; // Fence to manage staging buffer reuse for transfers
+    // --- Asynchronous Transfer Management ---
+
+    // Represents a single transfer submission that is in-flight on the GPU.
+    struct InFlightTransfer {
+        VkCommandBuffer commandBuffer;
+        VkFence fence;
+    };
+
+    std::vector<InFlightTransfer> m_inFlightTransfers; // Tracks all submitted but not-yet-completed transfers.
 
     // --- New members for sub-allocation ---
 
