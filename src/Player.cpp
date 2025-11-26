@@ -55,6 +55,9 @@ void Player::update(float deltaTime) {
     // Handle input once per frame based on the full deltaTime
     handleMovementInput(deltaTime); // Sets m_wishHorizontalVelocity and handles jump impulse
 
+    // Reset grounded state at the start of the physics update.
+    // It will be re-evaluated during collision resolution in the sub-steps.
+    m_isGrounded = false;
     // Physics sub-stepping
     // Accumulator for time to be simulated this frame
     m_physicsTimeAccumulator += deltaTime;
@@ -115,7 +118,6 @@ void Player::handleMovementInput(float deltaTime) {
     // Using isKeyDown for now. Ideally, InputManager would provide an `isKeyJustPressed`
     if (m_inputManager->isKeyDown(KeyCode::Space) && m_isGrounded) {
         m_velocity.y = m_jumpForce; // Apply an upward impulse
-        m_isGrounded = false;       // Player is no longer on the ground
     }
 }
 
@@ -149,10 +151,6 @@ void Player::applyPhysics(float deltaTime) {
     } else { // If WAS in the air at the end of the last frame...
         applyDownwardGravity = true; // ...gravity continues to apply.
     }
-
-    // Reset m_isGrounded for the CURRENT frame's collision detection.
-    // It will be set to true again in resolveCollisionsAndMove if a Y-axis collision occurs.
-    m_isGrounded = false;
 
     // Apply acceleration due to gravity (or lack thereof)
     if (applyDownwardGravity) {
