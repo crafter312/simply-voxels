@@ -20,6 +20,7 @@
 #include <algorithm> // Necessary for std::clamp
 #include <cstdlib>
 #include <cstring> // Required for strcmp
+#include <chrono>
 
 
 // --- Constants and Configuration ---
@@ -80,13 +81,9 @@ void HelloVulkanApp::initWindow() {
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
-    // Initialize game state
-    m_isPaused = false; // Start unpaused
-    // Capture and hide the cursor by default (unpaused state)
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); 
-
     // --- Initialize Input Manager ---
     inputManager = std::make_shared<InputManager>(window);
+    if (!inputManager) throw std::runtime_error("Failed to create InputManager!");
     std::cout << "InputManager initialized." << std::endl;
 }
 
@@ -105,12 +102,12 @@ void HelloVulkanApp::initVulkan() {
 
     // --- Create Vulkan Device (Physical & Logical) ---
     vulkanDevice = std::make_unique<VulkanDevice>(instance, surface, REQUIRED_DEVICE_EXTENSIONS, *vulkanDebug);
+    if (!vulkanDevice) throw std::runtime_error("Failed to create Vulkan Device!");
     // VulkanDevice constructor will print its own success messages for physical/logical device.
 
     // --- Create Camera ---
     camera = std::make_shared<Camera>(inputManager); // Pass the inputManager to the Camera constructor
-    // Example: Set initial camera position or orientation if not done in constructor
-    // camera->position = glm::vec3(0.0f, 0.0f, 5.0f);
+    if (!camera) throw std::runtime_error("Failed to create Camera!");
     std::cout << "Camera created and initialized." << std::endl;
 
     // --- Create and Populate Block Registry ---
@@ -122,10 +119,12 @@ void HelloVulkanApp::initVulkan() {
     // --- Create World ---
     // World constructor now only takes the camera
     world = std::make_unique<World>(camera);
+    if (!world) throw std::runtime_error("Failed to create World!");
     std::cout << "World created with initial blocks." << std::endl;
 
     // --- Create Player ---
     player = std::make_unique<Player>(camera, *world, *blockRegistry, inputManager);
+    if (!player) throw std::runtime_error("Failed to create Player!");
     std::cout << "Player created." << std::endl;
 
     // --- Create and Initialize Renderer ---
@@ -139,10 +138,14 @@ void HelloVulkanApp::initVulkan() {
         camera,
         *player        // Pass the Player object by reference
     );
+    if (!renderer) throw std::runtime_error("Failed to create VulkanRenderer!");
     renderer->init(); // init no longer takes BlockRegistry
                                     // --- End Renderer Init ---
 
     std::cout << "Vulkan initialization complete." << std::endl;
+
+    // Set initial state after all initialization
+    m_currentState = GameState::STARTUP;
 }
 
 void HelloVulkanApp::createInstance() {
@@ -198,79 +201,158 @@ void HelloVulkanApp::createSurface() {
 // --- Helper Implementations ---
 
 void HelloVulkanApp::mainLoop() {
-    lastFrameTime = static_cast<float>(glfwGetTime()); // Initialize lastFrameTime before loop
+    lastFrame = static_cast<float>(glfwGetTime()); // Initialize lastFrame before loop
 
+    // Loop for single time game startup state
+    while (!glfwWindowShouldClose(window)) {
+        if (startup()) {
+            break; // Exit loop once startup is complete
+        }
+    }
+
+    // Main application loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         // Calculate delta time
-        float currentTime = static_cast<float>(glfwGetTime());
-        float deltaTime = currentTime - lastFrameTime;
-        lastFrameTime = currentTime;
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
 
-        if (inputManager) {
-            inputManager->update(); // Call input manager update
-        }
+        inputManager->update(); // Update input state once per frame
 
-        // --- Player Spawning Logic ---
-        if (player && !player->hasSpawned() && world) {
-            std::optional<glm::i64vec3> spawnPosOpt = world->getPlayerSpawnPos();
-            if (spawnPosOpt) {
-                glm::i64vec3 absoluteSpawnBlockPos = *spawnPosOpt; // This is the world block coord for player's feet
-
-                std::optional<glm::ivec3> spawnChunkOpt = World::worldToChunkCoordinates(absoluteSpawnBlockPos);
-                if (spawnChunkOpt) {
-                    glm::ivec3 spawnChunk = *spawnChunkOpt;
-                    std::optional<glm::ivec3> spawnLocalBlockOpt = World::worldToLocalCoordinates(absoluteSpawnBlockPos, spawnChunk);
-                    if (spawnLocalBlockOpt) {
-                        // Convert local block coords to vec3 for player's local position.
-                        // The Y from getPlayerSpawnPos is already the feet level.
-                        // Center the player on the XZ of the block.
-                        // Add a small epsilon to Y to prevent clipping into the spawn block.
-                        glm::vec3 spawnLocalPos = glm::vec3(*spawnLocalBlockOpt);
-                        spawnLocalPos.x += 0.5f; // Center on X
-                        spawnLocalPos.y += 0.001f; // Small epsilon for Y
-                        spawnLocalPos.z += 0.5f; // Center on Z
-                        player->setPosition(spawnChunk, spawnLocalPos);
-                        std::cout << "Player spawned at chunk: (" << spawnChunk.x << "," << spawnChunk.y << "," << spawnChunk.z << "), local: (" << spawnLocalPos.x << "," << spawnLocalPos.y << "," << spawnLocalPos.z << ")" << std::endl;
-                    }
-                }
-            }
-        }
-
-        // Handle pause toggle first, as it might affect input processing for camera/player
-        if (inputManager && inputManager->isKeyPressed(KeyCode::Escape)) {
-            m_isPaused = !m_isPaused;
-            if (m_isPaused) {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show and uncapture cursor
-            } else {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide and capture cursor
-            }
-        }
-
-        // Update player first, as player's position dictates camera's position
-        if (player && !m_isPaused) { // Check m_isPaused here for player movement
-            player->update(deltaTime); // Player logic, includes call to updateCameraPosition()
-        }
-
-        // Then update camera orientation (mouse look) if not paused
-        if (camera && !m_isPaused) {
-            camera->update(deltaTime); 
-        }
-        
-        if (world) {
-            world->update(deltaTime); // Update world logic (chunk loading/unloading)
-        }
-
-        if (renderer) {
-            renderer->drawFrame(); // Call renderer's drawFrame
-        }
+        update(); // Call the main update dispatcher
+        render(); // Call the main render dispatcher
     }
 
     // Wait for the logical device to finish operations before cleanup
     if (vulkanDevice && vulkanDevice->getLogicalDevice() != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(vulkanDevice->getLogicalDevice());
     }
+}
+
+// Game startup dispatcher
+bool HelloVulkanApp::startup() {
+    // Currently, we just transition to the main menu immediately.
+    // You could add splash screen logic or initial loading here.
+    std::cout << "State: STARTUP -> MAIN_MENU" << std::endl;
+    m_currentState = GameState::MAIN_MENU;
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for menu
+    return true; // Indicate that startup is complete
+}
+
+// Main update dispatcher
+void HelloVulkanApp::update() {
+    switch (m_currentState) {
+        case GameState::MAIN_MENU:
+            updateMainMenu();
+            break;
+        case GameState::LOADING:
+            // Handle loading screen logic here
+            // For now, we can imagine it transitions to IN_GAME after some work
+            break;
+        case GameState::IN_GAME:
+            updateInGame(deltaTime);
+            break;
+        case GameState::PAUSED:
+            updatePaused();
+            break;
+    }
+}
+
+// Main render dispatcher
+void HelloVulkanApp::render() {
+    switch (m_currentState) {
+        case GameState::MAIN_MENU:
+            renderMainMenu();
+            break;
+        case GameState::IN_GAME:
+            renderInGame();
+            break;
+        case GameState::PAUSED:
+            renderPaused();
+            break;
+        default:
+            // For STARTUP or LOADING, you might just clear the screen
+            // or do nothing until the renderer is ready.
+            // Calling drawFrame ensures the window doesn't appear unresponsive.
+            renderer->drawFrame();
+            break;
+    }
+}
+
+void HelloVulkanApp::updateMainMenu() {
+    // Handle input for the main menu (e.g., button clicks)
+    // For now, let's add a simple key press to start the game
+    if (inputManager->isKeyPressed(KeyCode::Space)) {
+        std::cout << "State: MAIN_MENU -> IN_GAME" << std::endl;
+        m_currentState = GameState::IN_GAME; //TODO: implement LOADING state later
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide cursor for game
+    }
+}
+
+void HelloVulkanApp::renderMainMenu() {
+    // This is where you will tell ImGui to draw the main menu.
+    // For now, we can just have the renderer draw its clear color.
+    renderer->drawFrame();
+}
+
+void HelloVulkanApp::updateInGame(float dt) {
+    // --- Player Spawning Logic ---
+    if (player && !player->hasSpawned() && world) {
+        std::optional<glm::i64vec3> spawnPosOpt = world->getPlayerSpawnPos();
+        if (spawnPosOpt) {
+            glm::i64vec3 absoluteSpawnBlockPos = *spawnPosOpt; // This is the world block coord for player's feet
+
+            std::optional<glm::ivec3> spawnChunkOpt = World::worldToChunkCoordinates(absoluteSpawnBlockPos);
+            if (spawnChunkOpt) {
+                glm::ivec3 spawnChunk = *spawnChunkOpt;
+                std::optional<glm::ivec3> spawnLocalBlockOpt = World::worldToLocalCoordinates(absoluteSpawnBlockPos, spawnChunk);
+                if (spawnLocalBlockOpt) {
+                    // Convert local block coords to vec3 for player's local position.
+                    // The Y from getPlayerSpawnPos is already the feet level.
+                    // Center the player on the XZ of the block.
+                    // Add a small epsilon to Y to prevent clipping into the spawn block.
+                    glm::vec3 spawnLocalPos = glm::vec3(*spawnLocalBlockOpt);
+                    spawnLocalPos.x += 0.5f; // Center on X
+                    spawnLocalPos.y += 0.001f; // Small epsilon for Y
+                    spawnLocalPos.z += 0.5f; // Center on Z
+                    player->setPosition(spawnChunk, spawnLocalPos);
+                    std::cout << "Player spawned at chunk: (" << spawnChunk.x << "," << spawnChunk.y << "," << spawnChunk.z << "), local: (" << spawnLocalPos.x << "," << spawnLocalPos.y << "," << spawnLocalPos.z << ")" << std::endl;
+                }
+            }
+        }
+    }
+
+    // Handle pause toggle first, as it might affect input processing for camera/player
+    if (inputManager->isKeyPressed(KeyCode::Escape)) {
+        std::cout << "State: IN_GAME -> PAUSED" << std::endl;
+        m_currentState = GameState::PAUSED;
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for pause menu
+        world->update(dt);
+        return; // Don't process any more game logic this frame
+    }
+
+    player->update(dt);
+    camera->update(dt);
+    world->update(dt);
+}
+
+void HelloVulkanApp::renderInGame() {
+    renderer->drawFrame();
+}
+
+void HelloVulkanApp::updatePaused() {
+    if (inputManager->isKeyPressed(KeyCode::Escape)) {
+        std::cout << "State: PAUSED -> IN_GAME" << std::endl;
+        m_currentState = GameState::IN_GAME;
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide cursor for game
+    }
+}
+
+void HelloVulkanApp::renderPaused() {
+    // When paused, we still want to see the game world, but with a menu on top.
+    renderer->drawFrame();
 }
 
 void HelloVulkanApp::cleanup() {

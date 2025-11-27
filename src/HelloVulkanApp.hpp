@@ -45,6 +45,15 @@ public:
     void run();
 
 private:
+    // Define the possible states of the application
+    enum class GameState {
+        STARTUP,
+        MAIN_MENU,
+        LOADING,
+        IN_GAME,
+        PAUSED
+    };
+
     // --- Constants ---
     const int MAX_FRAMES_IN_FLIGHT = 2; // For frame synchronization
 
@@ -76,11 +85,11 @@ private:
     std::unique_ptr<VulkanRenderer> renderer;
 
     // --- Timing ---
-    float lastFrameTime = 0.0f;
+    float deltaTime = 0.0f;
+    float lastFrame = 0.0f;
 
     // --- Game State ---
-    bool m_isPaused = false; // Tracks if the game is paused
-
+    GameState m_currentState = GameState::STARTUP;
 
     void initWindow();
     void initVulkan();
@@ -91,6 +100,23 @@ private:
     void createInstance();
     void createSurface();
     
+    // --- State-specific update and render functions ---
+
+    // Game startup state
+    bool startup();
+
+    void update();
+    void render();
+
+    void updateMainMenu();
+    void renderMainMenu();
+
+    void updateInGame(float dt);
+    void renderInGame();
+
+    void updatePaused();
+    void renderPaused();
+
     // Static callback function for GLFW
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 };
