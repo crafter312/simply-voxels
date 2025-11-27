@@ -45,9 +45,18 @@ FetchContent_Declare(
   GIT_TAG 3.4 # Using latest release tag for GLFW
 )
 
+# ImGui
+set(IMGUI_BUILD_EXAMPLES OFF CACHE BOOL "Build ImGui examples" FORCE)
+set(IMGUI_BUILD_TESTS OFF CACHE BOOL "Build ImGui tests" FORCE)
+FetchContent_Declare(
+  imgui
+  GIT_REPOSITORY https://github.com/ocornut/imgui.git
+  GIT_TAG v1.90.8 # Using a recent stable release
+)
+
 # --- Make all declared dependencies available ---
 # Make glm and glfw available normally
-FetchContent_MakeAvailable(glm glfw)
+FetchContent_MakeAvailable(glm glfw imgui)
  
 # --- Handle lz4 dependency ---
 # 1. Declare the dependency with FetchContent to manage the download.
@@ -171,6 +180,16 @@ endif()
 # Add executable
 add_executable(SimpleVulkanWindow
     src/main.cpp
+    # --- ImGui Implementation Files ---
+    # These must be compiled directly into the executable.
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    # --- ImGui Core Source Files ---
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    # --- Application Source Files ---
     src/HelloVulkanApp.cpp
     src/VulkanDebug.cpp                  # Add the new VulkanDebug source file
     src/render/VulkanRenderer.cpp
@@ -197,6 +216,14 @@ add_executable(SimpleVulkanWindow
     src/physics/VoxelShape.cpp           # Add the new VoxelShape source file
     src/physics/WireframeMesher.cpp
 )
+
+# Include directories for ImGui
+# This ensures that imgui_impl_*.cpp files can find "imgui.h"
+target_include_directories(SimpleVulkanWindow PRIVATE ${imgui_SOURCE_DIR})
+
+# Add compile definition for ImGui to avoid Vulkan symbol conflicts
+target_compile_definitions(SimpleVulkanWindow PRIVATE
+    IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
 
 # Add compile definitions for tinygltf configuration to the target
 # TINYGLTF_IMPLEMENTATION must remain defined in only one .cpp file (ModelLoader.cpp)
