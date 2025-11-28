@@ -1,8 +1,8 @@
 #ifndef VULKAN_DEBUG_HPP
 #define VULKAN_DEBUG_HPP
 
-#define GLFW_INCLUDE_VULKAN // For VkInstance, VkDebugUtilsMessengerEXT, etc.
-#include <GLFW/glfw3.h>   // Includes vulkan.h
+#include "render/VulkanCommon.hpp" // Centralized header for Volk and GLFW
+
 #include <vector>
 #include <string>
 
@@ -36,10 +36,6 @@ private:
     VkInstance m_instance = VK_NULL_HANDLE; // Store instance for cleanup
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
 
-    // Proxy function to load vkCreateDebugUtilsMessengerEXT
-    static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
-    // Proxy function to load vkDestroyDebugUtilsMessengerEXT
-    static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
     // The debug callback function
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,

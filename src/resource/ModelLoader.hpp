@@ -1,7 +1,7 @@
 #ifndef MODELLOADER_HPP
 #define MODELLOADER_HPP
 
-#include <vulkan/vulkan.h> // For VkVertexInputBindingDescription, VkVertexInputAttributeDescription, VK_FORMAT_*, VK_VERTEX_INPUT_RATE_VERTEX
+#include "../render/VulkanCommon.hpp" // Use the common header for Vulkan types
 
 #define GLM_FORCE_RADIANS // Ensure GLM uses radians
 #include <glm/glm.hpp>    // For vec3

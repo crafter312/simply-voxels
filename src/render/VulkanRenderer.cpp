@@ -62,6 +62,12 @@ VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSu
 VulkanRenderer::~VulkanRenderer() {
     std::cout << "Cleaning up VulkanRenderer..." << std::endl;
 
+    // --- ImGui Cleanup ---
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    std::cout << "ImGui context and backends shut down." << std::endl;
+
     // m_threadManager's destructor will be called automatically, which safely stops and joins the worker thread.
     // Note: vkDeviceWaitIdle should be called before this destructor is invoked (e.g., in HelloVulkanApp::cleanup)
 
@@ -192,6 +198,24 @@ void VulkanRenderer::init() {
     // Initialize the DescriptorSetManager first, as subsequent calls will need the device.
     descriptorSetManager->initialize(&m_vulkanDeviceRef, swapChainManager.get());
     std::cout << "DescriptorSetManager initialized." << std::endl;
+
+    // --- Create ImGui Descriptor Pool ---
+    descriptorSetManager->createImguiDescriptorPool();
+    std::cout << "ImGui Descriptor Pool created by manager." << std::endl;
+
+    // --- Initialize ImGui ---
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplGlfw_InitForVulkan(&window, true);
+    std::cout << "ImGui GLFW backend initialized." << std::endl;
 
     // Define descriptor set layout bindings (previously in createDescriptorSetLayout)
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
@@ -333,6 +357,25 @@ void VulkanRenderer::init() {
     std::cout << "Synchronization Objects created." << std::endl;
     std::cout << "VulkanRenderer initialization complete." << std::endl;
 
+    // --- Finalize ImGui Initialization ---
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.Instance = instanceRef;
+    init_info.PhysicalDevice = m_vulkanDeviceRef.getPhysicalDevice();
+    init_info.Device = m_vulkanDeviceRef.getLogicalDevice();
+    init_info.QueueFamily = m_vulkanDeviceRef.getQueueFamilyIndices().graphicsFamily.value();
+    init_info.Queue = m_vulkanDeviceRef.getGraphicsQueue();
+    init_info.PipelineCache = VK_NULL_HANDLE;
+    init_info.DescriptorPool = descriptorSetManager->getImguiDescriptorPool();
+    init_info.MinImageCount = static_cast<uint32_t>(swapChainManager->getImageCount());
+    init_info.ImageCount = static_cast<uint32_t>(swapChainManager->getImageCount());
+    init_info.PipelineInfoMain.RenderPass = renderPass;
+    init_info.PipelineInfoMain.Subpass = 0;
+    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    // init_info.CheckVkResultFn = check_vk_result; // Optional: can add a result checking function
+    
+    ImGui_ImplVulkan_Init(&init_info);
+    std::cout << "ImGui Vulkan backend initialized." << std::endl;
+ 
     // Initialize deletion queues
     m_deletionQueues.resize(MAX_FRAMES_IN_FLIGHT);
 }
@@ -468,19 +511,44 @@ void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
 }
 
 void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    std::cout << "[RCB] start. cmdBuf=" << reinterpret_cast<uintptr_t>(commandBuffer)
+              << " imageIndex=" << imageIndex
+              << " currentFrame=" << currentFrame
+              << " renderPass=" << reinterpret_cast<uintptr_t>(renderPass)
+              << " framebuffer=" << reinterpret_cast<uintptr_t>(swapChainManager->getFramebuffer(imageIndex))
+              << std::endl;
+
+    if (commandBuffer == VK_NULL_HANDLE) {
+        std::cerr << "[RCB][ERR] commandBuffer is VK_NULL_HANDLE\n";
+        return;
+    }
+    if (renderPass == VK_NULL_HANDLE) {
+        std::cerr << "[RCB][ERR] renderPass is VK_NULL_HANDLE\n";
+        return;
+    }
+    VkFramebuffer fb = swapChainManager->getFramebuffer(imageIndex);
+    if (fb == VK_NULL_HANDLE) {
+        std::cerr << "[RCB][ERR] framebuffer for imageIndex " << imageIndex << " is VK_NULL_HANDLE\n";
+        return;
+    }
+
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to begin recording command buffer!");
+    std::cout << "[RCB] before vkBeginCommandBuffer\n";
+    VkResult r = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    std::cout << "[RCB] vkBeginCommandBuffer -> " << r << std::endl;
+    if (r != VK_SUCCESS) {
+        std::cerr << "[RCB][ERR] vkBeginCommandBuffer failed: " << r << std::endl;
+        return;
     }
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = renderPass; // Use the class member renderPass
-    renderPassInfo.framebuffer = swapChainManager->getFramebuffer(imageIndex); // Get framebuffer from manager
+    renderPassInfo.renderPass = renderPass;
+    renderPassInfo.framebuffer = fb;
     renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent = swapChainManager->getExtent(); // Get extent from manager
+    renderPassInfo.renderArea.extent = swapChainManager->getExtent();
 
     std::array<VkClearValue, 2> clearValues{};
     clearValues[0].color = {{0.39f, 0.58f, 0.93f, 1.0f}}; // Clear color for attachment 0
@@ -489,7 +557,9 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
+    std::cout << "[RCB] before vkCmdBeginRenderPass\n";
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    std::cout << "[RCB] after vkCmdBeginRenderPass\n";
 
     // Set dynamic viewport
     VkViewport viewport{};
@@ -500,62 +570,72 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    std::cout << "[RCB] viewport set\n";
 
-    // Set dynamic scissor
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = swapChainManager->getExtent();
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    std::cout << "[RCB] scissor set\n";
 
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Bind the pipeline
-
-    // Bind the main descriptor set (UBO + Atlas Texture) for the current frame
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
-                            &descriptorSetManager->getDescriptorSets()[currentFrame], 0, nullptr);
-
-    // Iterate through chunk render data and draw each chunk
-    for (const auto& pair : m_chunkRenderData) {
-        const ChunkRenderData& chunkData = pair.second;
-        if (chunkData.vertexBuffer != VK_NULL_HANDLE && chunkData.indexBuffer != VK_NULL_HANDLE && chunkData.indexCount > 0) {
-            // Bind the one large vertex buffer. The offset is handled in the draw call.
-            VkBuffer vertexBuffers[] = { chunkData.vertexBuffer };
-            VkDeviceSize bindOffsets[] = { chunkData.vertexOffset }; // Bind at correct offset, draw at 0 offset
-            // Sanity checks (optional, keep for debugging)
-            if (chunkData.vertexOffset % sizeof(Vertex) != 0) {
-                std::cerr << "[VulkanRenderer] Warning: vertexOffset not multiple of sizeof(Vertex): " << chunkData.vertexOffset << std::endl;
-            }
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, bindOffsets);
-
-            // Bind the index buffer at the sub-allocation byte offset (must be multiple of index size)
-            if (chunkData.indexOffset % sizeof(uint32_t) != 0) {
-                std::cerr << "[VulkanRenderer] Warning: indexOffset not multiple of 4: " << chunkData.indexOffset << std::endl;
-            }
-            vkCmdBindIndexBuffer(commandBuffer, chunkData.indexBuffer, chunkData.indexOffset, VK_INDEX_TYPE_UINT32);
-            
-            // Push model matrix for vertex shader
-            vkCmdPushConstants(
-                commandBuffer,
-                pipelineLayout,
-                VK_SHADER_STAGE_VERTEX_BIT,
-                0, // offset
-                sizeof(glm::mat4), // size
-                &chunkData.modelMatrix
-            );
-            // Use the offsets when drawing
-            //uint32_t firstIndex = static_cast<uint32_t>(chunkData.indexOffset / sizeof(uint32_t));
-            //int32_t vertexOffset = static_cast<int32_t>(chunkData.vertexOffset / sizeof(Vertex));
-            vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, 0, 0, 0);
-        }
+    // Pipeline bind
+    if (graphicsPipeline == VK_NULL_HANDLE) {
+        std::cerr << "[RCB][ERR] graphicsPipeline is VK_NULL_HANDLE\n";
+    } else {
+        std::cout << "[RCB] before vkCmdBindPipeline pipeline=" << reinterpret_cast<uintptr_t>(graphicsPipeline) << std::endl;
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+        std::cout << "[RCB] after vkCmdBindPipeline\n";
     }
 
-    // --- Wireframe Rendering ---
-    if (m_wireframeIndexCount > 0 && m_wireframeVertexBuffer != VK_NULL_HANDLE && m_wireframeIndexBuffer != VK_NULL_HANDLE) {
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_wireframePipeline);
-        // Descriptor set for UBO (view/proj) is already bound from main pass
+    // Descriptor set binding - validate indices
+    auto &descSets = descriptorSetManager->getDescriptorSets();
+    if (static_cast<size_t>(currentFrame) >= descSets.size()) {
+        std::cerr << "[RCB][ERR] descriptor sets size " << descSets.size() << " <= currentFrame " << currentFrame << std::endl;
+    } else {
+        VkDescriptorSet ds = descSets[currentFrame];
+        std::cout << "[RCB] before vkCmdBindDescriptorSets ds=" << reinterpret_cast<uintptr_t>(ds) << std::endl;
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &ds, 0, nullptr);
+        std::cout << "[RCB] after vkCmdBindDescriptorSets\n";
+    }
 
+    // Iterate through chunk render data and issue draw calls
+    std::cout << "[RCB] chunkRenderData count=" << m_chunkRenderData.size() << std::endl;
+    for (const auto& pair : m_chunkRenderData) {
+        const ChunkRenderData& chunkData = pair.second;
+        std::cout << "[RCB] chunk: vb=" << reinterpret_cast<uintptr_t>(chunkData.vertexBuffer)
+                  << " ib=" << reinterpret_cast<uintptr_t>(chunkData.indexBuffer)
+                  << " idxCount=" << chunkData.indexCount
+                  << " vOffset=" << chunkData.vertexOffset
+                  << " iOffset=" << chunkData.indexOffset << std::endl;
+
+        if (chunkData.vertexBuffer == VK_NULL_HANDLE || chunkData.indexBuffer == VK_NULL_HANDLE || chunkData.indexCount == 0) {
+            std::cout << "[RCB] skipping empty/invalid chunk\n";
+            continue;
+        }
+
+        VkBuffer vertexBuffers[] = { chunkData.vertexBuffer };
+        VkDeviceSize bindOffsets[] = { chunkData.vertexOffset };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, bindOffsets);
+        vkCmdBindIndexBuffer(commandBuffer, chunkData.indexBuffer, chunkData.indexOffset, VK_INDEX_TYPE_UINT32);
+
+        // Push constants - validate pipelineLayout
+        if (pipelineLayout == VK_NULL_HANDLE) {
+            std::cerr << "[RCB][ERR] pipelineLayout is VK_NULL_HANDLE, skipping push constants\n";
+        } else {
+            vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &chunkData.modelMatrix);
+        }
+
+        vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, 0, 0, 0);
+    }
+    std::cout << "[RCB] finished drawing chunks\n";
+
+    // Wireframe section guarded
+    if (m_wireframeIndexCount > 0 && m_wireframeVertexBuffer != VK_NULL_HANDLE && m_wireframeIndexBuffer != VK_NULL_HANDLE) {
+        std::cout << "[RCB] drawing wireframe vb=" << reinterpret_cast<uintptr_t>(m_wireframeVertexBuffer) << " ib=" << reinterpret_cast<uintptr_t>(m_wireframeIndexBuffer) << std::endl;
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_wireframePipeline);
         VkBuffer wireframeVertexBuffers[] = {m_wireframeVertexBuffer};
-        VkDeviceSize bindOffsets[] = {0}; // This offset is for the vkCmdBindVertexBuffers command, not the draw call. It's always 0 for us.
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, wireframeVertexBuffers, bindOffsets);
+        VkDeviceSize wireOffsets[] = {0};
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, wireframeVertexBuffers, wireOffsets);
         vkCmdBindIndexBuffer(commandBuffer, m_wireframeIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdPushConstants(commandBuffer, m_wireframePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_wireframeModelMatrix);
 
@@ -566,21 +646,65 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     }
 
     vkCmdEndRenderPass(commandBuffer);
+    std::cout << "[RCB] after vkCmdEndRenderPass\n";
 
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to record command buffer!");
+    // ImGui draw - guard null
+    ImDrawData* draw_data = ImGui::GetDrawData();
+    std::cout << "[RCB] ImGui draw_data ptr=" << reinterpret_cast<uintptr_t>(draw_data) << std::endl;
+    if (draw_data != nullptr) {
+        std::cout << "[RCB] before ImGui_ImplVulkan_RenderDrawData\n";
+        ImGui_ImplVulkan_RenderDrawData(draw_data, commandBuffer);
+        std::cout << "[RCB] after ImGui_ImplVulkan_RenderDrawData\n";
+    } else {
+        std::cout << "[RCB] skipping ImGui draw (null draw data)\n";
     }
 
-
+    std::cout << "[RCB] before vkEndCommandBuffer\n";
+    VkResult endR = vkEndCommandBuffer(commandBuffer);
+    std::cout << "[RCB] vkEndCommandBuffer -> " << endR << std::endl;
+    if (endR != VK_SUCCESS) {
+        std::cerr << "[RCB][ERR] vkEndCommandBuffer failed: " << endR << std::endl;
+    } else {
+        std::cout << "[RCB] recordCommandBuffer complete\n";
+    }
 }
 
 void VulkanRenderer::drawFrame() {
-    // Wait for the resources of the current frame-in-flight to be available.
-    // This ensures we don't overwrite the command buffer or UBO while it's still in use.
-    vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    // Debug instrumentation: print key state so we can see what causes the crash.
+    std::cout << "[VKR] drawFrame start. currentFrame=" << currentFrame
+              << " commandBuffers=" << commandBuffers.size()
+              << " inFlightFences=" << inFlightFences.size()
+              << " imageAvailableSemaphores=" << imageAvailableSemaphores.size()
+              << " presentationFinishedSemaphores=" << presentationFinishedSemaphores.size()
+              << " imagesInFlight=" << imagesInFlight.size()
+              << std::endl;
 
-    uint32_t imageIndex;
-    VkResult result = swapChainManager->acquireNextImage(imageAvailableSemaphores[currentFrame], &imageIndex);
+    if (commandBuffers.size() <= static_cast<size_t>(currentFrame)) {
+        std::cerr << "[VKR][ERR] commandBuffers.size() <= currentFrame -> " << commandBuffers.size() << " <= " << currentFrame << std::endl;
+        return;
+    }
+    if (inFlightFences.size() <= static_cast<size_t>(currentFrame)) {
+        std::cerr << "[VKR][ERR] inFlightFences not initialized for currentFrame: " << currentFrame << std::endl;
+        return;
+    }
+
+    // Print handles (safe to print even if VK_NULL_HANDLE)
+    std::cout << "[VKR] handles: fence=" << reinterpret_cast<uintptr_t>(inFlightFences[currentFrame])
+              << " imgAvail=" << (imageAvailableSemaphores.size() > static_cast<size_t>(currentFrame) ? reinterpret_cast<uintptr_t>(imageAvailableSemaphores[currentFrame]) : 0)
+              << std::endl;
+
+    // If fence is VK_NULL_HANDLE, avoid calling vkWaitForFences (prevents crashing on invalid/uninitialized handles).
+    if (inFlightFences[currentFrame] != VK_NULL_HANDLE) {
+        VkResult r = vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        std::cout << "[VKR] vkWaitForFences returned " << r << std::endl;
+    } else {
+        std::cout << "[VKR] inFlightFences[currentFrame] is VK_NULL_HANDLE, skipping wait\n";
+    }
+
+    std::cout << "[VKR] about to acquireNextImage\n";
+    uint32_t imageIndex = UINT32_MAX;
+    VkResult result = swapChainManager->acquireNextImage((imageAvailableSemaphores.size() > static_cast<size_t>(currentFrame) ? imageAvailableSemaphores[currentFrame] : VK_NULL_HANDLE), &imageIndex);
+    std::cout << "[VKR] acquireNextImage returned result=" << result << " imageIndex=" << imageIndex << std::endl;
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChainResources();
@@ -628,22 +752,45 @@ void VulkanRenderer::drawFrame() {
     // After acquiring the image, we might have waited on an old fence.
     // Now, mark the image as being in use by the *current* frame's fence.
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-        vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+        VkResult r = vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+        std::cout << "[VKR] vkWaitForFences(imagesInFlight) returned " << r << std::endl;
     }
+
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
-    // --- CRITICAL FIX ---
-    // All per-frame resources (UBO, descriptor sets, command buffers) must use the same index.
-    // The correct index is `currentFrame`, which corresponds to our set of in-flight resources.
-    // `imageIndex` is only for the swapchain image/framebuffer.
-    updateUniformBuffer(currentFrame);
+    // Check UBO mapping before updating
+    if (static_cast<size_t>(currentFrame) >= uniformBuffersMapped.size()) {
+        std::cerr << "[VKR][ERR] uniformBuffersMapped too small: " << uniformBuffersMapped.size() << " <= " << currentFrame << std::endl;
+    } else if (uniformBuffersMapped[currentFrame] == nullptr) {
+        std::cerr << "[VKR][ERR] uniformBuffersMapped[" << currentFrame << "] is nullptr, skipping update\n";
+    } else {
+        std::cout << "[VKR] calling updateUniformBuffer(" << currentFrame << ")\n";
+        updateUniformBuffer(currentFrame);
+        std::cout << "[VKR] updateUniformBuffer done\n";
+    }
 
-    // Reset the fence for the current frame, as we are about to submit work that will signal it.
-    vkResetFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame]);
+    // Reset the fence for the current frame
+    {
+        VkResult r = vkResetFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame]);
+        std::cout << "[VKR] vkResetFences returned " << r << std::endl;
+    }
 
-    vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-    // Record the command buffer for the current frame, telling it to render to the framebuffer of the acquired imageIndex.
-    recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+    // Reset and record command buffer
+    {
+        VkResult r = vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+        std::cout << "[VKR] vkResetCommandBuffer returned " << r << " for cmdBuf=" << reinterpret_cast<uintptr_t>(commandBuffers[currentFrame]) << std::endl;
+    }
+
+    try {
+        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+        std::cout << "[VKR] recordCommandBuffer succeeded\n";
+    } catch (const std::exception& e) {
+        std::cerr << "[VKR][ERR] recordCommandBuffer threw: " << e.what() << std::endl;
+        return;
+    } catch (...) {
+        std::cerr << "[VKR][ERR] recordCommandBuffer threw unknown exception\n";
+        return;
+    }
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -654,33 +801,45 @@ void VulkanRenderer::drawFrame() {
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
-    
-    // When rendering to `imageIndex` is complete, we must signal the semaphore
-    // that corresponds to that specific image.
+
+    // signal semaphore is tied to imageIndex
+    if (imageIndex >= presentationFinishedSemaphores.size()) {
+        std::cerr << "[VKR][WARN] imageIndex >= presentationFinishedSemaphores.size(): " << imageIndex << " >= " << presentationFinishedSemaphores.size() << std::endl;
+        // Resize to avoid OOB when debugging
+        presentationFinishedSemaphores.resize(imageIndex + 1, VK_NULL_HANDLE);
+    }
     VkSemaphore signalSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
-    submitInfo.signalSemaphoreCount = 1; 
+    submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(m_vulkanDeviceRef.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to submit draw command buffer!");
+    std::cout << "[VKR] about to vkQueueSubmit on graphicsQueue\n";
+    VkResult submitRes = vkQueueSubmit(m_vulkanDeviceRef.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]);
+    std::cout << "[VKR] vkQueueSubmit returned " << submitRes << std::endl;
+    if (submitRes != VK_SUCCESS) {
+        std::cerr << "[VKR][ERR] vkQueueSubmit failed: " << submitRes << std::endl;
+        return;
     }
-    
-    VkPresentInfoKHR presentInfo{}; // Get handle from manager
+
+    VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
     VkSemaphore presentWaitSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
-    presentInfo.pWaitSemaphores = presentWaitSemaphores;    VkSwapchainKHR swapChains[] = {swapChainManager->getSwapChainHandle()}; // Get handle from manager
+    presentInfo.pWaitSemaphores = presentWaitSemaphores;
+    VkSwapchainKHR swapChains[] = {swapChainManager->getSwapChainHandle()};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
 
-    result = vkQueuePresentKHR(m_vulkanDeviceRef.getPresentQueue(), &presentInfo);
+    std::cout << "[VKR] about to vkQueuePresentKHR on presentQueue\n";
+    VkResult presentRes = vkQueuePresentKHR(m_vulkanDeviceRef.getPresentQueue(), &presentInfo);
+    std::cout << "[VKR] vkQueuePresentKHR returned " << presentRes << std::endl;
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+    if (presentRes == VK_ERROR_OUT_OF_DATE_KHR || presentRes == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
         recreateSwapChainResources();
-    } else if (result != VK_SUCCESS) {
-        throw std::runtime_error("Failed to present swap chain image!");
+    } else if (presentRes != VK_SUCCESS) {
+        std::cerr << "[VKR][ERR] vkQueuePresentKHR failed: " << presentRes << std::endl;
+        return;
     }
 
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;

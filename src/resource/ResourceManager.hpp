@@ -6,7 +6,7 @@
 #include <map>
 #include <memory>
 #include <set> // For std::set in buildTextureAtlas implementation details
-#include <vulkan/vulkan.h> // For Vulkan types needed by VulkanTextureLoader
+#include "../render/VulkanCommon.hpp" // For Vulkan common definitions
 #include <mutex>        // For std::unique_lock
 #include <shared_mutex> // For std::shared_mutex
 

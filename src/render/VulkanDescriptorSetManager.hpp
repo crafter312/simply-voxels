@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include "VulkanCommon.hpp"
+
 #include <vector>
 #include <stdexcept> // For exceptions
 #include <optional>  // For std::optional
@@ -41,6 +42,10 @@ public:
     VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
     VkDescriptorPool getDescriptorPool() const { return descriptorPool; }
     const std::vector<VkDescriptorSet>& getDescriptorSets() const { return descriptorSets; }
+    VkDescriptorPool getImguiDescriptorPool() const { return m_imguiDescriptorPool; }
+
+    // --- ImGui Specific ---
+    void createImguiDescriptorPool();
 
     // Cleanup method (called by destructor)
     void cleanup();
@@ -51,6 +56,7 @@ private:
 
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    VkDescriptorPool m_imguiDescriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> descriptorSets;
 
     // Internal helper to get device handle safely

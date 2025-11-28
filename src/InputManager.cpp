@@ -1,5 +1,5 @@
 #include "InputManager.hpp"
-#include <GLFW/glfw3.h> // Include the GLFW header for glfwGetKey etc.
+#include "render/VulkanCommon.hpp" // Include the GLFW header for glfwGetKey etc.
 #include <vector>       // For storing the list of keys to monitor
 #include <stdexcept>    // For throwing exceptions on errors
 

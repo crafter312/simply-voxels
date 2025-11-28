@@ -55,6 +55,12 @@ HelloVulkanApp::~HelloVulkanApp() = default;
 
 void HelloVulkanApp::run() {
     std::cout << "Starting application..." << std::endl;
+    // --- Initialize Volk FIRST ---
+    // This must be done before any other Vulkan or GLFW calls.
+    if (volkInitialize() != VK_SUCCESS) {
+        throw std::runtime_error("Failed to initialize volk!");
+    }
+
     initWindow();
     initVulkan();
     mainLoop();
@@ -103,6 +109,8 @@ void HelloVulkanApp::initVulkan() {
     // --- Create Vulkan Device (Physical & Logical) ---
     vulkanDevice = std::make_unique<VulkanDevice>(instance, surface, REQUIRED_DEVICE_EXTENSIONS, *vulkanDebug);
     if (!vulkanDevice) throw std::runtime_error("Failed to create Vulkan Device!");
+    // Ensure Volk loads all device-level function pointers for this logical device
+    volkLoadDevice(vulkanDevice->getLogicalDevice());
     // VulkanDevice constructor will print its own success messages for physical/logical device.
 
     // --- Create Camera ---
@@ -176,20 +184,20 @@ void HelloVulkanApp::createInstance() {
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
 
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if (VulkanDebug::enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(VulkanDebug::validationLayers.size());
         createInfo.ppEnabledLayerNames = VulkanDebug::validationLayers.data();
-        VulkanDebug::populateDebugMessengerCreateInfo(debugCreateInfo);
-        createInfo.pNext = &debugCreateInfo;
     } else {
         createInfo.enabledLayerCount = 0;
-        createInfo.pNext = nullptr;
+        createInfo.pNext = nullptr; // Explicitly null
     }
 
     if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create Vulkan instance!");
     }
+
+    // Load instance-level functions from Volk AFTER the instance is created.
+    volkLoadInstance(instance);
 }
 
 void HelloVulkanApp::createSurface() {
@@ -212,17 +220,57 @@ void HelloVulkanApp::mainLoop() {
 
     // Main application loop
     while (!glfwWindowShouldClose(window)) {
+        std::cout << "[DBG] loop top\n";
+
+        std::cout << "[DBG] before glfwPollEvents\n";
         glfwPollEvents();
+        std::cout << "[DBG] after glfwPollEvents\n";
 
         // Calculate delta time
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        inputManager->update(); // Update input state once per frame
+        std::cout << "[DBG] before ImGui_NewFrame\n";
+        // Temporarily disable ImGui frame if ImGui init may be missing:
+        // ImGui_ImplVulkan_NewFrame();
+        // ImGui_ImplGlfw_NewFrame();
+        // ImGui::NewFrame();
+        std::cout << "[DBG] after ImGui_NewFrame\n";
 
-        update(); // Call the main update dispatcher
-        render(); // Call the main render dispatcher
+        std::cout << "[DBG] before inputManager->update\n";
+        if (inputManager) {
+            inputManager->update();
+            std::cout << "[DBG] inputManager updated\n";
+        } else {
+            std::cout << "[DBG] inputManager IS NULL\n";
+        }
+
+        std::cout << "[DBG] before update()\n";
+        update();
+        std::cout << "[DBG] after update()\n";
+
+        std::cout << "[DBG] before render()\n";
+        // Narrow down renderer usage safely
+        if (!renderer) {
+            std::cout << "[DBG] renderer IS NULL\n";
+        } else {
+            std::cout << "[DBG] renderer pointer: " << renderer.get() << "\n";
+        }
+
+        // Call render but guard drawFrame to see if that's the crash site.
+        // You can temporarily comment out the drawFrame call to see if crash stops.
+        // Note: leave calls that don't touch Vulkan active to test other subsystems.
+        try {
+            render();
+            std::cout << "[DBG] render() returned\n";
+        } catch (const std::exception& e) {
+            std::cout << "[DBG] render() threw std::exception: " << e.what() << "\n";
+        } catch (...) {
+            std::cout << "[DBG] render() threw unknown exception\n";
+        }
+
+        std::cout << "[DBG] end of loop iteration\n";
     }
 
     // Wait for the logical device to finish operations before cleanup

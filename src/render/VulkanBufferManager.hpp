@@ -1,6 +1,7 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include "VulkanCommon.hpp"
+
 #include <vector>
 #include <string> // Though not directly used in this header, often included with vector
 #include "../resource/ModelLoader.hpp" // For Vertex struct (moved from Vertex.hpp)

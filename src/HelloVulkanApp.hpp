@@ -1,8 +1,7 @@
 #ifndef HELLO_VULKAN_APP_HPP
 #define HELLO_VULKAN_APP_HPP
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include "render/VulkanCommon.hpp" // Centralized header for Volk and GLFW
 
 #include <vector>
 #include <optional> // For queue family indices

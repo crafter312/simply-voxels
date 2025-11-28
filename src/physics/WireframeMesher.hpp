@@ -1,13 +1,13 @@
  #ifndef PHYSICS_WIREFRAMEMESHER_HPP
  #define PHYSICS_WIREFRAMEMESHER_HPP
  
+#include "../render/VulkanCommon.hpp" // For VkVertexInputBindingDescription, VkVertexInputAttributeDescription, VK_FORMAT_*, VK_VERTEX_INPUT_RATE_VERTEX
+
  #include <glm/glm.hpp>
  #include <vector>
  #include <array>
  #include <cstddef> // For offsetof
  #include <cstdint> // For uint32_t
- 
- #include <vulkan/vulkan.h> // For VkVertexInputBindingDescription, VkVertexInputAttributeDescription, VK_FORMAT_*, VK_VERTEX_INPUT_RATE_VERTEX
  
  // Forward declare VoxelShape
  namespace Physics { class VoxelShape; }

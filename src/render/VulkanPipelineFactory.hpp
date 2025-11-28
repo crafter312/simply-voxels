@@ -1,6 +1,7 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include "VulkanCommon.hpp" // Common Vulkan includes and definitions
+
 #include <glm/glm.hpp> // For glm::mat4 in push constants, though not directly used in this header
 #include <string>
 #include <vector>

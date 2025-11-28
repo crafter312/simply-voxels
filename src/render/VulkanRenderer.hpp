@@ -1,8 +1,7 @@
 #ifndef VULKAN_RENDERER_HPP
 #define VULKAN_RENDERER_HPP
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include "VulkanCommon.hpp" // Use the centralized header for Volk and GLFW
 
 #define GLM_FORCE_RADIANS // Ensure GLM uses radians
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // Ensure GLM uses depth range [0, 1]
@@ -27,6 +26,11 @@
 #include "../world/ChunkMesher.hpp" // For ChunkMesher::MeshData
 #include "../resource/ModelLoader.hpp" // Include the ModelLoader which now contains Vertex and ModelData
 #include "VulkanDescriptorSetManager.hpp" // Include the new manager
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
+#include <stdio.h>          // printf, fprintf
+#include <stdlib.h>         // abort
 #include "VulkanThreadManager.hpp" // Include the new thread manager
 #include "../physics/WireframeMesher.hpp" // For WireframeMesher
 

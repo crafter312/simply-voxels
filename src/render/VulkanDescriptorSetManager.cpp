@@ -37,6 +37,11 @@ void VulkanDescriptorSetManager::cleanup() {
             vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, nullptr);
             descriptorSetLayout = VK_NULL_HANDLE;
         }
+
+        if (m_imguiDescriptorPool != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(logicalDevice, m_imguiDescriptorPool, nullptr);
+            m_imguiDescriptorPool = VK_NULL_HANDLE;
+        }
     }
 
     // Clearing the vector is good practice even if sets are freed with the pool
@@ -143,4 +148,25 @@ std::optional<std::vector<VkDescriptorSet>> VulkanDescriptorSetManager::allocate
         return std::nullopt;
     }
     return allocatedSets;
+}
+
+void VulkanDescriptorSetManager::createImguiDescriptorPool() {
+    VkDevice logicalDevice = getDevice();
+
+    // Based on ImGui's Vulkan example main.cpp
+    // This pool is dedicated to ImGui and is separate from the application's main descriptor pool.
+    VkDescriptorPoolSize pool_sizes[] = {
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 } // A large number for textures (fonts, UI elements)
+    };
+
+    VkDescriptorPoolCreateInfo pool_info = {};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    pool_info.maxSets = 1000; // A large number of sets
+    pool_info.poolSizeCount = (uint32_t)std::size(pool_sizes);
+    pool_info.pPoolSizes = pool_sizes;
+
+    if (vkCreateDescriptorPool(logicalDevice, &pool_info, nullptr, &m_imguiDescriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create ImGui descriptor pool!");
+    }
 }

@@ -51,12 +51,19 @@ set(IMGUI_BUILD_TESTS OFF CACHE BOOL "Build ImGui tests" FORCE)
 FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
-  GIT_TAG v1.90.8 # Using a recent stable release
+  GIT_TAG v1.92.5 # Using a recent stable release
+)
+
+# Volk
+FetchContent_Declare(
+  volk
+  GIT_REPOSITORY https://github.com/zeux/volk.git
+  GIT_TAG 1.4.304 # A recent stable tag
 )
 
 # --- Make all declared dependencies available ---
 # Make glm and glfw available normally
-FetchContent_MakeAvailable(glm glfw imgui)
+FetchContent_MakeAvailable(glm glfw imgui volk)
  
 # --- Handle lz4 dependency ---
 # 1. Declare the dependency with FetchContent to manage the download.
@@ -171,6 +178,7 @@ endif()
 
 add_library(tinygltf INTERFACE)
 target_include_directories(tinygltf INTERFACE ${TINYGLTF_DIR})
+
 # Find glslc (SPIR-V compiler) - Keep this as is
 find_program(GLSLANG_VALIDATOR_EXECUTABLE glslangValidator HINTS ENV VULKAN_SDK PATHS ENV PATH)
 if(NOT GLSLANG_VALIDATOR_EXECUTABLE)
@@ -179,6 +187,9 @@ endif()
 
 # Add executable
 add_executable(SimpleVulkanWindow
+    # Volk implementation file. This must be compiled only once.
+    src/render/VulkanCommon.cpp
+    # Then list the rest of the source files.
     src/main.cpp
     # --- ImGui Implementation Files ---
     # These must be compiled directly into the executable.
@@ -217,13 +228,20 @@ add_executable(SimpleVulkanWindow
     src/physics/WireframeMesher.cpp
 )
 
-# Include directories for ImGui
-# This ensures that imgui_impl_*.cpp files can find "imgui.h"
-target_include_directories(SimpleVulkanWindow PRIVATE ${imgui_SOURCE_DIR})
+# Include directories for the SimpleVulkanWindow target
+target_include_directories(SimpleVulkanWindow PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src # For local headers like "render/VulkanCommon.hpp"
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+    # The two lines below are not strictly necessary if linking the interface targets,
+    # but being explicit here is more robust for IDEs like VS Code.
+    # ${VOLK_DIR} # No longer needed, volk_headers target handles this.
+    ${Vulkan_INCLUDE_DIRS} # CRITICAL: Add the Vulkan SDK include path
+)
 
 # Add compile definition for ImGui to avoid Vulkan symbol conflicts
 target_compile_definitions(SimpleVulkanWindow PRIVATE
-    IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
+    IMGUI_IMPL_VULKAN_USE_VOLK) # This is the only definition needed when using Volk
 
 # Add compile definitions for tinygltf configuration to the target
 # TINYGLTF_IMPLEMENTATION must remain defined in only one .cpp file (ModelLoader.cpp)
@@ -284,7 +302,7 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WI
 
 # Link all libraries. By linking our modern `lz4_lib` target, CMake handles all
 # include paths, library paths, and build dependencies correctly.
-target_link_libraries(SimpleVulkanWindow PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_image tinygltf lz4_lib)
+target_link_libraries(SimpleVulkanWindow PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_image tinygltf lz4_lib volk_headers)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_link_libraries(SimpleVulkanWindow PRIVATE stdc++fs)

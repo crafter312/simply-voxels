@@ -1,8 +1,7 @@
 #ifndef VULKAN_SWAP_CHAIN_HPP
 #define VULKAN_SWAP_CHAIN_HPP
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include "VulkanCommon.hpp" // Centralized header for Volk and GLFW
 
 #include <vector>
 #include <memory>

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include "VulkanCommon.hpp" // Common Vulkan includes and definitions
+
 #include <vector>
 #include <optional>
 #include <string> // For std::string in error messages, though not strictly required by VulkanDevice itself

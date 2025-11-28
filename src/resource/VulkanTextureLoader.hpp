@@ -1,7 +1,8 @@
 #ifndef VULKAN_TEXTURE_LOADER_HPP
 #define VULKAN_TEXTURE_LOADER_HPP
 
-#include <vulkan/vulkan.h>
+#include "../render/VulkanCommon.hpp"
+
 #include <string>
 
 // Forward declaration for stb_image
