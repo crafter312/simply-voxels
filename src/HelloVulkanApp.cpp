@@ -1,4 +1,5 @@
 #include "HelloVulkanApp.hpp"
+#include "util/DebugLog.hpp"
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
 #include "render/VulkanDevice.hpp"   // Include the new VulkanDevice header
 #include "InputManager.hpp"          // Include the InputManager header
@@ -54,7 +55,7 @@ HelloVulkanApp::HelloVulkanApp() {}
 HelloVulkanApp::~HelloVulkanApp() = default;
 
 void HelloVulkanApp::run() {
-    std::cout << "Starting application..." << std::endl;
+    VK_LOG("Starting application...");
     // --- Initialize Volk FIRST ---
     // This must be done before any other Vulkan or GLFW calls.
     if (volkInitialize() != VK_SUCCESS) {
@@ -81,7 +82,7 @@ void HelloVulkanApp::initWindow() {
         glfwTerminate();
         throw std::runtime_error("Failed to create GLFW window!");
     }
-    std::cout << "GLFW window created successfully." << std::endl;
+    VK_LOG("GLFW window created successfully.");
 
     // Store pointer to this instance for use in callbacks
     glfwSetWindowUserPointer(window, this);
@@ -90,7 +91,7 @@ void HelloVulkanApp::initWindow() {
     // --- Initialize Input Manager ---
     inputManager = std::make_shared<InputManager>(window);
     if (!inputManager) throw std::runtime_error("Failed to create InputManager!");
-    std::cout << "InputManager initialized." << std::endl;
+    VK_LOG("InputManager initialized.");
 }
 
 void HelloVulkanApp::initVulkan() {
@@ -100,11 +101,11 @@ void HelloVulkanApp::initVulkan() {
     vulkanDebug = std::make_unique<VulkanDebug>();
 
     createInstance();
-    std::cout << "Vulkan Instance created." << std::endl;
+    VK_LOG("Vulkan Instance created.");
     // Setup debug messenger after instance creation
     vulkanDebug->setupMessenger(instance); // This will print its own success message
      createSurface();
-    std::cout << "Vulkan Surface created." << std::endl;
+    VK_LOG("Vulkan Surface created.");
 
     // --- Create Vulkan Device (Physical & Logical) ---
     vulkanDevice = std::make_unique<VulkanDevice>(instance, surface, REQUIRED_DEVICE_EXTENSIONS, *vulkanDebug);
@@ -116,7 +117,7 @@ void HelloVulkanApp::initVulkan() {
     // --- Create Camera ---
     camera = std::make_shared<Camera>(inputManager); // Pass the inputManager to the Camera constructor
     if (!camera) throw std::runtime_error("Failed to create Camera!");
-    std::cout << "Camera created and initialized." << std::endl;
+    VK_LOG("Camera created and initialized.");
 
     // --- Create and Populate Block Registry ---
     blockRegistry = std::make_unique<BlockRegistry>();
@@ -128,12 +129,12 @@ void HelloVulkanApp::initVulkan() {
     // World constructor now only takes the camera
     world = std::make_unique<World>(camera);
     if (!world) throw std::runtime_error("Failed to create World!");
-    std::cout << "World created with initial blocks." << std::endl;
+    VK_LOG("World created with initial blocks.");
 
     // --- Create Player ---
     player = std::make_unique<Player>(camera, *world, *blockRegistry, inputManager);
     if (!player) throw std::runtime_error("Failed to create Player!");
-    std::cout << "Player created." << std::endl;
+    VK_LOG("Player created.");
 
     // --- Create and Initialize Renderer ---
     renderer = std::make_unique<VulkanRenderer>(
@@ -220,42 +221,42 @@ void HelloVulkanApp::mainLoop() {
 
     // Main application loop
     while (!glfwWindowShouldClose(window)) {
-        std::cout << "[DBG] loop top\n";
+        VK_LOG("[DBG] loop top");
 
-        std::cout << "[DBG] before glfwPollEvents\n";
+        VK_LOG("[DBG] before glfwPollEvents");
         glfwPollEvents();
-        std::cout << "[DBG] after glfwPollEvents\n";
+        VK_LOG("[DBG] after glfwPollEvents");
 
         // Calculate delta time
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        std::cout << "[DBG] before ImGui_NewFrame\n";
+        VK_LOG("[DBG] before ImGui_NewFrame");
         // Temporarily disable ImGui frame if ImGui init may be missing:
         // ImGui_ImplVulkan_NewFrame();
         // ImGui_ImplGlfw_NewFrame();
         // ImGui::NewFrame();
-        std::cout << "[DBG] after ImGui_NewFrame\n";
+        VK_LOG("[DBG] after ImGui_NewFrame");
 
-        std::cout << "[DBG] before inputManager->update\n";
+        VK_LOG("[DBG] before inputManager->update");
         if (inputManager) {
             inputManager->update();
-            std::cout << "[DBG] inputManager updated\n";
+            VK_LOG("[DBG] inputManager updated");
         } else {
-            std::cout << "[DBG] inputManager IS NULL\n";
+            std::cerr << "[DBG] inputManager IS NULL" << std::endl;
         }
 
-        std::cout << "[DBG] before update()\n";
+        VK_LOG("[DBG] before update()");
         update();
-        std::cout << "[DBG] after update()\n";
+        VK_LOG("[DBG] after update()");
 
-        std::cout << "[DBG] before render()\n";
+        VK_LOG("[DBG] before render()");
         // Narrow down renderer usage safely
         if (!renderer) {
-            std::cout << "[DBG] renderer IS NULL\n";
+            std::cerr << "[DBG] renderer IS NULL" << std::endl;
         } else {
-            std::cout << "[DBG] renderer pointer: " << renderer.get() << "\n";
+            VK_LOG("[DBG] renderer pointer: " << renderer.get() << "");
         }
 
         // Call render but guard drawFrame to see if that's the crash site.
@@ -263,14 +264,14 @@ void HelloVulkanApp::mainLoop() {
         // Note: leave calls that don't touch Vulkan active to test other subsystems.
         try {
             render();
-            std::cout << "[DBG] render() returned\n";
+            VK_LOG("[DBG] render() returned");
         } catch (const std::exception& e) {
-            std::cout << "[DBG] render() threw std::exception: " << e.what() << "\n";
+            std::cerr << "[DBG] render() threw std::exception: " << e.what() << std::endl;
         } catch (...) {
-            std::cout << "[DBG] render() threw unknown exception\n";
+            std::cerr << "[DBG] render() threw unknown exception" << std::endl;
         }
 
-        std::cout << "[DBG] end of loop iteration\n";
+        VK_LOG("[DBG] end of loop iteration");
     }
 
     // Wait for the logical device to finish operations before cleanup
@@ -283,7 +284,7 @@ void HelloVulkanApp::mainLoop() {
 bool HelloVulkanApp::startup() {
     // Currently, we just transition to the main menu immediately.
     // You could add splash screen logic or initial loading here.
-    std::cout << "State: STARTUP -> MAIN_MENU" << std::endl;
+    VK_LOG("State: STARTUP -> MAIN_MENU");
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for menu
     return true; // Indicate that startup is complete
@@ -333,7 +334,7 @@ void HelloVulkanApp::updateMainMenu() {
     // Handle input for the main menu (e.g., button clicks)
     // For now, let's add a simple key press to start the game
     if (inputManager->isKeyPressed(KeyCode::Space)) {
-        std::cout << "State: MAIN_MENU -> IN_GAME" << std::endl;
+        VK_LOG("State: MAIN_MENU -> IN_GAME");
         m_currentState = GameState::IN_GAME; //TODO: implement LOADING state later
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide cursor for game
     }
@@ -366,7 +367,7 @@ void HelloVulkanApp::updateInGame(float dt) {
                     spawnLocalPos.y += 0.001f; // Small epsilon for Y
                     spawnLocalPos.z += 0.5f; // Center on Z
                     player->setPosition(spawnChunk, spawnLocalPos);
-                    std::cout << "Player spawned at chunk: (" << spawnChunk.x << "," << spawnChunk.y << "," << spawnChunk.z << "), local: (" << spawnLocalPos.x << "," << spawnLocalPos.y << "," << spawnLocalPos.z << ")" << std::endl;
+                    VK_LOG("Player spawned at chunk: (" << spawnChunk.x << "," << spawnChunk.y << "," << spawnChunk.z << "), local: (" << spawnLocalPos.x << "," << spawnLocalPos.y << "," << spawnLocalPos.z << ")");
                 }
             }
         }
@@ -374,7 +375,7 @@ void HelloVulkanApp::updateInGame(float dt) {
 
     // Handle pause toggle first, as it might affect input processing for camera/player
     if (inputManager->isKeyPressed(KeyCode::Escape)) {
-        std::cout << "State: IN_GAME -> PAUSED" << std::endl;
+        VK_LOG("State: IN_GAME -> PAUSED");
         m_currentState = GameState::PAUSED;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for pause menu
         world->update(dt);
@@ -392,7 +393,7 @@ void HelloVulkanApp::renderInGame() {
 
 void HelloVulkanApp::updatePaused() {
     if (inputManager->isKeyPressed(KeyCode::Escape)) {
-        std::cout << "State: PAUSED -> IN_GAME" << std::endl;
+        VK_LOG("State: PAUSED -> IN_GAME");
         m_currentState = GameState::IN_GAME;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide cursor for game
     }
@@ -404,7 +405,7 @@ void HelloVulkanApp::renderPaused() {
 }
 
 void HelloVulkanApp::cleanup() {
-    std::cout << "Cleaning up..." << std::endl;
+    VK_LOG("Cleaning up...");
 
     // Renderer holds Vulkan objects that depend on the device, so destroy it first.
     // The renderer's destructor handles its internal cleanup.

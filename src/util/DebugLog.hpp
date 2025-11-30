@@ -1,7 +1,7 @@
 #pragma once
 #include <iostream>
 
-#ifdef CUSTOM_DEBUG
+#ifdef ENABLE_VK_LOG
     // Compile-time enabled logging (zero overhead when not defined)
     #define VK_LOG(expr) do { std::cout << expr << std::endl; } while(0)
 #else

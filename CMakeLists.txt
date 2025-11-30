@@ -239,6 +239,10 @@ target_include_directories(SimpleVulkanWindow PRIVATE
     ${Vulkan_INCLUDE_DIRS} # CRITICAL: Add the Vulkan SDK include path
 )
 
+# --- Optional Compile Definitions ---
+# Uncomment the following line to enable verbose Vulkan logging via the VK_LOG macro.
+#target_compile_definitions(SimpleVulkanWindow PRIVATE ENABLE_VK_LOG)
+
 # Add compile definition for ImGui to avoid Vulkan symbol conflicts
 target_compile_definitions(SimpleVulkanWindow PRIVATE
     IMGUI_IMPL_VULKAN_USE_VOLK) # This is the only definition needed when using Volk
