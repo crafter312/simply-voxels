@@ -1,4 +1,5 @@
 #include "VulkanRenderer.hpp"
+#include "../util/DebugLog.hpp" // For VK_LOG macro
 #include "VulkanSwapChain.hpp" // Include the new swap chain class
 #include "VulkanPipelineFactory.hpp" // Include the new pipeline factory class
 #include "VulkanBufferManager.hpp" // Include the new buffer manager class
@@ -56,17 +57,17 @@ VulkanRenderer::VulkanRenderer(GLFWwindow& glfwWindow, VkInstance instance, VkSu
     // Create the descriptor set manager
     descriptorSetManager = std::make_unique<VulkanDescriptorSetManager>();
 
-    std::cout << "VulkanRenderer constructed." << std::endl;
+    VK_LOG("VulkanRenderer constructed.");
 }
 
 VulkanRenderer::~VulkanRenderer() {
-    std::cout << "Cleaning up VulkanRenderer..." << std::endl;
+    VK_LOG("Cleaning up VulkanRenderer...");
 
     // --- ImGui Cleanup ---
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-    std::cout << "ImGui context and backends shut down." << std::endl;
+    VK_LOG("ImGui context and backends shut down.");
 
     // m_threadManager's destructor will be called automatically, which safely stops and joins the worker thread.
     // Note: vkDeviceWaitIdle should be called before this destructor is invoked (e.g., in HelloVulkanApp::cleanup)
@@ -77,7 +78,7 @@ VulkanRenderer::~VulkanRenderer() {
 
     // Process any remaining items in deletion queues.
     // Assuming vkDeviceWaitIdle has been called externally or we'd call it here.
-    std::cout << "VulkanRenderer Destructor: Processing final deletion queues..." << std::endl;
+    VK_LOG("VulkanRenderer Destructor: Processing final deletion queues...");
     for (size_t i = 0; i < m_deletionQueues.size(); ++i) {
         for (const auto& resource : m_deletionQueues[i]) {
             // At shutdown, we only care about destroying full buffers (like wireframe).
@@ -153,17 +154,17 @@ VulkanRenderer::~VulkanRenderer() {
     if (m_wireframePipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(m_vulkanDeviceRef.getLogicalDevice(), m_wireframePipelineLayout, nullptr);
 
     // Other resources (device, instance, surface) are managed by HelloVulkanApp
-    std::cout << "VulkanRenderer cleanup complete." << std::endl;
+    VK_LOG("VulkanRenderer cleanup complete.");
 }
 
 void VulkanRenderer::init() {
-    std::cout << "Initializing VulkanRenderer..." << std::endl;
+    VK_LOG("Initializing VulkanRenderer...");
     // Initialize swap chain (creates chain and image views)
     swapChainManager->init();
-    std::cout << "Swap Chain initialized." << std::endl;
+    VK_LOG("Swap Chain initialized.");
     
     createCommandPool(); // Create command pool early as ResourceManager might need it
-    std::cout << "Command Pool created." << std::endl;
+    VK_LOG("Command Pool created.");
 
     // --- Initialize ResourceManager ---
     resourceManager = std::make_unique<ResourceManager>(m_vulkanDeviceRef.getPhysicalDevice(), m_vulkanDeviceRef.getLogicalDevice(), commandPool, m_vulkanDeviceRef.getGraphicsQueue());
@@ -190,18 +191,18 @@ void VulkanRenderer::init() {
 
     // Create depth buffer resources (needs swap chain extent, so after swapChainManager->init())
     bufferManager->createDepthResources(swapChainManager->getExtent(), depthImage, depthImageMemory, depthImageView, depthFormat);
-    std::cout << "Depth Resources created." << std::endl;
+    VK_LOG("Depth Resources created.");
 
     createRenderPass();
-    std::cout << "Render Pass created." << std::endl;
+    VK_LOG("Render Pass created.");
 
     // Initialize the DescriptorSetManager first, as subsequent calls will need the device.
     descriptorSetManager->initialize(&m_vulkanDeviceRef, swapChainManager.get());
-    std::cout << "DescriptorSetManager initialized." << std::endl;
+    VK_LOG("DescriptorSetManager initialized.");
 
     // --- Create ImGui Descriptor Pool ---
     descriptorSetManager->createImguiDescriptorPool();
-    std::cout << "ImGui Descriptor Pool created by manager." << std::endl;
+    VK_LOG("ImGui Descriptor Pool created by manager.");
 
     // --- Initialize ImGui ---
     IMGUI_CHECKVERSION();
@@ -215,7 +216,7 @@ void VulkanRenderer::init() {
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForVulkan(&window, true);
-    std::cout << "ImGui GLFW backend initialized." << std::endl;
+    VK_LOG("ImGui GLFW backend initialized.");
 
     // Define descriptor set layout bindings (previously in createDescriptorSetLayout)
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
@@ -233,7 +234,7 @@ void VulkanRenderer::init() {
 
     std::vector<VkDescriptorSetLayoutBinding> bindings = {uboLayoutBinding, samplerLayoutBinding};
     descriptorSetManager->createDescriptorSetLayout(bindings);
-    std::cout << "Descriptor Set Layout created by manager." << std::endl;
+    VK_LOG("Descriptor Set Layout created by manager.");
 
     // Create and use the pipeline factory
     // The pipeline layout is created inside createGraphicsPipeline if pipelineLayout is VK_NULL_HANDLE
@@ -250,7 +251,7 @@ void VulkanRenderer::init() {
                                                    &pushConstantRange)) { // Pass push constant range
         throw std::runtime_error("Failed to create graphics pipeline using factory!");
     }
-    std::cout << "Graphics Pipeline and Layout created." << std::endl;
+    VK_LOG("Graphics Pipeline and Layout created.");
 
     // --- Create Wireframe Pipeline ---
     // The push constant range for the wireframe pipeline will also be for the model matrix.
@@ -268,7 +269,7 @@ void VulkanRenderer::init() {
                                                   &wireframePushConstantRange)) {
         throw std::runtime_error("Failed to create wireframe pipeline using factory!");
     }
-    std::cout << "Wireframe Pipeline and Layout created." << std::endl;
+    VK_LOG("Wireframe Pipeline and Layout created.");
 
     swapChainManager->createFramebuffers(renderPass, depthImageView); // Create framebuffers (needs render pass, image views, and depth image view)
     // createCommandPool(); // Moved earlier
@@ -276,12 +277,12 @@ void VulkanRenderer::init() {
     // Create Texture Loader
     // Make sure you have a texture file at this path or change it // This is now handled by ResourceManager. We'll get the "dirt" texture for the initial cube.
     // textureLoader = std::make_unique<VulkanTextureLoader>(physicalDeviceRef, deviceRef, commandPool, graphicsQueueRef, "../resources/textures/dirt.png");
-    // std::cout << "Texture Loader created." << std::endl;
+    // VK_LOG("Texture Loader created.");
     // This is now handled by ResourceManager. We'll get the "dirt" texture for the initial cube.
 
     // Create UBO resources
     bufferManager->createUniformBuffers(MAX_FRAMES_IN_FLIGHT, sizeof(UniformBufferObject), uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
-    std::cout << "Uniform Buffers created." << std::endl;
+    VK_LOG("Uniform Buffers created.");
 
     // Define descriptor pool sizes (previously in createDescriptorPool)
     // The manager's createDescriptorSets allocates swapChain->getImageCount() sets.
@@ -300,11 +301,11 @@ void VulkanRenderer::init() {
     // Max sets is just the number of frames in flight, as we have one descriptor set (UBO+Atlas) per frame.
     uint32_t maxSetsForPool = num_swap_chain_images;
     descriptorSetManager->createDescriptorPool(poolSizesVec, maxSetsForPool);
-    std::cout << "Descriptor Pool created by manager." << std::endl;
+    VK_LOG("Descriptor Pool created by manager.");
 
     // Allocate descriptor sets (previously in createDescriptorSets)
     descriptorSetManager->createDescriptorSets(); // Allocates descriptor sets for each frame in flight
-    std::cout << "Descriptor Sets allocated by manager." << std::endl;
+    VK_LOG("Descriptor Sets allocated by manager.");
 
     // Update descriptor sets (this logic remains in VulkanRenderer as it's application-specific)
     // Now we bind the UBO and the Texture Atlas
@@ -346,15 +347,15 @@ void VulkanRenderer::init() {
 
         vkUpdateDescriptorSets(m_vulkanDeviceRef.getLogicalDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
-    std::cout << "Descriptor Sets updated." << std::endl;
+    VK_LOG("Descriptor Sets updated.");
 
     // Process initial chunk changes (builds meshes for any existing/loaded chunks)
     processChunkChanges(); // This will also clear changed chunks in the world
 
     createCommandBuffers();
-    std::cout << "Command Buffers created." << std::endl;
+    VK_LOG("Command Buffers created.");
     createSyncObjects();
-    std::cout << "Synchronization Objects created." << std::endl;
+    VK_LOG("Synchronization Objects created.");
     std::cout << "VulkanRenderer initialization complete." << std::endl;
 
     // --- Finalize ImGui Initialization ---
@@ -374,7 +375,7 @@ void VulkanRenderer::init() {
     // init_info.CheckVkResultFn = check_vk_result; // Optional: can add a result checking function
     
     ImGui_ImplVulkan_Init(&init_info);
-    std::cout << "ImGui Vulkan backend initialized." << std::endl;
+    VK_LOG("ImGui Vulkan backend initialized.");
  
     // Initialize deletion queues
     m_deletionQueues.resize(MAX_FRAMES_IN_FLIGHT);
@@ -511,12 +512,12 @@ void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
 }
 
 void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-    std::cout << "[RCB] start. cmdBuf=" << reinterpret_cast<uintptr_t>(commandBuffer)
+    VK_LOG("[RCB] start. cmdBuf=" << reinterpret_cast<uintptr_t>(commandBuffer)
               << " imageIndex=" << imageIndex
               << " currentFrame=" << currentFrame
               << " renderPass=" << reinterpret_cast<uintptr_t>(renderPass)
               << " framebuffer=" << reinterpret_cast<uintptr_t>(swapChainManager->getFramebuffer(imageIndex))
-              << std::endl;
+             );
 
     if (commandBuffer == VK_NULL_HANDLE) {
         std::cerr << "[RCB][ERR] commandBuffer is VK_NULL_HANDLE\n";
@@ -535,9 +536,9 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    std::cout << "[RCB] before vkBeginCommandBuffer\n";
+    VK_LOG("[RCB] before vkBeginCommandBuffer");
     VkResult r = vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    std::cout << "[RCB] vkBeginCommandBuffer -> " << r << std::endl;
+    VK_LOG("[RCB] vkBeginCommandBuffer -> " << r);
     if (r != VK_SUCCESS) {
         std::cerr << "[RCB][ERR] vkBeginCommandBuffer failed: " << r << std::endl;
         return;
@@ -557,9 +558,9 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
-    std::cout << "[RCB] before vkCmdBeginRenderPass\n";
+    VK_LOG("[RCB] before vkCmdBeginRenderPass");
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    std::cout << "[RCB] after vkCmdBeginRenderPass\n";
+    VK_LOG("[RCB] after vkCmdBeginRenderPass");
 
     // Set dynamic viewport
     VkViewport viewport{};
@@ -570,21 +571,21 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    std::cout << "[RCB] viewport set\n";
+    VK_LOG("[RCB] viewport set");
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = swapChainManager->getExtent();
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-    std::cout << "[RCB] scissor set\n";
+    VK_LOG("[RCB] scissor set");
 
     // Pipeline bind
     if (graphicsPipeline == VK_NULL_HANDLE) {
-        std::cerr << "[RCB][ERR] graphicsPipeline is VK_NULL_HANDLE\n";
+        std::cerr << "[RCB][ERR] graphicsPipeline is VK_NULL_HANDLE" << std::endl;
     } else {
-        std::cout << "[RCB] before vkCmdBindPipeline pipeline=" << reinterpret_cast<uintptr_t>(graphicsPipeline) << std::endl;
+        VK_LOG("[RCB] before vkCmdBindPipeline pipeline=" << reinterpret_cast<uintptr_t>(graphicsPipeline));
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-        std::cout << "[RCB] after vkCmdBindPipeline\n";
+        VK_LOG("[RCB] after vkCmdBindPipeline");
     }
 
     // Descriptor set binding - validate indices
@@ -593,23 +594,23 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
         std::cerr << "[RCB][ERR] descriptor sets size " << descSets.size() << " <= currentFrame " << currentFrame << std::endl;
     } else {
         VkDescriptorSet ds = descSets[currentFrame];
-        std::cout << "[RCB] before vkCmdBindDescriptorSets ds=" << reinterpret_cast<uintptr_t>(ds) << std::endl;
+        VK_LOG("[RCB] before vkCmdBindDescriptorSets ds=" << reinterpret_cast<uintptr_t>(ds));
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &ds, 0, nullptr);
-        std::cout << "[RCB] after vkCmdBindDescriptorSets\n";
+        VK_LOG("[RCB] after vkCmdBindDescriptorSets");
     }
 
     // Iterate through chunk render data and issue draw calls
-    std::cout << "[RCB] chunkRenderData count=" << m_chunkRenderData.size() << std::endl;
+    VK_LOG("[RCB] chunkRenderData count=" << m_chunkRenderData.size());
     for (const auto& pair : m_chunkRenderData) {
         const ChunkRenderData& chunkData = pair.second;
-        std::cout << "[RCB] chunk: vb=" << reinterpret_cast<uintptr_t>(chunkData.vertexBuffer)
+        VK_LOG("[RCB] chunk: vb=" << reinterpret_cast<uintptr_t>(chunkData.vertexBuffer)
                   << " ib=" << reinterpret_cast<uintptr_t>(chunkData.indexBuffer)
                   << " idxCount=" << chunkData.indexCount
                   << " vOffset=" << chunkData.vertexOffset
-                  << " iOffset=" << chunkData.indexOffset << std::endl;
+                  << " iOffset=" << chunkData.indexOffset);
 
         if (chunkData.vertexBuffer == VK_NULL_HANDLE || chunkData.indexBuffer == VK_NULL_HANDLE || chunkData.indexCount == 0) {
-            std::cout << "[RCB] skipping empty/invalid chunk\n";
+            VK_LOG("[RCB] skipping empty/invalid chunk");
             continue;
         }
 
@@ -627,11 +628,11 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
         vkCmdDrawIndexed(commandBuffer, chunkData.indexCount, 1, 0, 0, 0);
     }
-    std::cout << "[RCB] finished drawing chunks\n";
+    VK_LOG("[RCB] finished drawing chunks");
 
     // Wireframe section guarded
     if (m_wireframeIndexCount > 0 && m_wireframeVertexBuffer != VK_NULL_HANDLE && m_wireframeIndexBuffer != VK_NULL_HANDLE) {
-        std::cout << "[RCB] drawing wireframe vb=" << reinterpret_cast<uintptr_t>(m_wireframeVertexBuffer) << " ib=" << reinterpret_cast<uintptr_t>(m_wireframeIndexBuffer) << std::endl;
+        VK_LOG("[RCB] drawing wireframe vb=" << reinterpret_cast<uintptr_t>(m_wireframeVertexBuffer) << " ib=" << reinterpret_cast<uintptr_t>(m_wireframeIndexBuffer));
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_wireframePipeline);
         VkBuffer wireframeVertexBuffers[] = {m_wireframeVertexBuffer};
         VkDeviceSize wireOffsets[] = {0};
@@ -646,38 +647,38 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     }
 
     vkCmdEndRenderPass(commandBuffer);
-    std::cout << "[RCB] after vkCmdEndRenderPass\n";
+    VK_LOG("[RCB] after vkCmdEndRenderPass");
 
     // ImGui draw - guard null
     ImDrawData* draw_data = ImGui::GetDrawData();
-    std::cout << "[RCB] ImGui draw_data ptr=" << reinterpret_cast<uintptr_t>(draw_data) << std::endl;
+    VK_LOG("[RCB] ImGui draw_data ptr=" << reinterpret_cast<uintptr_t>(draw_data));
     if (draw_data != nullptr) {
-        std::cout << "[RCB] before ImGui_ImplVulkan_RenderDrawData\n";
+        VK_LOG("[RCB] before ImGui_ImplVulkan_RenderDrawData");
         ImGui_ImplVulkan_RenderDrawData(draw_data, commandBuffer);
-        std::cout << "[RCB] after ImGui_ImplVulkan_RenderDrawData\n";
+        VK_LOG("[RCB] after ImGui_ImplVulkan_RenderDrawData");
     } else {
-        std::cout << "[RCB] skipping ImGui draw (null draw data)\n";
+        std::cerr << "[RCB][ERR] skipping ImGui draw (null draw data)" << std::endl;
     }
 
-    std::cout << "[RCB] before vkEndCommandBuffer\n";
+    VK_LOG("[RCB] before vkEndCommandBuffer");
     VkResult endR = vkEndCommandBuffer(commandBuffer);
-    std::cout << "[RCB] vkEndCommandBuffer -> " << endR << std::endl;
+    VK_LOG("[RCB] vkEndCommandBuffer -> " << endR);
     if (endR != VK_SUCCESS) {
         std::cerr << "[RCB][ERR] vkEndCommandBuffer failed: " << endR << std::endl;
     } else {
-        std::cout << "[RCB] recordCommandBuffer complete\n";
+        VK_LOG("[RCB] recordCommandBuffer complete");
     }
 }
 
 void VulkanRenderer::drawFrame() {
     // Debug instrumentation: print key state so we can see what causes the crash.
-    std::cout << "[VKR] drawFrame start. currentFrame=" << currentFrame
+    VK_LOG("[VKR] drawFrame start. currentFrame=" << currentFrame
               << " commandBuffers=" << commandBuffers.size()
               << " inFlightFences=" << inFlightFences.size()
               << " imageAvailableSemaphores=" << imageAvailableSemaphores.size()
               << " presentationFinishedSemaphores=" << presentationFinishedSemaphores.size()
               << " imagesInFlight=" << imagesInFlight.size()
-              << std::endl;
+             );
 
     if (commandBuffers.size() <= static_cast<size_t>(currentFrame)) {
         std::cerr << "[VKR][ERR] commandBuffers.size() <= currentFrame -> " << commandBuffers.size() << " <= " << currentFrame << std::endl;
@@ -689,22 +690,22 @@ void VulkanRenderer::drawFrame() {
     }
 
     // Print handles (safe to print even if VK_NULL_HANDLE)
-    std::cout << "[VKR] handles: fence=" << reinterpret_cast<uintptr_t>(inFlightFences[currentFrame])
+    VK_LOG("[VKR] handles: fence=" << reinterpret_cast<uintptr_t>(inFlightFences[currentFrame])
               << " imgAvail=" << (imageAvailableSemaphores.size() > static_cast<size_t>(currentFrame) ? reinterpret_cast<uintptr_t>(imageAvailableSemaphores[currentFrame]) : 0)
-              << std::endl;
+             );
 
     // If fence is VK_NULL_HANDLE, avoid calling vkWaitForFences (prevents crashing on invalid/uninitialized handles).
     if (inFlightFences[currentFrame] != VK_NULL_HANDLE) {
         VkResult r = vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-        std::cout << "[VKR] vkWaitForFences returned " << r << std::endl;
+        VK_LOG("[VKR] vkWaitForFences returned " << r);
     } else {
-        std::cout << "[VKR] inFlightFences[currentFrame] is VK_NULL_HANDLE, skipping wait\n";
+        std::cerr << "[VKR] inFlightFences[currentFrame] is VK_NULL_HANDLE, skipping wait" << std::endl;
     }
 
-    std::cout << "[VKR] about to acquireNextImage\n";
+    VK_LOG("[VKR] about to acquireNextImage");
     uint32_t imageIndex = UINT32_MAX;
     VkResult result = swapChainManager->acquireNextImage((imageAvailableSemaphores.size() > static_cast<size_t>(currentFrame) ? imageAvailableSemaphores[currentFrame] : VK_NULL_HANDLE), &imageIndex);
-    std::cout << "[VKR] acquireNextImage returned result=" << result << " imageIndex=" << imageIndex << std::endl;
+    VK_LOG("[VKR] acquireNextImage returned result=" << result << " imageIndex=" << imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChainResources();
@@ -731,7 +732,7 @@ void VulkanRenderer::drawFrame() {
 
     // If a rebase occurred, update all chunk model matrices immediately
     if (m_world.rebaseOccurredLastFrame()) {
-        // std::cout << "Rebase detected by renderer. Updating all model matrices." << std::endl;
+        // VK_LOG("Rebase detected by renderer. Updating all model matrices.");
         glm::ivec3 newRebaseOrigin = m_world.getRebaseOriginChunkCoord();
         for (auto& pair : m_chunkRenderData) {
             const glm::ivec3& chunkCoord = pair.first;
@@ -753,7 +754,7 @@ void VulkanRenderer::drawFrame() {
     // Now, mark the image as being in use by the *current* frame's fence.
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
         VkResult r = vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
-        std::cout << "[VKR] vkWaitForFences(imagesInFlight) returned " << r << std::endl;
+        VK_LOG("[VKR] vkWaitForFences(imagesInFlight) returned " << r);
     }
 
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
@@ -764,26 +765,26 @@ void VulkanRenderer::drawFrame() {
     } else if (uniformBuffersMapped[currentFrame] == nullptr) {
         std::cerr << "[VKR][ERR] uniformBuffersMapped[" << currentFrame << "] is nullptr, skipping update\n";
     } else {
-        std::cout << "[VKR] calling updateUniformBuffer(" << currentFrame << ")\n";
+        VK_LOG("[VKR] calling updateUniformBuffer(" << currentFrame << ")");
         updateUniformBuffer(currentFrame);
-        std::cout << "[VKR] updateUniformBuffer done\n";
+        VK_LOG("[VKR] updateUniformBuffer done");
     }
 
     // Reset the fence for the current frame
     {
         VkResult r = vkResetFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame]);
-        std::cout << "[VKR] vkResetFences returned " << r << std::endl;
+        VK_LOG("[VKR] vkResetFences returned " << r);
     }
 
     // Reset and record command buffer
     {
         VkResult r = vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-        std::cout << "[VKR] vkResetCommandBuffer returned " << r << " for cmdBuf=" << reinterpret_cast<uintptr_t>(commandBuffers[currentFrame]) << std::endl;
+        VK_LOG("[VKR] vkResetCommandBuffer returned " << r << " for cmdBuf=" << reinterpret_cast<uintptr_t>(commandBuffers[currentFrame]));
     }
 
     try {
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-        std::cout << "[VKR] recordCommandBuffer succeeded\n";
+        VK_LOG("[VKR] recordCommandBuffer succeeded");
     } catch (const std::exception& e) {
         std::cerr << "[VKR][ERR] recordCommandBuffer threw: " << e.what() << std::endl;
         return;
@@ -812,9 +813,9 @@ void VulkanRenderer::drawFrame() {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    std::cout << "[VKR] about to vkQueueSubmit on graphicsQueue\n";
+    VK_LOG("[VKR] about to vkQueueSubmit on graphicsQueue");
     VkResult submitRes = vkQueueSubmit(m_vulkanDeviceRef.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]);
-    std::cout << "[VKR] vkQueueSubmit returned " << submitRes << std::endl;
+    VK_LOG("[VKR] vkQueueSubmit returned " << submitRes);
     if (submitRes != VK_SUCCESS) {
         std::cerr << "[VKR][ERR] vkQueueSubmit failed: " << submitRes << std::endl;
         return;
@@ -830,9 +831,9 @@ void VulkanRenderer::drawFrame() {
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
 
-    std::cout << "[VKR] about to vkQueuePresentKHR on presentQueue\n";
+    VK_LOG("[VKR] about to vkQueuePresentKHR on presentQueue");
     VkResult presentRes = vkQueuePresentKHR(m_vulkanDeviceRef.getPresentQueue(), &presentInfo);
-    std::cout << "[VKR] vkQueuePresentKHR returned " << presentRes << std::endl;
+    VK_LOG("[VKR] vkQueuePresentKHR returned " << presentRes);
 
     if (presentRes == VK_ERROR_OUT_OF_DATE_KHR || presentRes == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
@@ -855,7 +856,7 @@ void VulkanRenderer::cleanupDepthResources() {
 }
 
 void VulkanRenderer::recreateSwapChainResources() {
-    std::cout << "Recreating swap chain dependent resources..." << std::endl;
+    VK_LOG("Recreating swap chain dependent resources...");
 
     // Wait for the device to be idle before cleanup/recreation
     vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
@@ -865,7 +866,7 @@ void VulkanRenderer::recreateSwapChainResources() {
     swapChainManager->cleanupForRecreation();
 
     // Process all pending deletions immediately since we've waited for idle
-    std::cout << "RecreateSwapChainResources: Processing all deletion queues..." << std::endl;
+    VK_LOG("RecreateSwapChainResources: Processing all deletion queues...");
     for (size_t i = 0; i < m_deletionQueues.size(); ++i) {
         for (const auto& resource : m_deletionQueues[i]) {
             if (resource.type == ResourceToDelete::Type::Buffer) {
@@ -899,7 +900,7 @@ void VulkanRenderer::recreateSwapChainResources() {
     // 4. Recreate swap chain and image views
     swapChainManager->createSwapChainInternal(); // Creates swap chain, gets new format/extent
     swapChainManager->createImageViews();
-    std::cout << "Swap chain and image views recreated by manager." << std::endl;
+    VK_LOG("Swap chain and image views recreated by manager.");
 
     // 4.5. Re-initialize imagesInFlight fences as image count might have changed
     // Fences in inFlightFences are not destroyed, so we can reuse them.
@@ -922,11 +923,11 @@ void VulkanRenderer::recreateSwapChainResources() {
 
     // 5. Recreate depth buffer resources (depends on new swap chain extent)
     bufferManager->createDepthResources(swapChainManager->getExtent(), depthImage, depthImageMemory, depthImageView, depthFormat);
-    std::cout << "Depth Resources recreated." << std::endl;
+    VK_LOG("Depth Resources recreated.");
 
     // 6. Recreate render pass (depends on new format and new depth format)
     createRenderPass();
-    std::cout << "Render pass recreated." << std::endl;
+    VK_LOG("Render pass recreated.");
 
     // 7. Recreate graphics pipeline (depends on new render pass and existing push constant setup)
     // Define the push constant range again, as it's needed for pipeline recreation
@@ -937,7 +938,7 @@ void VulkanRenderer::recreateSwapChainResources() {
     if (!pipelineFactory->createGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", descriptorSetManager->getDescriptorSetLayout(), renderPass, pipelineLayout, graphicsPipeline, &pushConstantRange)) {
         throw std::runtime_error("Failed to recreate graphics pipeline using factory!");
     }
-    std::cout << "Graphics pipeline recreated." << std::endl;
+    VK_LOG("Graphics pipeline recreated.");
 
     // 7.5 Recreate wireframe pipeline (depends on new render pass and existing push constant setup)
     VkPushConstantRange wireframePushConstantRange{};
@@ -952,7 +953,7 @@ void VulkanRenderer::recreateSwapChainResources() {
                                                   &wireframePushConstantRange)) {
         throw std::runtime_error("Failed to recreate wireframe pipeline using factory!");
     }
-    std::cout << "Wireframe pipeline recreated." << std::endl;
+    VK_LOG("Wireframe pipeline recreated.");
 
     // 8. Recreate framebuffers (depends on new image views, render pass, and new depth image view)
     swapChainManager->createFramebuffers(renderPass, depthImageView);
@@ -975,7 +976,7 @@ void VulkanRenderer::recreateSwapChainResources() {
     // However, sync objects need to be recreated if their count changed or if they were destroyed.
     createSyncObjects(); // Recreate all sync objects, including presentationFinishedSemaphores
 
-    std::cout << "Swap chain dependent resources fully recreated." << std::endl;
+    VK_LOG("Swap chain dependent resources fully recreated.");
 }
 
 void VulkanRenderer::destroyChunkRenderData(ChunkRenderData& data) {
@@ -1026,13 +1027,13 @@ void VulkanRenderer::createChunkRenderDataFromMeshData(VkCommandBuffer& transfer
                                                relativeChunkCoord.y * CHUNK_SIDE_LENGTH,
                                                relativeChunkCoord.z * CHUNK_SIDE_LENGTH);
         renderData.modelMatrix = glm::translate(glm::mat4(1.0f), relativeWorldPos);
-        // std::cout << "Created render data for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " Indices: " << renderData.indexCount << std::endl;
+        VK_LOG("Created render data for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << " Indices: " << renderData.indexCount);
     } else {
         // If mesh is empty, ensure no render data exists or it's cleared
         if (it != m_chunkRenderData.end()) { // If it existed
              m_chunkRenderData.erase(it); // Remove the entry as it's now empty
         }
-        // std::cout << "No mesh data to create for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z << std::endl;
+        VK_LOG("No mesh data to create for chunk: " << chunkCoord.x << "," << chunkCoord.y << "," << chunkCoord.z);
     }
 }
 
