@@ -83,6 +83,9 @@ public:
     // Main drawing function
     void drawFrame();
 
+    // Clears all world-related render data (chunks, wireframes, etc.)
+    void clearWorldRenderDataAndReset();
+
     // Public flag to signal resize from callback
     bool framebufferResized = false;
 
@@ -103,7 +106,7 @@ private:
     // std::unique_ptr<VulkanTextureLoader> textureLoader; // Replaced by ResourceManager
     std::unique_ptr<ResourceManager> resourceManager; // Manages models and textures
     std::shared_ptr<Camera> m_camera; // Store the camera
-    std::unique_ptr<VulkanThreadManager> m_threadManager; // New thread manager
+    std::unique_ptr<VulkanThreadManager> m_threadManager; // New thread manager, made public for now
     BlockRegistry& m_blockRegistryRef; // Reference to the block registry
     World& m_world; // Reference to the world data
     Player& m_playerRef; // Reference to the player object

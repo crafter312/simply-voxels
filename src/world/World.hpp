@@ -98,6 +98,9 @@ public:
     // Call this periodically to process loading/unloading
     void update(float deltaTime);
 
+    // Clears all loaded chunks from memory, saving dirty ones first.
+    void clearAllChunks();
+
     // Get the current rebase origin in chunk coordinates
     glm::ivec3 getRebaseOriginChunkCoord() const { return m_rebaseOriginChunkCoord; }
 

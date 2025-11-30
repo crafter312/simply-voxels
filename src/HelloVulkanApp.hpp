@@ -35,6 +35,9 @@ class Player;
 // Forward declare VulkanDebug
 class VulkanDebug;
 
+// Forward declare UIManager
+class UIManager;
+
 class HelloVulkanApp {
 public:
     HelloVulkanApp();
@@ -42,6 +45,11 @@ public:
     
     // Main function to run the application
     void run();
+
+    // --- Public State Changers for UI ---
+    void resumeGame();
+    void quitToMenu();
+    GLFWwindow* getWindow() { return window; }
 
 private:
     // Define the possible states of the application
@@ -89,6 +97,9 @@ private:
 
     // --- Game State ---
     GameState m_currentState = GameState::STARTUP;
+
+    // --- UI Manager ---
+    std::unique_ptr<UIManager> m_uiManager;
 
     void initWindow();
     void initVulkan();

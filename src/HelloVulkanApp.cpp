@@ -11,6 +11,7 @@
 #include "Player.hpp"                // Include the Player header
 #include "VulkanDebug.hpp"           // Include the new VulkanDebug header
 
+#include "ui/UIManager.hpp"          // Include the new UIManager header
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -156,6 +157,21 @@ void HelloVulkanApp::initVulkan() {
     // Set initial state after all initialization
     m_currentState = GameState::STARTUP;
 }
+void HelloVulkanApp::resumeGame() {
+    m_currentState = GameState::IN_GAME;
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+}
+
+void HelloVulkanApp::quitToMenu() {
+    m_currentState = GameState::MAIN_MENU;
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+    // Clear world data on both the CPU and GPU
+    if (world) {
+        world->clearAllChunks();
+    }
+    renderer->clearWorldRenderDataAndReset();
+}
 
 void HelloVulkanApp::createInstance() {
     if (VulkanDebug::enableValidationLayers && !VulkanDebug::checkValidationLayerSupport()) {
@@ -233,10 +249,10 @@ void HelloVulkanApp::mainLoop() {
         lastFrame = currentFrame;
 
         VK_LOG("[DBG] before ImGui_NewFrame");
-        // Temporarily disable ImGui frame if ImGui init may be missing:
-        // ImGui_ImplVulkan_NewFrame();
-        // ImGui_ImplGlfw_NewFrame();
-        // ImGui::NewFrame();
+        // Start the Dear ImGui frame
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
         VK_LOG("[DBG] after ImGui_NewFrame");
 
         VK_LOG("[DBG] before inputManager->update");
@@ -285,6 +301,10 @@ bool HelloVulkanApp::startup() {
     // Currently, we just transition to the main menu immediately.
     // You could add splash screen logic or initial loading here.
     VK_LOG("State: STARTUP -> MAIN_MENU");
+
+    // Create the UI Manager
+    m_uiManager = std::make_unique<UIManager>(*this);
+
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for menu
     return true; // Indicate that startup is complete
@@ -321,29 +341,27 @@ void HelloVulkanApp::render() {
         case GameState::PAUSED:
             renderPaused();
             break;
-        default:
-            // For STARTUP or LOADING, you might just clear the screen
-            // or do nothing until the renderer is ready.
-            // Calling drawFrame ensures the window doesn't appear unresponsive.
-            renderer->drawFrame();
-            break;
     }
+
+    // All render paths should call ImGui::Render() and renderer->drawFrame() to present the frame
+    ImGui::Render();
+    renderer->drawFrame();
 }
 
 void HelloVulkanApp::updateMainMenu() {
-    // Handle input for the main menu (e.g., button clicks)
-    // For now, let's add a simple key press to start the game
-    if (inputManager->isKeyPressed(KeyCode::Space)) {
-        VK_LOG("State: MAIN_MENU -> IN_GAME");
-        m_currentState = GameState::IN_GAME; //TODO: implement LOADING state later
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide cursor for game
-    }
+    // The logic for button clicks is now handled inside UIManager::drawMainMenu
+    // and the renderMainMenu function. We leave this empty for now, but you
+    // could add logic for things like menu animations here.
 }
 
 void HelloVulkanApp::renderMainMenu() {
     // This is where you will tell ImGui to draw the main menu.
-    // For now, we can just have the renderer draw its clear color.
-    renderer->drawFrame();
+    // The UIManager will return true if the "Start Game" button is clicked.
+    if (m_uiManager && m_uiManager->drawMainMenu()) {
+        VK_LOG("State: MAIN_MENU -> IN_GAME");
+        m_currentState = GameState::IN_GAME; // TODO: implement LOADING state later
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
 }
 
 void HelloVulkanApp::updateInGame(float dt) {
@@ -388,7 +406,8 @@ void HelloVulkanApp::updateInGame(float dt) {
 }
 
 void HelloVulkanApp::renderInGame() {
-    renderer->drawFrame();
+    // All ImGui rendering setup for in-game HUD would go here,
+    // ImGui::Render() and renderer->drawFrame() are called in the main render dispatcher.
 }
 
 void HelloVulkanApp::updatePaused() {
@@ -400,8 +419,9 @@ void HelloVulkanApp::updatePaused() {
 }
 
 void HelloVulkanApp::renderPaused() {
-    // When paused, we still want to see the game world, but with a menu on top.
-    renderer->drawFrame();
+    if (m_uiManager) {
+        m_uiManager->drawPauseMenu(); // bit of a misnomer, just defines the pause UI
+    }
 }
 
 void HelloVulkanApp::cleanup() {
@@ -410,6 +430,9 @@ void HelloVulkanApp::cleanup() {
     // Renderer holds Vulkan objects that depend on the device, so destroy it first.
     // The renderer's destructor handles its internal cleanup.
     renderer.reset(); // Calls VulkanRenderer destructor
+
+    // UI Manager is managed by unique_ptr
+    m_uiManager.reset();
 
     // Player is managed by unique_ptr, will be cleaned up automatically
     player.reset();

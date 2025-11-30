@@ -646,9 +646,6 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
         vkCmdDrawIndexed(commandBuffer, m_wireframeIndexCount, 1, firstIndex, vertexOffset, 0); // Use calculated offsets
     }
 
-    vkCmdEndRenderPass(commandBuffer);
-    VK_LOG("[RCB] after vkCmdEndRenderPass");
-
     // ImGui draw - guard null
     ImDrawData* draw_data = ImGui::GetDrawData();
     VK_LOG("[RCB] ImGui draw_data ptr=" << reinterpret_cast<uintptr_t>(draw_data));
@@ -659,6 +656,9 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     } else {
         std::cerr << "[RCB][ERR] skipping ImGui draw (null draw data)" << std::endl;
     }
+
+    vkCmdEndRenderPass(commandBuffer);
+    VK_LOG("[RCB] after vkCmdEndRenderPass");
 
     VK_LOG("[RCB] before vkEndCommandBuffer");
     VkResult endR = vkEndCommandBuffer(commandBuffer);
@@ -844,6 +844,42 @@ void VulkanRenderer::drawFrame() {
     }
 
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void VulkanRenderer::clearWorldRenderDataAndReset() {
+    VK_LOG("Clearing all world render data...");
+
+    // Wait for the GPU to be idle to ensure no resources are in use before we
+    // queue them for deletion and clear our maps.
+    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
+
+    // Destroy all chunk render data
+    for (auto& pair : m_chunkRenderData) {
+        // We can use the existing helper. It queues buffers for deletion.
+        // Since we just waited for idle, we can process these deletions immediately.
+        destroyChunkRenderData(pair.second);
+    }
+    m_chunkRenderData.clear();
+
+    // Also clear the wireframe data
+    if (m_wireframeVertexBuffer != VK_NULL_HANDLE) {
+        m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::VertexBufferRegion, m_wireframeVertexBuffer, VK_NULL_HANDLE, m_wireframeVertexOffset, m_wireframeVertexSize});
+        m_wireframeVertexBuffer = VK_NULL_HANDLE;
+    }
+    if (m_wireframeIndexBuffer != VK_NULL_HANDLE) {
+        m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::IndexBufferRegion, m_wireframeIndexBuffer, VK_NULL_HANDLE, m_wireframeIndexOffset, m_wireframeIndexSize});
+        m_wireframeIndexBuffer = VK_NULL_HANDLE;
+    }
+    m_wireframeIndexCount = 0;
+
+    VK_LOG("Clearing in-progress meshing tasks set...");
+    m_meshingTasksInProgress.clear();
+
+    VK_LOG("Restarting thread manager...");
+    m_threadManager->stop();
+    m_threadManager->start();
+
+    VK_LOG("Renderer clearing and resetting complete!");
 }
 
 void VulkanRenderer::cleanupDepthResources() {

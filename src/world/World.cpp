@@ -285,6 +285,37 @@ const std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator>& World::getC
     return m_chunks;
 }
 
+void World::clearAllChunks() {
+    std::cout << "[World] Clearing all chunks..." << std::endl;
+    std::unique_lock<std::shared_mutex> lock(m_chunks_mutex); // Exclusive lock to modify data structures
+
+    // 1. Save any modified chunks before clearing them
+    if (m_regionManager) {
+        int savedCount = 0;
+        for (auto& pair : m_chunks) {
+            if (pair.second && pair.second->isDirty()) {
+                if (m_regionManager->saveChunkToFile(*pair.second)) {
+                    savedCount++;
+                }
+            }
+        }
+        std::cout << "[World] Saved " << savedCount << " dirty chunks before clearing." << std::endl;
+    }
+
+    // 2. Clear all chunk data structures
+    m_chunks.clear();
+    m_changedChunks.clear();
+
+    // 3. Clear the loading/unloading queues
+    std::queue<glm::ivec3> emptyLoadQueue;
+    m_loadQueue.swap(emptyLoadQueue);
+
+    std::queue<glm::ivec3> emptyUnloadQueue;
+    m_unloadQueue.swap(emptyUnloadQueue);
+
+    std::cout << "[World] All chunk data cleared." << std::endl;
+}
+
 void World::update(float deltaTime) {
     m_rebaseOccurredThisFrame = false; // Reset flag at the start of update
     checkAndRebase(); // Check and perform rebase first

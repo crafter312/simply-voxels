@@ -226,6 +226,7 @@ add_executable(SimpleVulkanWindow
     src/util/Raycaster.cpp               # Add the new Raycaster source file
     src/physics/VoxelShape.cpp           # Add the new VoxelShape source file
     src/physics/WireframeMesher.cpp
+    src/ui/UIManager.cpp                  # Add the new UIManager source file
 )
 
 # Include directories for the SimpleVulkanWindow target
