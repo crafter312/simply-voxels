@@ -1,5 +1,7 @@
  #include "WireframeMesher.hpp"
  #include "VoxelShape.hpp" // Include VoxelShape definition to access BlockAABB
+#include <cassert>   // For assert
+#include <limits>    // For std::numeric_limits
  
  namespace WireframeMesher {
  
@@ -24,6 +26,10 @@
          glm::vec3 c101 = glm::vec3(max.x, min.y, max.z);
          glm::vec3 c111 = glm::vec3(max.x, max.y, max.z);
          glm::vec3 c011 = glm::vec3(min.x, max.y, max.z);
+
+         // Assert that the number of vertices will not overflow a 32-bit index.
+         // This is highly unlikely for a single block's wireframe.
+         assert(meshData.vertices.size() <= std::numeric_limits<uint32_t>::max());
  
          // Store the current number of vertices before adding new ones
          uint32_t baseVertexIndex = static_cast<uint32_t>(meshData.vertices.size());
