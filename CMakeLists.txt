@@ -73,11 +73,13 @@ FetchContent_Declare(
     GIT_TAG        v1.9.4
 )
 
-# 2. Ensure the source code is available.
-FetchContent_GetProperties(lz4)
-if(NOT lz4_POPULATED)
-    FetchContent_Populate(lz4)
-endif()
+# 2. Ensure the source code is available without adding it to the build.
+# By setting FETCHCONTENT_ADD_SUBDIRECTORY_SKIP to TRUE, we instruct
+# FetchContent_MakeAvailable to only perform the population step (downloading)
+# and not call add_subdirectory. This is the modern, non-deprecated equivalent
+# of FetchContent_Populate and is ideal for use with ExternalProject_Add.
+set(FETCHCONTENT_ADD_SUBDIRECTORY_SKIP TRUE)
+FetchContent_MakeAvailable(lz4)
 
 # 3. Build lz4 using ExternalProject_Add for maximum isolation.
 # This avoids the policy issues from add_subdirectory while giving us a reliable build.
