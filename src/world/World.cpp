@@ -18,7 +18,7 @@
 #include "../resource/RegionManager.hpp" // Include RegionManager definition
 
 World::World(std::shared_ptr<Camera> camera)
-    : m_camera(camera), m_stopCompactionThread(false) {
+    : m_camera(camera), m_stopCompactionThread(false), m_initialChunkGenerationComplete(false) {
     m_regionManager = std::make_unique<WorldSave::RegionManager>("../run/regions/"); // Initialize RegionManager
     // Initially, enqueue chunks around the starting camera position (which is relative to the initial rebase origin 0,0,0)
     enqueueChunksNearCamera();
@@ -459,6 +459,12 @@ void World::processLoadQueue() {
         loadedCount++; 
         // m_changedChunks is already updated by getOrCreateChunk if it's new
     }
+    
+    // After processing, if the load queue is empty and we haven't marked the initial generation as complete yet, do so now.
+    if (m_loadQueue.empty() && !m_initialChunkGenerationComplete.load()) {
+        m_initialChunkGenerationComplete.store(true);
+        std::cout << "[World] Initial chunk generation complete." << std::endl;
+    }
 }
 
 void World::processUnloadQueue() {
@@ -715,4 +721,8 @@ std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {
 
     // Fallback: If no suitable ground found (e.g., over a void), return nullopt.
     return std::nullopt;
+}
+
+bool World::isInitialChunkGenerationComplete() const {
+    return m_initialChunkGenerationComplete.load();
 }

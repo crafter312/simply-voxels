@@ -7,7 +7,8 @@
 VulkanThreadManager::VulkanThreadManager(World& world, ResourceManager& resourceManager, BlockRegistry& blockRegistry)
     : m_world(world),
       m_resourceManager(resourceManager),
-      m_blockRegistry(blockRegistry) {
+      m_blockRegistry(blockRegistry),
+      m_isMeshing(false) { // Initialize the flag
     std::cout << "VulkanThreadManager constructed." << std::endl;
 }
 
@@ -59,6 +60,12 @@ bool VulkanThreadManager::hasMeshResults() {
     return !m_meshResultsQueue.empty();
 }
 
+bool VulkanThreadManager::isIdle() const {
+    std::unique_lock<std::mutex> lock(m_workQueueMutex);
+    // The manager is idle if the work queue is empty AND no job is currently being processed.
+    return m_meshWorkQueue.empty() && !m_isMeshing.load();
+}
+
 void VulkanThreadManager::mesherThreadLoop() {
     while (!m_stopMesherThread.load()) {
         glm::ivec3 chunkCoordToMesh;
@@ -74,6 +81,9 @@ void VulkanThreadManager::mesherThreadLoop() {
                 break; // Exit loop if stop is requested
             }
 
+            // Set the flag to indicate we are now processing a job, BEFORE releasing the lock.
+            // This closes the race condition window with the isIdle() check.
+            m_isMeshing.store(true);
             chunkCoordToMesh = m_meshWorkQueue.front();
             m_meshWorkQueue.pop();
         } // Lock is released here
@@ -106,6 +116,9 @@ void VulkanThreadManager::mesherThreadLoop() {
             //     m_meshResultsQueue.push({chunkCoordToMesh, ModelData{}});
             // }
         }
+
+        // Clear the flag now that we are done with the job
+        m_isMeshing.store(false);
     }
     std::cout << "VulkanThreadManager: Mesher thread loop exited." << std::endl;
 }

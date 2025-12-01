@@ -44,3 +44,18 @@ void UIManager::drawPauseMenu() {
 
     ImGui::End();
 }
+
+void UIManager::drawLoadingScreen() {
+    // Create a full-screen, non-interactive window for the loading message.
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+    ImGui::Begin("Loading", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    const char* loadingText = "Loading World...";
+    ImVec2 textSize = ImGui::CalcTextSize(loadingText);
+    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - textSize.x) * 0.5f);
+    ImGui::SetCursorPosY((ImGui::GetWindowHeight() - textSize.y) * 0.5f);
+    ImGui::Text("%s", loadingText);
+
+    ImGui::End();
+}

@@ -317,8 +317,7 @@ void HelloVulkanApp::update() {
             updateMainMenu();
             break;
         case GameState::LOADING:
-            // Handle loading screen logic here
-            // For now, we can imagine it transitions to IN_GAME after some work
+            updateLoading(deltaTime);
             break;
         case GameState::IN_GAME:
             updateInGame(deltaTime);
@@ -335,6 +334,9 @@ void HelloVulkanApp::render() {
         case GameState::MAIN_MENU:
             renderMainMenu();
             break;
+        case GameState::LOADING:
+            renderLoading();
+            break;
         case GameState::IN_GAME:
             renderInGame();
             break;
@@ -345,6 +347,10 @@ void HelloVulkanApp::render() {
 
     // All render paths should call ImGui::Render() and renderer->drawFrame() to present the frame
     ImGui::Render();
+    if (m_currentState == GameState::LOADING) {
+        renderer->drawFrameUIOnly();
+        return;
+    }
     renderer->drawFrame();
 }
 
@@ -358,9 +364,27 @@ void HelloVulkanApp::renderMainMenu() {
     // This is where you will tell ImGui to draw the main menu.
     // The UIManager will return true if the "Start Game" button is clicked.
     if (m_uiManager && m_uiManager->drawMainMenu()) {
-        VK_LOG("State: MAIN_MENU -> IN_GAME");
-        m_currentState = GameState::IN_GAME; // TODO: implement LOADING state later
+        VK_LOG("State: MAIN_MENU -> LOADING");
+        m_currentState = GameState::LOADING; // TODO: implement LOADING state later
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
+}
+
+void HelloVulkanApp::updateLoading(float dt) {
+    // This is our two-stage check for loading completion.
+    // Stage 1: Wait for the world to finish its initial chunk generation pass.
+    // Stage 2: Once generation is done, wait for the meshing pipeline to become fully idle.
+    world->update(dt);
+    if (world && world->isInitialChunkGenerationComplete() &&
+        renderer && renderer->isMeshingPipelineIdle()) {
+        VK_LOG("State: LOADING -> IN_GAME");
+        m_currentState = GameState::IN_GAME;
+    }
+}
+
+void HelloVulkanApp::renderLoading() {
+    if (m_uiManager) {
+        m_uiManager->drawLoadingScreen(); // bit of a misnomer, just defines the pause UI
     }
 }
 

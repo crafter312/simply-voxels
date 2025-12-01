@@ -82,9 +82,13 @@ public:
 
     // Main drawing function
     void drawFrame();
+    void drawFrameUIOnly();
 
     // Clears all world-related render data (chunks, wireframes, etc.)
     void clearWorldRenderDataAndReset();
+
+    // Checks if the meshing thread pool is completely idle.
+    bool isMeshingPipelineIdle() const;
 
     // Public flag to signal resize from callback
     bool framebufferResized = false;
@@ -200,6 +204,7 @@ private:
     // void createChunkRenderData(const glm::ivec3& chunkCoord, const Chunk& chunk); // Old synchronous version
     void createChunkRenderDataFromMeshData(VkCommandBuffer& transferCommandBuffer, const glm::ivec3& chunkCoord, const ModelData& meshData);
     void updateTargetedBlockWireframe(); // New function for wireframe
+    void submitNewMeshingTasks();
 };
 
 #endif // VULKAN_RENDERER_HPP

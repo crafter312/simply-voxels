@@ -846,6 +846,154 @@ void VulkanRenderer::drawFrame() {
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+void VulkanRenderer::drawFrameUIOnly() {
+    // Debug instrumentation: print key state so we can see what causes the crash.
+    VK_LOG("[VKR] drawFrame start. currentFrame=" << currentFrame
+              << " commandBuffers=" << commandBuffers.size()
+              << " inFlightFences=" << inFlightFences.size()
+              << " imageAvailableSemaphores=" << imageAvailableSemaphores.size()
+              << " presentationFinishedSemaphores=" << presentationFinishedSemaphores.size()
+              << " imagesInFlight=" << imagesInFlight.size()
+             );
+
+    if (commandBuffers.size() <= static_cast<size_t>(currentFrame)) {
+        std::cerr << "[VKR][ERR] commandBuffers.size() <= currentFrame -> " << commandBuffers.size() << " <= " << currentFrame << std::endl;
+        return;
+    }
+    if (inFlightFences.size() <= static_cast<size_t>(currentFrame)) {
+        std::cerr << "[VKR][ERR] inFlightFences not initialized for currentFrame: " << currentFrame << std::endl;
+        return;
+    }
+
+    // Print handles (safe to print even if VK_NULL_HANDLE)
+    VK_LOG("[VKR] handles: fence=" << reinterpret_cast<uintptr_t>(inFlightFences[currentFrame])
+              << " imgAvail=" << (imageAvailableSemaphores.size() > static_cast<size_t>(currentFrame) ? reinterpret_cast<uintptr_t>(imageAvailableSemaphores[currentFrame]) : 0)
+             );
+
+    // If fence is VK_NULL_HANDLE, avoid calling vkWaitForFences (prevents crashing on invalid/uninitialized handles).
+    if (inFlightFences[currentFrame] != VK_NULL_HANDLE) {
+        VkResult r = vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        VK_LOG("[VKR] vkWaitForFences returned " << r);
+    } else {
+        std::cerr << "[VKR] inFlightFences[currentFrame] is VK_NULL_HANDLE, skipping wait" << std::endl;
+    }
+
+    VK_LOG("[VKR] about to acquireNextImage");
+    uint32_t imageIndex = UINT32_MAX;
+    VkResult result = swapChainManager->acquireNextImage((imageAvailableSemaphores.size() > static_cast<size_t>(currentFrame) ? imageAvailableSemaphores[currentFrame] : VK_NULL_HANDLE), &imageIndex);
+    VK_LOG("[VKR] acquireNextImage returned result=" << result << " imageIndex=" << imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreateSwapChainResources();
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("Failed to acquire swap chain image!");
+    }
+
+    // --- Corrected Deferred Deletion ---
+    // At the start of the frame, we have already waited on inFlightFences[currentFrame].
+    // This means the GPU has finished with the resources from the last time this frame index was used.
+    // It is now safe to process the deletion queue for the current frame index.
+    for (const auto& resource : m_deletionQueues[currentFrame]) {
+        if (resource.type == ResourceToDelete::Type::VertexBufferRegion) {
+            bufferManager->freeVertexBuffer(resource.bufferHandle, resource.offset, resource.size);
+        } else if (resource.type == ResourceToDelete::Type::IndexBufferRegion) {
+            bufferManager->freeIndexBuffer(resource.bufferHandle, resource.offset, resource.size);
+        } else if (resource.type == ResourceToDelete::Type::Buffer) {
+            if (resource.bufferHandle != VK_NULL_HANDLE) vkDestroyBuffer(m_vulkanDeviceRef.getLogicalDevice(), resource.bufferHandle, nullptr);
+            if (resource.memoryHandle != VK_NULL_HANDLE) vkFreeMemory(m_vulkanDeviceRef.getLogicalDevice(), resource.memoryHandle, nullptr);
+        }
+    }
+    m_deletionQueues[currentFrame].clear();
+
+    // Process chunk changes (only meshing tasks, no data transfer to GPU yet)
+    submitNewMeshingTasks();
+
+    // After acquiring the image, we might have waited on an old fence.
+    // Now, mark the image as being in use by the *current* frame's fence.
+    if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+        VkResult r = vkWaitForFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+        VK_LOG("[VKR] vkWaitForFences(imagesInFlight) returned " << r);
+    }
+
+    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+    // Reset the fence for the current frame
+    {
+        VkResult r = vkResetFences(m_vulkanDeviceRef.getLogicalDevice(), 1, &inFlightFences[currentFrame]);
+        VK_LOG("[VKR] vkResetFences returned " << r);
+    }
+
+    // Reset and record command buffer
+    {
+        VkResult r = vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+        VK_LOG("[VKR] vkResetCommandBuffer returned " << r << " for cmdBuf=" << reinterpret_cast<uintptr_t>(commandBuffers[currentFrame]));
+    }
+
+    try {
+        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+        VK_LOG("[VKR] recordCommandBuffer succeeded");
+    } catch (const std::exception& e) {
+        std::cerr << "[VKR][ERR] recordCommandBuffer threw: " << e.what() << std::endl;
+        return;
+    } catch (...) {
+        std::cerr << "[VKR][ERR] recordCommandBuffer threw unknown exception\n";
+        return;
+    }
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+
+    // signal semaphore is tied to imageIndex
+    if (imageIndex >= presentationFinishedSemaphores.size()) {
+        std::cerr << "[VKR][WARN] imageIndex >= presentationFinishedSemaphores.size(): " << imageIndex << " >= " << presentationFinishedSemaphores.size() << std::endl;
+        // Resize to avoid OOB when debugging
+        presentationFinishedSemaphores.resize(imageIndex + 1, VK_NULL_HANDLE);
+    }
+    VkSemaphore signalSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    VK_LOG("[VKR] about to vkQueueSubmit on graphicsQueue");
+    VkResult submitRes = vkQueueSubmit(m_vulkanDeviceRef.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]);
+    VK_LOG("[VKR] vkQueueSubmit returned " << submitRes);
+    if (submitRes != VK_SUCCESS) {
+        std::cerr << "[VKR][ERR] vkQueueSubmit failed: " << submitRes << std::endl;
+        return;
+    }
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    VkSemaphore presentWaitSemaphores[] = {presentationFinishedSemaphores[imageIndex]};
+    presentInfo.pWaitSemaphores = presentWaitSemaphores;
+    VkSwapchainKHR swapChains[] = {swapChainManager->getSwapChainHandle()};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+
+    VK_LOG("[VKR] about to vkQueuePresentKHR on presentQueue");
+    VkResult presentRes = vkQueuePresentKHR(m_vulkanDeviceRef.getPresentQueue(), &presentInfo);
+    VK_LOG("[VKR] vkQueuePresentKHR returned " << presentRes);
+
+    if (presentRes == VK_ERROR_OUT_OF_DATE_KHR || presentRes == VK_SUBOPTIMAL_KHR || framebufferResized) {
+        framebufferResized = false;
+        recreateSwapChainResources();
+    } else if (presentRes != VK_SUCCESS) {
+        std::cerr << "[VKR][ERR] vkQueuePresentKHR failed: " << presentRes << std::endl;
+        return;
+    }
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
 void VulkanRenderer::clearWorldRenderDataAndReset() {
     VK_LOG("Clearing all world render data...");
 
@@ -880,6 +1028,15 @@ void VulkanRenderer::clearWorldRenderDataAndReset() {
     m_threadManager->start();
 
     VK_LOG("Renderer clearing and resetting complete!");
+}
+
+bool VulkanRenderer::isMeshingPipelineIdle() const {
+    if (!m_threadManager) {
+        return true; // No thread manager means it's idle.
+    }
+
+    // This is a simple wrapper around the thread manager's idle check.
+    return m_threadManager->isIdle();
 }
 
 void VulkanRenderer::cleanupDepthResources() {
@@ -1125,18 +1282,14 @@ void VulkanRenderer::processChunkChanges() {
     }
 
     // --- Stage 2: Submit new meshing jobs to the thread manager ---
+    submitNewMeshingTasks();
+}
+
+void VulkanRenderer::submitNewMeshingTasks() {
     const auto& changedChunks = m_world.getChangedChunks();
     std::set<glm::ivec3, IVec3Comparator> chunksToActuallyProcess = changedChunks; // Copy to iterate
 
     for (const glm::ivec3& chunkCoord : chunksToActuallyProcess) {
-        // Check if a task for this chunk is already in progress
-        if (m_meshingTasksInProgress.count(chunkCoord)) {
-            // A task is already in progress. Acknowledge it so it's removed
-            // from the world's changed set, but don't submit a duplicate job.
-            m_world.acknowledgeChunkChangeProcessed(chunkCoord);
-            continue;
-        }
-
         std::shared_ptr<Chunk> chunk_sptr = m_world.getChunk(chunkCoord);
 
         if (chunk_sptr) { // Chunk exists: modified or newly loaded, needs meshing

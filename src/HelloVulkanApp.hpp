@@ -121,6 +121,9 @@ private:
     void updateMainMenu();
     void renderMainMenu();
 
+    void updateLoading(float dt);
+    void renderLoading();
+
     void updateInGame(float dt);
     void renderInGame();
 

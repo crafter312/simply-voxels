@@ -120,6 +120,9 @@ public:
     // Determines a suitable spawn position for the player.
     std::optional<glm::i64vec3> getPlayerSpawnPos() const;
 
+    // Checks if the initial wave of chunk generation is complete.
+    bool isInitialChunkGenerationComplete() const;
+
 private:
     std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator> m_chunks;
     std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    
@@ -132,6 +135,7 @@ private:
     std::queue<glm::ivec3> m_unloadQueue;
     mutable std::shared_mutex m_chunks_mutex; // Mutex to protect m_chunks
     std::unique_ptr<WorldSave::RegionManager> m_regionManager; // Instance of RegionManager, using unique_ptr
+    std::atomic<bool> m_initialChunkGenerationComplete; // Flag for initial world load
 
     // Background compaction thread
     std::thread m_compactionThread;

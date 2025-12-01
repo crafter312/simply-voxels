@@ -46,6 +46,7 @@ public:
     void submitMeshJob(const glm::ivec3& chunkCoord);
     std::optional<MeshResult> getMeshResult();
     bool hasMeshResults();
+    bool isIdle() const;
 
 private:
     void mesherThreadLoop();
@@ -58,9 +59,10 @@ private:
     // --- Mesher Thread Members ---
     std::thread m_mesherThread;
     std::atomic<bool> m_stopMesherThread{false};
+    std::atomic<bool> m_isMeshing{false}; // Tracks if a job is currently being processed
 
     std::queue<glm::ivec3> m_meshWorkQueue;
-    std::mutex m_workQueueMutex;
+    mutable std::mutex m_workQueueMutex;
     std::condition_variable m_workQueueCV;
 
     std::queue<MeshResult> m_meshResultsQueue;

@@ -19,6 +19,9 @@ public:
     // Draws the pause menu.
     void drawPauseMenu();
 
+    // Draws the loading screen.
+    void drawLoadingScreen();
+
 private:
     HelloVulkanApp& m_app; // Reference to the main app to interact with game state
 };
