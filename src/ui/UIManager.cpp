@@ -31,17 +31,29 @@ bool UIManager::drawMainMenu() {
 void UIManager::drawPauseMenu() {
     // Center the pause menu window
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(250, 150)); // Set a fixed size for the pause menu window
 
-    ImGui::Begin("Paused", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+    ImGui::Begin("Paused", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 
-    if (ImGui::Button("Resume", ImVec2(120, 0))) {
+    // Define button dimensions
+    float buttonWidth = 200.0f;
+    float buttonHeight = 50.0f; // Consistent height for buttons
+
+    // Calculate total height of buttons + spacing for vertical centering
+    float totalButtonsHeight = (buttonHeight * 2) + ImGui::GetStyle().ItemSpacing.y;
+    float startY = (ImGui::GetWindowHeight() - totalButtonsHeight) * 0.5f;
+
+    // Set cursor position for the first button (vertically centered group, horizontally centered button)
+    ImGui::SetCursorPosY(startY);
+    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - buttonWidth) * 0.5f);
+    if (ImGui::Button("Resume", ImVec2(buttonWidth, buttonHeight))) {
         m_app.resumeGame();
     }
-    if (ImGui::Button("Quit to Main Menu", ImVec2(120, 0))) {
+    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - buttonWidth) * 0.5f); // Center the next button horizontally
+    if (ImGui::Button("Quit to Main Menu", ImVec2(buttonWidth, buttonHeight))) {
         m_app.quitToMenu();
     }
-
     ImGui::End();
 }
 
