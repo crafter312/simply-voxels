@@ -44,10 +44,10 @@ private:
     void handleBlockInteraction();
     void handleMovementInput(float deltaTime);
     void applyPhysics(float deltaTime); // Will handle gravity, etc.
-    void resolveMovementOnAxis(size_t axis, float deltaTime);
+    bool resolveMovementOnAxis(glm::length_t axis, float deltaTime, bool firstIter = true); // Returns true if movement was not blocked, false if fully blocked
     // void updatePlayerPosition(float deltaTime); // Replaced by resolveCollisionsAndMove
     void resolveCollisionsAndMove(float deltaTime); // Handles movement, collision, and chunk boundary crossing
-    void normalizeAndCrossChunkBoundary(size_t axis);
+    void normalizeAndCrossChunkBoundary(glm::length_t axis);
     void updateCameraPosition();
 
     std::shared_ptr<Camera> m_camera;

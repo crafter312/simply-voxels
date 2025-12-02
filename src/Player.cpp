@@ -174,7 +174,7 @@ namespace { // Anonymous namespace for helper functions local to this file
     }
 }
 
-void Player::normalizeAndCrossChunkBoundary(size_t axis) {
+void Player::normalizeAndCrossChunkBoundary(glm::length_t axis) {
     int chunksMovedAlongAxis = static_cast<int>(std::floor(m_localPositionInChunk[axis] / CHUNK_SIDE_LENGTH));
     if (chunksMovedAlongAxis != 0) {
         m_absoluteChunkPos[axis] += chunksMovedAlongAxis;
@@ -182,12 +182,15 @@ void Player::normalizeAndCrossChunkBoundary(size_t axis) {
     }
 }
 
-// Axes are mapped as 0 = X, 1 = Y, 2 = Z
-void Player::resolveMovementOnAxis(size_t axis, float deltaTime) {
+// Axes are mapped as 0 = X, 1 = Y, 2 = Z.
+// Returns true if movement was successful (even if partially), false if it was fully blocked.
+bool Player::resolveMovementOnAxis(glm::length_t axis, float deltaTime, bool firstIter) {
+    float initial_position_component = m_localPositionInChunk[axis]; // Store initial position for this axis
+
     m_localPositionInChunk[axis] += m_velocity[axis] * deltaTime;
     normalizeAndCrossChunkBoundary(axis);
 
-    bool collision_resolved = false;
+    bool collision_resolved = false; // Flag to break out of nested loops
     if (std::abs(m_velocity[axis]) > glm::epsilon<float>()) {
         Physics::BlockAABB playerWorldAABB = {getAABBMin(), getAABBMax()};
         std::vector<PotentialCollisionBlock> nearbyBlocks =
@@ -214,25 +217,75 @@ void Player::resolveMovementOnAxis(size_t axis, float deltaTime) {
                     glm::vec3(blockInfo.worldPosition) + localBlockShapeAABB.maxExtents
                 };
 
-                if (checkAABBCollision(playerWorldAABB, worldBlockAABB)) {
-                    if (m_velocity[axis] > 0) { // moving in positive direction
-                        float penetration = playerWorldAABB.maxExtents[axis] - worldBlockAABB.minExtents[axis];
-                        m_localPositionInChunk[axis] -= (penetration + COLLISION_RESOLUTION_BIAS);
-                    } else { // moving in negative direction
-                        float penetration = worldBlockAABB.maxExtents[axis] - playerWorldAABB.minExtents[axis];
-                        m_localPositionInChunk[axis] += (penetration + COLLISION_RESOLUTION_BIAS);
-                        if (axis == 1) m_isGrounded = true; // Collided with something below
-                    }
-                    m_velocity[axis] = 0.0f;
-                    collision_resolved = true;
-                    normalizeAndCrossChunkBoundary(axis);
-                    playerWorldAABB = {getAABBMin(), getAABBMax()};
-                    break; // Break from the inner aabbsToTest loop
+                if (!checkAABBCollision(playerWorldAABB, worldBlockAABB)) {
+                    continue; // No collision with this AABB, check the next one
                 }
+
+                // --- COLLISION DETECTED ---
+
+                // --- AUTO-STEP LOGIC ---
+                bool isHorizontal = (axis == 0 || axis == 2);
+                if (firstIter && isHorizontal && m_isGrounded) {
+                    float playerFeetY = getAABBMin().y;
+                    float obstacleHeight = worldBlockAABB.maxExtents.y - playerFeetY;
+
+                    if (obstacleHeight > 0.0f && obstacleHeight <= MAX_STEP_HEIGHT) {
+                        // Potential step detected.
+                        // 1. Reverse the horizontal movement to check for clearance from original position.
+                        m_localPositionInChunk[axis] -= m_velocity[axis] * deltaTime;
+                        normalizeAndCrossChunkBoundary(axis);
+
+                        // 2. Save original Y position and attempt the step-up.
+                        float originalY = m_localPositionInChunk.y;
+                        m_localPositionInChunk.y += obstacleHeight + COLLISION_RESOLUTION_BIAS;
+                        normalizeAndCrossChunkBoundary(1); // Normalize Y after stepping up
+
+                        // 3. Recursively call to see if movement is clear at the new height.
+                        if (resolveMovementOnAxis(axis, deltaTime, false)) {
+                            // Step was successful! The recursive call handled the movement.
+                            // We just need to mark the collision as resolved and exit.
+                            m_isGrounded = true; // We are now grounded on the new step
+                            collision_resolved = true;
+                            break; // Exit aabbsToTest loop
+                        } else {
+                            // Step failed (no headroom). Restore original state before normal collision.
+                            m_localPositionInChunk.y = originalY;
+                            normalizeAndCrossChunkBoundary(1); // Normalize Y back
+
+                            // Restore original horizontal movement before normal collision resolution.
+                            m_localPositionInChunk[axis] += m_velocity[axis] * deltaTime;
+                            normalizeAndCrossChunkBoundary(axis);
+                        }
+                    }
+                }
+
+                // --- REGULAR COLLISION RESPONSE ---
+                // This runs if it's not a valid step, or if the auto-step attempt failed.
+                if (m_velocity[axis] > 0) { // moving in positive direction
+                    float penetration = playerWorldAABB.maxExtents[axis] - worldBlockAABB.minExtents[axis];
+                    m_localPositionInChunk[axis] -= (penetration + COLLISION_RESOLUTION_BIAS);
+                } else { // moving in negative direction
+                    float penetration = worldBlockAABB.maxExtents[axis] - playerWorldAABB.minExtents[axis];
+                    m_localPositionInChunk[axis] += (penetration + COLLISION_RESOLUTION_BIAS);
+                    if (axis == 1) m_isGrounded = true; // Only set grounded on a downward Y-axis collision
+                }
+
+                m_velocity[axis] = 0.0f;
+                collision_resolved = true;
+                normalizeAndCrossChunkBoundary(axis);
+                playerWorldAABB = {getAABBMin(), getAABBMax()};
+                break; // Break from the inner aabbsToTest loop
             }
             if (collision_resolved) break; // Break from the outer nearbyBlocks loop if collision was resolved
         }
     }
+
+    // Determine return value based on actual positional change
+    // If the final position is very close to the initial position, movement was fully blocked.
+    if (std::abs(m_localPositionInChunk[axis] - initial_position_component) < glm::epsilon<float>()) {
+        return false; // Movement was blocked on this axis
+    }
+    return true; // Movement was successful (even if only partially)
 }
 
 void Player::resolveCollisionsAndMove(float deltaTime) {
