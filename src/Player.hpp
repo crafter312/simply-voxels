@@ -44,11 +44,10 @@ private:
     void handleBlockInteraction();
     void handleMovementInput(float deltaTime);
     void applyPhysics(float deltaTime); // Will handle gravity, etc.
+    void resolveMovementOnAxis(size_t axis, float deltaTime);
     // void updatePlayerPosition(float deltaTime); // Replaced by resolveCollisionsAndMove
     void resolveCollisionsAndMove(float deltaTime); // Handles movement, collision, and chunk boundary crossing
-    void normalizeAndCrossChunkBoundaryX();
-    void normalizeAndCrossChunkBoundaryY();
-    void normalizeAndCrossChunkBoundaryZ();
+    void normalizeAndCrossChunkBoundary(size_t axis);
     void updateCameraPosition();
 
     std::shared_ptr<Camera> m_camera;
@@ -87,6 +86,7 @@ private:
     // --- Physics Constants ---
     static constexpr float GRAVITY_ACCELERATION = 9.81f * 2.0f; // m/s^2, tuned for gameplay feel
     static constexpr float COLLISION_RESOLUTION_BIAS = 0.001f; // Small bias to push player slightly further out of collision
+    static constexpr float MAX_STEP_HEIGHT = 0.5f; // Max height the player can auto-step (e.g., half-slab)
     static constexpr float HORIZONTAL_SMOOTHING_FACTOR = 8.0f; // How quickly player reaches target horizontal speed (higher = less smoothing for acceleration)
     static constexpr float HORIZONTAL_DRAG_FACTOR = 5.0f;      // How quickly player stops when no input (higher = faster stop)
     static constexpr float FIXED_PHYSICS_DT = 1.0f / 120.0f; // Run physics at 120 Hz

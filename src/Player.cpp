@@ -174,90 +174,21 @@ namespace { // Anonymous namespace for helper functions local to this file
     }
 }
 
-void Player::normalizeAndCrossChunkBoundaryX() {
-    int chunksMovedX = static_cast<int>(std::floor(m_localPositionInChunk.x / CHUNK_SIDE_LENGTH));
-    if (chunksMovedX != 0) {
-        m_absoluteChunkPos.x += chunksMovedX;
-        m_localPositionInChunk.x -= chunksMovedX * CHUNK_SIDE_LENGTH;
+void Player::normalizeAndCrossChunkBoundary(size_t axis) {
+    int chunksMovedAlongAxis = static_cast<int>(std::floor(m_localPositionInChunk[axis] / CHUNK_SIDE_LENGTH));
+    if (chunksMovedAlongAxis != 0) {
+        m_absoluteChunkPos[axis] += chunksMovedAlongAxis;
+        m_localPositionInChunk[axis] -= chunksMovedAlongAxis * CHUNK_SIDE_LENGTH;
     }
 }
 
-void Player::normalizeAndCrossChunkBoundaryY() {
-    int chunksMovedY = static_cast<int>(std::floor(m_localPositionInChunk.y / CHUNK_SIDE_LENGTH));
-    if (chunksMovedY != 0) {
-        m_absoluteChunkPos.y += chunksMovedY;
-        m_localPositionInChunk.y -= chunksMovedY * CHUNK_SIDE_LENGTH;
-    }
-}
+// Axes are mapped as 0 = X, 1 = Y, 2 = Z
+void Player::resolveMovementOnAxis(size_t axis, float deltaTime) {
+    m_localPositionInChunk[axis] += m_velocity[axis] * deltaTime;
+    normalizeAndCrossChunkBoundary(axis);
 
-void Player::normalizeAndCrossChunkBoundaryZ() {
-    int chunksMovedZ = static_cast<int>(std::floor(m_localPositionInChunk.z / CHUNK_SIDE_LENGTH));
-    if (chunksMovedZ != 0) {
-        m_absoluteChunkPos.z += chunksMovedZ;
-        m_localPositionInChunk.z -= chunksMovedZ * CHUNK_SIDE_LENGTH;
-    }
-}
-
-void Player::resolveCollisionsAndMove(float deltaTime) {
-    // --- X-AXIS MOVEMENT AND COLLISION ---
-    m_localPositionInChunk.x += m_velocity.x * deltaTime;
-    normalizeAndCrossChunkBoundaryX(); // Normalize before getting AABB for current position
-
-    if (std::abs(m_velocity.x) > glm::epsilon<float>()) {
-        Physics::BlockAABB playerWorldAABB = {getAABBMin(), getAABBMax()};
-        std::vector<PotentialCollisionBlock> nearbyBlocks =
-            m_world.getPotentialCollisionBlocks(m_absoluteChunkPos, m_localPositionInChunk, PLAYER_DIMENSIONS);
-
-        for (const auto& blockInfo : nearbyBlocks) {
-            const Block* blockDef = m_blockRegistry.getBlockDefinition(blockInfo.blockID);
-            if (!blockDef) continue; // Safety check
-            
-            std::vector<Physics::BlockAABB> aabbsToTest;
-            const auto& customShapeOpt = blockDef->getCustomShape();
-
-            if (customShapeOpt && !customShapeOpt->aabbs.empty()) {
-                aabbsToTest = customShapeOpt->aabbs;
-            } else {
-                // Block is not air (guaranteed by getPotentialCollisionBlocks)
-                // and has no (or empty) custom shape, so treat as a full cube.
-                aabbsToTest.push_back(Physics::BlockAABB(glm::vec3(0.0f), glm::vec3(1.0f)));
-            }
-
-            for (const auto& localBlockShapeAABB : aabbsToTest) {
-                Physics::BlockAABB worldBlockAABB = {
-                    glm::vec3(blockInfo.worldPosition) + localBlockShapeAABB.minExtents,
-                    glm::vec3(blockInfo.worldPosition) + localBlockShapeAABB.maxExtents
-                };
-
-                if (checkAABBCollision(playerWorldAABB, worldBlockAABB)) {
-                    if (m_velocity.x > 0) { // Moving right, collision with block's left face
-                        // Calculate penetration
-                        float penetration = playerWorldAABB.maxExtents.x - worldBlockAABB.minExtents.x;
-                        // Adjust local position by penetration. Since player's AABB is centered,
-                        // and m_localPositionInChunk.x is the center of the player's base X,
-                        // moving the center back by `penetration` resolves it.
-                        m_localPositionInChunk.x -= (penetration + COLLISION_RESOLUTION_BIAS);
-                    } else { // Moving left, collision with block's right face
-                        float penetration = worldBlockAABB.maxExtents.x - playerWorldAABB.minExtents.x;
-                        m_localPositionInChunk.x += (penetration + COLLISION_RESOLUTION_BIAS);
-                    }
-                    m_velocity.x = 0.0f;
-                    normalizeAndCrossChunkBoundaryX(); // Re-normalize after collision adjustment
-                    playerWorldAABB = {getAABBMin(), getAABBMax()}; // Update player AABB for next potential check
-                                                                  // (though we break, good practice if not breaking)
-                    break; // Break from the inner aabbsToTest loop
-                }
-            }
-            if (m_velocity.x == 0.0f) break; // Break from the outer nearbyBlocks loop if collision was resolved
-        }
-    }
-
-    // --- Y-AXIS MOVEMENT AND COLLISION ---
-    m_localPositionInChunk.y += m_velocity.y * deltaTime;
-    normalizeAndCrossChunkBoundaryY(); // Normalize before getting AABB
-
-    bool y_collision_resolved_this_frame = false;
-    if (std::abs(m_velocity.y) > glm::epsilon<float>()) {
+    bool collision_resolved = false;
+    if (std::abs(m_velocity[axis]) > glm::epsilon<float>()) {
         Physics::BlockAABB playerWorldAABB = {getAABBMin(), getAABBMax()};
         std::vector<PotentialCollisionBlock> nearbyBlocks =
             m_world.getPotentialCollisionBlocks(m_absoluteChunkPos, m_localPositionInChunk, PLAYER_DIMENSIONS);
@@ -284,76 +215,32 @@ void Player::resolveCollisionsAndMove(float deltaTime) {
                 };
 
                 if (checkAABBCollision(playerWorldAABB, worldBlockAABB)) {
-                    if (m_velocity.y > 0) { // Moving up
-                        float penetration = playerWorldAABB.maxExtents.y - worldBlockAABB.minExtents.y;
-                        m_localPositionInChunk.y -= (penetration + COLLISION_RESOLUTION_BIAS);
-                    } else { // Moving down
-                        float penetration = worldBlockAABB.maxExtents.y - playerWorldAABB.minExtents.y;
-                        m_localPositionInChunk.y += (penetration + COLLISION_RESOLUTION_BIAS);
-                        m_isGrounded = true; // Collided with something below
+                    if (m_velocity[axis] > 0) { // moving in positive direction
+                        float penetration = playerWorldAABB.maxExtents[axis] - worldBlockAABB.minExtents[axis];
+                        m_localPositionInChunk[axis] -= (penetration + COLLISION_RESOLUTION_BIAS);
+                    } else { // moving in negative direction
+                        float penetration = worldBlockAABB.maxExtents[axis] - playerWorldAABB.minExtents[axis];
+                        m_localPositionInChunk[axis] += (penetration + COLLISION_RESOLUTION_BIAS);
+                        if (axis == 1) m_isGrounded = true; // Collided with something below
                     }
-                    m_velocity.y = 0.0f;
-                    y_collision_resolved_this_frame = true;
-                    normalizeAndCrossChunkBoundaryY();
+                    m_velocity[axis] = 0.0f;
+                    collision_resolved = true;
+                    normalizeAndCrossChunkBoundary(axis);
                     playerWorldAABB = {getAABBMin(), getAABBMax()};
                     break; // Break from the inner aabbsToTest loop
                 }
             }
-            if (y_collision_resolved_this_frame) break; // Break from the outer nearbyBlocks loop if collision was resolved
+            if (collision_resolved) break; // Break from the outer nearbyBlocks loop if collision was resolved
         }
     }
-    // If player was moving downwards and no collision was resolved on Y, they are not grounded.
-    // (m_isGrounded was reset in applyPhysics)
-    // If m_velocity.y was 0 or positive, m_isGrounded remains false unless a collision happened.
-    // No special logic needed here, m_isGrounded is correctly false if no downward collision occurred.
+}
 
-    // --- Z-AXIS MOVEMENT AND COLLISION ---
-    m_localPositionInChunk.z += m_velocity.z * deltaTime;
-    normalizeAndCrossChunkBoundaryZ(); // Normalize before getting AABB
-
-    if (std::abs(m_velocity.z) > glm::epsilon<float>()) {
-        Physics::BlockAABB playerWorldAABB = {getAABBMin(), getAABBMax()};
-        std::vector<PotentialCollisionBlock> nearbyBlocks =
-            m_world.getPotentialCollisionBlocks(m_absoluteChunkPos, m_localPositionInChunk, PLAYER_DIMENSIONS);
-
-        for (const auto& blockInfo : nearbyBlocks) {
-            const Block* blockDef = m_blockRegistry.getBlockDefinition(blockInfo.blockID);
-            if (!blockDef) continue;
-            
-            std::vector<Physics::BlockAABB> aabbsToTest;
-            const auto& customShapeOpt = blockDef->getCustomShape();
-
-            if (customShapeOpt && !customShapeOpt->aabbs.empty()) {
-                aabbsToTest = customShapeOpt->aabbs;
-            } else {
-                // Block is not air (guaranteed by getPotentialCollisionBlocks)
-                // and has no (or empty) custom shape, so treat as a full cube.
-                aabbsToTest.push_back(Physics::BlockAABB(glm::vec3(0.0f), glm::vec3(1.0f)));
-            }
-
-            for (const auto& localBlockShapeAABB : aabbsToTest) {
-                Physics::BlockAABB worldBlockAABB = {
-                    glm::vec3(blockInfo.worldPosition) + localBlockShapeAABB.minExtents,
-                    glm::vec3(blockInfo.worldPosition) + localBlockShapeAABB.maxExtents
-                };
-
-                if (checkAABBCollision(playerWorldAABB, worldBlockAABB)) {
-                    if (m_velocity.z > 0) { // Moving positive Z
-                        float penetration = playerWorldAABB.maxExtents.z - worldBlockAABB.minExtents.z;
-                        m_localPositionInChunk.z -= (penetration + COLLISION_RESOLUTION_BIAS);
-                    } else { // Moving negative Z
-                        float penetration = worldBlockAABB.maxExtents.z - playerWorldAABB.minExtents.z;
-                        m_localPositionInChunk.z += (penetration + COLLISION_RESOLUTION_BIAS);
-                    }
-                    m_velocity.z = 0.0f;
-                    normalizeAndCrossChunkBoundaryZ();
-                    // playerWorldAABB = {getAABBMin(), getAABBMax()}; // Not strictly needed due to goto
-                    break; // Break from the inner aabbsToTest loop
-                }
-            }
-            if (m_velocity.z == 0.0f) break; // Break from the outer nearbyBlocks loop if collision was resolved
-        }
-    }
+void Player::resolveCollisionsAndMove(float deltaTime) {
+    // Resolve movement and collisions one axis at a time.
+    // This is a standard and robust way to handle sliding against walls.
+    resolveMovementOnAxis(0, deltaTime); // X-axis
+    resolveMovementOnAxis(1, deltaTime); // Y-axis
+    resolveMovementOnAxis(2, deltaTime); // Z-axis
 }
 
 void Player::handleBlockInteraction() {
