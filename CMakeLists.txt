@@ -215,7 +215,7 @@ add_executable(SimpleVulkanWindow
     src/resource/VulkanTextureLoader.cpp # Add the new texture loader
     src/resource/ModelLoader.cpp         # Add the new model loader
     src/resource/ResourceManager.cpp     # Add ResourceManager
-    src/InputManager.cpp 
+    src/ui/InputManager.cpp 
     src/Player.cpp                       # Add the new Player source file
     src/Camera.cpp                       # Add the new Camera source file
     src/block/Block.cpp                        # Source file for the Block class

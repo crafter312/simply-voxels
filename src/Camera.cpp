@@ -1,6 +1,6 @@
 #include "Camera.hpp"
 #include <iostream> // For constructor/destructor messages
-#include "InputManager.hpp" // Include InputManager header
+#include "ui/InputManager.hpp" // Include InputManager header
 #include <stdexcept> // For std::runtime_error
 #define GLM_ENABLE_EXPERIMENTAL // Enable experimental GLM features
 #include "world/Chunk.hpp" // Include Chunk for dimension constants

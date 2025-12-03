@@ -2,7 +2,7 @@
 #include "util/DebugLog.hpp"
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
 #include "render/VulkanDevice.hpp"   // Include the new VulkanDevice header
-#include "InputManager.hpp"          // Include the InputManager header
+#include "ui/InputManager.hpp"          // Include the InputManager header
 #include "render/VulkanSwapChain.hpp" // Include for querySupport and SwapChainSupportDetails
 #include "block/BlockRegistry.hpp"         // Include the BlockRegistry header
 #include "block/Blocks.hpp"                // Include the new Blocks header

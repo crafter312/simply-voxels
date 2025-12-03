@@ -2,7 +2,7 @@
 #include "Camera.hpp"       // For Camera methods
 #include "world/Chunk.hpp"  // For CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH
 #include "world/World.hpp"  // For World methods
-#include "InputManager.hpp" // For InputManager methods
+#include "ui/InputManager.hpp" // For InputManager methods
 #include "block/BlockRegistry.hpp" // Include for BlockRegistry
 #include "block/Block.hpp"         // For Block class definition
 #include "physics/BoundingBox.hpp" // For Physics::BlockAABB
