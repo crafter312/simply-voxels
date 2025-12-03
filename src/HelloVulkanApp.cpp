@@ -379,6 +379,36 @@ void HelloVulkanApp::updateLoading(float dt) {
         renderer && renderer->isMeshingPipelineIdle()) {
         VK_LOG("State: LOADING -> IN_GAME");
         m_currentState = GameState::IN_GAME;
+
+        // Spawn player after world is fully loaded
+        if (player && !player->hasSpawned()) {
+            std::optional<glm::i64vec3> spawnPosOpt = world->getPlayerSpawnPos();
+            if (spawnPosOpt) {
+                glm::i64vec3 absoluteSpawnBlockPos = *spawnPosOpt; // This is the world block coord for player's feet
+
+                std::optional<glm::ivec3> spawnChunkOpt = World::worldToChunkCoordinates(absoluteSpawnBlockPos);
+                if (spawnChunkOpt) {
+                    glm::ivec3 spawnChunk = *spawnChunkOpt;
+                    std::optional<glm::ivec3> spawnLocalBlockOpt = World::worldToLocalCoordinates(absoluteSpawnBlockPos, spawnChunk);
+                    if (spawnLocalBlockOpt) {
+                        // Convert local block coords to vec3 for player's local position.
+                        // The Y from getPlayerSpawnPos is already the feet level.
+                        // Center the player on the XZ of the block.
+                        // Add a small epsilon to Y to prevent clipping into the spawn block.
+                        glm::vec3 spawnLocalPos = glm::vec3(*spawnLocalBlockOpt);
+                        spawnLocalPos.x += 0.5f; // Center on X
+                        spawnLocalPos.y += 0.001f; // Small epsilon for Y
+                        spawnLocalPos.z += 0.5f; // Center on Z
+                        player->setPosition(spawnChunk, spawnLocalPos);
+                        VK_LOG("Player spawned at chunk: (" << spawnChunk.x << "," << spawnChunk.y << "," << spawnChunk.z << "), local: (" << spawnLocalPos.x << "," << spawnLocalPos.y << "," << spawnLocalPos.z << ")");
+                    }
+                }
+            }
+        }
+
+        // Check that player has spawned successfully
+        if (player && !player->hasSpawned())
+            throw std::runtime_error("Player failed to spawn after loading world!");
     }
 }
 
@@ -389,32 +419,7 @@ void HelloVulkanApp::renderLoading() {
 }
 
 void HelloVulkanApp::updateInGame(float dt) {
-    // --- Player Spawning Logic ---
-    if (player && !player->hasSpawned() && world) {
-        std::optional<glm::i64vec3> spawnPosOpt = world->getPlayerSpawnPos();
-        if (spawnPosOpt) {
-            glm::i64vec3 absoluteSpawnBlockPos = *spawnPosOpt; // This is the world block coord for player's feet
-
-            std::optional<glm::ivec3> spawnChunkOpt = World::worldToChunkCoordinates(absoluteSpawnBlockPos);
-            if (spawnChunkOpt) {
-                glm::ivec3 spawnChunk = *spawnChunkOpt;
-                std::optional<glm::ivec3> spawnLocalBlockOpt = World::worldToLocalCoordinates(absoluteSpawnBlockPos, spawnChunk);
-                if (spawnLocalBlockOpt) {
-                    // Convert local block coords to vec3 for player's local position.
-                    // The Y from getPlayerSpawnPos is already the feet level.
-                    // Center the player on the XZ of the block.
-                    // Add a small epsilon to Y to prevent clipping into the spawn block.
-                    glm::vec3 spawnLocalPos = glm::vec3(*spawnLocalBlockOpt);
-                    spawnLocalPos.x += 0.5f; // Center on X
-                    spawnLocalPos.y += 0.001f; // Small epsilon for Y
-                    spawnLocalPos.z += 0.5f; // Center on Z
-                    player->setPosition(spawnChunk, spawnLocalPos);
-                    VK_LOG("Player spawned at chunk: (" << spawnChunk.x << "," << spawnChunk.y << "," << spawnChunk.z << "), local: (" << spawnLocalPos.x << "," << spawnLocalPos.y << "," << spawnLocalPos.z << ")");
-                }
-            }
-        }
-    }
-
+    
     // Handle pause toggle first, as it might affect input processing for camera/player
     if (inputManager->isKeyPressed(KeyCode::Escape)) {
         VK_LOG("State: IN_GAME -> PAUSED");
