@@ -34,7 +34,7 @@ public:
     glm::vec3 getFront() const;
     float getPitch() const;
     // Setters
-    void setPosition(const glm::ivec3& absoluteChunkPos, const glm::vec3& localPositionInChunk);
+    void setPosition(const glm::ivec3& targetAbsoluteChunkPos, const glm::vec3& targetLocalPositionInChunk, bool shouldStartSmoothing);
     void setYaw(float yaw);
     void setPitch(float pitch);
     void setFov(float fov);
@@ -59,9 +59,16 @@ private:
 
     // Camera options
     float m_fov; // In degrees
-    glm::ivec3 m_absoluteChunkPos; // Camera's absolute chunk coordinate
-    glm::vec3 m_localPositionInChunk; // Camera's position within the current chunk [0, CHUNK_DIMENSION)
+    glm::ivec3 m_absoluteChunkPos; // Camera's current VISUAL chunk coordinate
+    glm::vec3 m_localPositionInChunk; // Camera's current VISUAL position within the current chunk [0, CHUNK_DIMENSION)
     float m_mouseSensitivity;     // Sensitivity for mouse look
+
+    // --- Smoothing State ---
+    glm::ivec3 m_targetAbsoluteChunkPos; // The position the camera is moving towards
+    glm::vec3 m_targetLocalPositionInChunk; // The local position the camera is moving towards
+    bool m_isSmoothingPosition = false; // True if the camera is currently lerping
+    static constexpr float CAMERA_SMOOTHING_FACTOR = 15.0f; // Higher is faster/less smooth
+    static constexpr float CAMERA_SMOOTHING_STOP_THRESHOLD = 0.001f; // Distance to snap to target and stop smoothing
 
     void updateCameraVectors();
 

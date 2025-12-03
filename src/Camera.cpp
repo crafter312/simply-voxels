@@ -11,6 +11,8 @@ Camera::Camera(std::shared_ptr<InputManager> inputManager)
     : m_inputManager(inputManager),
       m_absoluteChunkPos(0, 0, 0), // Start at chunk (0,0,0)
       m_localPositionInChunk(0.0f, 0.0f, 3.0f), // Start at local (0,0,3) within chunk (0,0,0)
+      m_targetAbsoluteChunkPos(m_absoluteChunkPos), // Initialize target to match visual
+      m_targetLocalPositionInChunk(m_localPositionInChunk),
       m_worldUp(0.0f, 1.0f, 0.0f), // Y is up
       m_yaw(-90.0f), // Pointing down negative Z-axis
       m_pitch(0.0f),
@@ -41,6 +43,47 @@ void Camera::updateCameraVectors() {
 
 void Camera::update(float deltaTime) {
     if (!m_inputManager) return;
+
+    // --- Position Smoothing ---
+    if (m_isSmoothingPosition) {
+        // Calculate the displacement vector from the visual position to the target position
+        // without converting to a single large absolute world coordinate. This preserves precision.
+        glm::dvec3 chunkDisplacement = glm::dvec3(m_targetAbsoluteChunkPos - m_absoluteChunkPos);
+        glm::dvec3 localDisplacement = glm::dvec3(m_targetLocalPositionInChunk) - glm::dvec3(m_localPositionInChunk);
+        glm::dvec3 totalDisplacement = (chunkDisplacement * static_cast<double>(CHUNK_SIDE_LENGTH)) + localDisplacement;
+
+        double distance = glm::length(totalDisplacement);
+
+        if (distance > CAMERA_SMOOTHING_STOP_THRESHOLD) {
+            // Calculate the step to take this frame along the displacement vector.
+            glm::dvec3 step = glm::lerp(glm::dvec3(0.0), totalDisplacement, static_cast<double>(CAMERA_SMOOTHING_FACTOR * deltaTime));
+
+            // Apply the step to the camera's visual position.
+            m_localPositionInChunk += glm::vec3(step);
+
+            // Normalize the new position in case it crossed a chunk boundary.
+            // This is crucial for keeping the local position within [0, CHUNK_SIDE_LENGTH).
+            for (int axis = 0; axis < 3; ++axis) {
+                int chunksMoved = static_cast<int>(std::floor(m_localPositionInChunk[axis] / CHUNK_SIDE_LENGTH));
+                if (chunksMoved != 0) {
+                    m_absoluteChunkPos[axis] += chunksMoved;
+                    m_localPositionInChunk[axis] -= chunksMoved * CHUNK_SIDE_LENGTH;
+                }
+            }
+
+        } else {
+            // The camera is close enough, snap to the final target position and stop smoothing.
+            m_absoluteChunkPos = m_targetAbsoluteChunkPos;
+            m_localPositionInChunk = m_targetLocalPositionInChunk;
+            m_isSmoothingPosition = false;
+        }
+    } else {
+        // If not smoothing, ensure the visual position is always snapped to the target position.
+        // This handles normal, non-smoothed movement updates from the player.
+        m_absoluteChunkPos = m_targetAbsoluteChunkPos;
+        m_localPositionInChunk = m_targetLocalPositionInChunk;
+    }
+
 
     // --- Mouse look for camera orientation ---
     // Player class now handles position. Camera only handles orientation via mouse.
@@ -106,12 +149,20 @@ float Camera::getFov() const { return m_fov; }
 glm::vec3 Camera::getFront() const { return m_front; }
 
 // --- Setters ---
-void Camera::setPosition(const glm::ivec3& absoluteChunkPos, const glm::vec3& localPositionInChunk) {
-    // This method directly sets the camera's chunk and local-in-chunk positions.
-    // It's called by the Player class.
-    m_absoluteChunkPos = absoluteChunkPos;
-    m_localPositionInChunk = localPositionInChunk;
-    // No need to call updateCameraVectors() as only position changed, not orientation.
+void Camera::setPosition(const glm::ivec3& targetAbsoluteChunkPos, const glm::vec3& targetLocalPositionInChunk, bool shouldStartSmoothing) {
+    // This method is called by the Player to update the camera's desired (target) position.
+    m_targetAbsoluteChunkPos = targetAbsoluteChunkPos;
+    m_targetLocalPositionInChunk = targetLocalPositionInChunk;
+
+    if (shouldStartSmoothing) {
+        // An auto-step occurred. Enable smoothing mode. The `update` loop will handle the lerp.
+        m_isSmoothingPosition = true;
+    } else {
+        // This is a normal position update (or a teleport). Snap the visual position directly to the target.
+        m_absoluteChunkPos = m_targetAbsoluteChunkPos;
+        m_localPositionInChunk = m_targetLocalPositionInChunk;
+        m_isSmoothingPosition = false; // Ensure smoothing is off.
+    }
 }
 
 void Camera::setYaw(float yaw) {

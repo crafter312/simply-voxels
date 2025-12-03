@@ -48,7 +48,7 @@ private:
     // void updatePlayerPosition(float deltaTime); // Replaced by resolveCollisionsAndMove
     void resolveCollisionsAndMove(float deltaTime); // Handles movement, collision, and chunk boundary crossing
     void normalizeAndCrossChunkBoundary(glm::length_t axis);
-    void updateCameraPosition();
+    void updateCameraPosition(bool wasAutoStep);
 
     std::shared_ptr<Camera> m_camera;
     World& m_world; // Reference, as Player doesn't own the World
@@ -71,6 +71,7 @@ private:
     glm::vec3 m_acceleration;
     bool m_isGrounded;
     bool m_hasSpawned; // Flag to indicate if the player has been spawned/positioned in the world
+    bool m_justAutoStepped = false; // Flag for camera smoothing
     float m_physicsTimeAccumulator = 0.0f; // Accumulator for fixed-step physics
 
     // --- Player Characteristics ---

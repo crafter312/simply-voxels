@@ -55,6 +55,9 @@ void Player::update(float deltaTime) {
     // Handle input once per frame based on the full deltaTime
     handleMovementInput(deltaTime); // Sets m_wishHorizontalVelocity and handles jump impulse
 
+    // Reset auto-step flag at the beginning of the update cycle
+    m_justAutoStepped = false;
+
     // Reset grounded state at the start of the physics update.
     // It will be re-evaluated during collision resolution in the sub-steps.
     m_isGrounded = false;
@@ -72,7 +75,10 @@ void Player::update(float deltaTime) {
         substepsPerformed++;
     }
 
-    updateCameraPosition(); // Update camera after all physics steps are done
+    // Update camera after all physics steps are done.
+    // The m_justAutoStepped flag is consumed here. It's reset at the start of the next update.
+    // Note: The camera class will need to be updated to handle this boolean.
+    updateCameraPosition(m_justAutoStepped);
     
     // Update cooldowns
     if (m_breakCooldown > 0.0f) {
@@ -245,6 +251,7 @@ bool Player::resolveMovementOnAxis(glm::length_t axis, float deltaTime, bool fir
                             // Step was successful! The recursive call handled the movement.
                             // We just need to mark the collision as resolved and exit.
                             m_isGrounded = true; // We are now grounded on the new step
+                            m_justAutoStepped = true; // Set the flag for camera smoothing
                             collision_resolved = true;
                             break; // Exit aabbsToTest loop
                         } else {
@@ -348,27 +355,30 @@ const std::optional<RaycastResult>& Player::getCurrentTargetedBlockInfo() const 
     return m_currentTargetedBlockInfo;
 }
 
-void Player::updateCameraPosition() {
-    if (m_camera) {
-        // Calculate camera's target position based on player's chunk-relative position and eye height.
-        glm::ivec3 cameraTargetChunkPos = m_absoluteChunkPos;
-        glm::vec3 cameraTargetLocalPos = m_localPositionInChunk;
+void Player::updateCameraPosition(bool wasAutoStep) {
+    if (!m_camera) return;
 
-        // Add eye height to the player's local Y position.
-        cameraTargetLocalPos.y += EYE_HEIGHT;
+    // Calculate camera's target position based on player's chunk-relative position and eye height.
+    glm::ivec3 cameraTargetChunkPos = m_absoluteChunkPos;
+    glm::vec3 cameraTargetLocalPos = m_localPositionInChunk;
 
-        // Normalize the camera's local Y position and adjust its chunk Y coordinate if necessary.
-        // This handles cases where adding EYE_HEIGHT pushes the camera into an adjacent chunk vertically.
-        int chunksMovedY = static_cast<int>(std::floor(cameraTargetLocalPos.y / CHUNK_SIDE_LENGTH));
-        if (chunksMovedY != 0) { // Check if it actually crossed a boundary
-            cameraTargetChunkPos.y += chunksMovedY;
-            cameraTargetLocalPos.y -= chunksMovedY * CHUNK_SIDE_LENGTH;
-        }
-        // Note: We assume EYE_HEIGHT is less than CHUNK_SIDE_LENGTH, so it won't cross more than one chunk boundary.
-        // If EYE_HEIGHT could be >= CHUNK_HEIGHT, a loop or more robust normalization might be needed,
-        // but for typical player/camera setups, this is sufficient.
-        m_camera->setPosition(cameraTargetChunkPos, cameraTargetLocalPos);
+    // Add eye height to the player's local Y position.
+    cameraTargetLocalPos.y += EYE_HEIGHT;
+
+    // Normalize the camera's local Y position and adjust its chunk Y coordinate if necessary.
+    // This handles cases where adding EYE_HEIGHT pushes the camera into an adjacent chunk vertically.
+    int chunksMovedY = static_cast<int>(std::floor(cameraTargetLocalPos.y / CHUNK_SIDE_LENGTH));
+    if (chunksMovedY != 0) { // Check if it actually crossed a boundary
+        cameraTargetChunkPos.y += chunksMovedY;
+        cameraTargetLocalPos.y -= chunksMovedY * CHUNK_SIDE_LENGTH;
     }
+    // Note: We assume EYE_HEIGHT is less than CHUNK_SIDE_LENGTH, so it won't cross more than one chunk boundary.
+    // If EYE_HEIGHT could be >= CHUNK_HEIGHT, a loop or more robust normalization might be needed,
+    // but for typical player/camera setups, this is sufficient.
+
+    // TODO: The Camera::setPosition method needs to be updated to accept the wasAutoStep boolean
+    // For now, this will cause a compile error until Camera.hpp/cpp are modified.
+    m_camera->setPosition(cameraTargetChunkPos, cameraTargetLocalPos, wasAutoStep);
 }
 
 // --- AABB Getter Methods ---
@@ -409,5 +419,5 @@ void Player::setPosition(const glm::ivec3& absoluteChunkPos, const glm::vec3& lo
     }
 
     // Ensure the camera is updated to the new position
-    updateCameraPosition();
+    updateCameraPosition(false); // On a direct setPosition, no smoothing is needed.
 }
