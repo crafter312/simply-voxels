@@ -997,19 +997,20 @@ void VulkanRenderer::drawFrameUIOnly() {
 void VulkanRenderer::clearWorldRenderDataAndReset() {
     VK_LOG("Clearing all world render data...");
 
-    // Wait for the GPU to be idle to ensure no resources are in use before we
-    // queue them for deletion and clear our maps.
-    vkDeviceWaitIdle(m_vulkanDeviceRef.getLogicalDevice());
+    // Do NOT wait for the GPU to be idle. This is the source of the long delay.
+    // Instead, we will queue all world-related GPU resources for deletion. They will
+    // be safely destroyed in a future frame when we know the GPU is no longer
+    // using them (managed by the inFlightFences). This makes the transition
+    // back to the main menu feel instantaneous.
 
     // Destroy all chunk render data
     for (auto& pair : m_chunkRenderData) {
-        // We can use the existing helper. It queues buffers for deletion.
-        // Since we just waited for idle, we can process these deletions immediately.
         destroyChunkRenderData(pair.second);
     }
     m_chunkRenderData.clear();
 
     // Also clear the wireframe data
+    VK_LOG("Clearing wireframe buffers...");
     if (m_wireframeVertexBuffer != VK_NULL_HANDLE) {
         m_deletionQueues[currentFrame].push_back({ResourceToDelete::Type::VertexBufferRegion, m_wireframeVertexBuffer, VK_NULL_HANDLE, m_wireframeVertexOffset, m_wireframeVertexSize});
         m_wireframeVertexBuffer = VK_NULL_HANDLE;
@@ -1019,12 +1020,17 @@ void VulkanRenderer::clearWorldRenderDataAndReset() {
         m_wireframeIndexBuffer = VK_NULL_HANDLE;
     }
     m_wireframeIndexCount = 0;
+    m_lastTargetedBlockPos = std::nullopt; // Also reset the targeted block state
 
     VK_LOG("Clearing in-progress meshing tasks set...");
+    // Stop the thread manager to abandon any queued work. Then, clear our own
+    // tracking set. This is a critical sequence to prevent a deadlock when
+    // starting a new game.
+    m_threadManager->stop();
     m_meshingTasksInProgress.clear();
 
-    VK_LOG("Restarting thread manager...");
-    m_threadManager->stop();
+    // The thread manager needs to be started again so it's ready for the next game.
+    VK_LOG("Starting thread manager...");
     m_threadManager->start();
 
     VK_LOG("Renderer clearing and resetting complete!");

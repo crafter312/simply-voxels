@@ -134,6 +134,10 @@ private:
     std::queue<glm::ivec3> m_loadQueue;
     std::queue<glm::ivec3> m_unloadQueue;
     mutable std::shared_mutex m_chunks_mutex; // Mutex to protect m_chunks
+
+    std::queue<std::shared_ptr<Chunk>> m_chunkDeletionQueue; // Queue for chunks to be deleted
+    std::mutex m_chunkDeletionMutex; // Mutex for the deletion queue
+
     std::unique_ptr<WorldSave::RegionManager> m_regionManager; // Instance of RegionManager, using unique_ptr
     std::atomic<bool> m_initialChunkGenerationComplete; // Flag for initial world load
 

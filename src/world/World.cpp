@@ -302,7 +302,15 @@ void World::clearAllChunks() {
         std::cout << "[World] Saved " << savedCount << " dirty chunks before clearing." << std::endl;
     }
 
-    // 2. Clear all chunk data structures
+    // 2. Move chunks to a deletion queue instead of clearing them directly.
+    //    This avoids a long blocking call on the main thread as thousands of
+    //    shared_ptr destructors are called. The compaction thread will handle deletion.
+    {
+        std::unique_lock<std::mutex> deletion_lock(m_chunkDeletionMutex);
+        for (auto& pair : m_chunks) {
+            m_chunkDeletionQueue.push(std::move(pair.second));
+        }
+    }
     m_chunks.clear();
     m_changedChunks.clear();
 
@@ -333,6 +341,20 @@ void World::compactionThreadLoop() {
         // Unlock the mutex while processing, as processCompactionQueue might take time
         // and has its own internal locking.
         lock.unlock();
+
+        // --- Process Chunk Deletion Queue ---
+        // Also use this thread to asynchronously delete chunks.
+        {
+            std::unique_lock<std::mutex> deletion_lock(m_chunkDeletionMutex);
+            // Process a few deletions per cycle to spread the load
+            for (int i = 0; i < 100 && !m_chunkDeletionQueue.empty(); ++i) {
+                // The shared_ptr is destroyed when it goes out of scope here,
+                // which in turn calls the Chunk destructor.
+                std::shared_ptr<Chunk> chunk_to_delete = m_chunkDeletionQueue.front();
+                m_chunkDeletionQueue.pop();
+            }
+        }
+        // --- End Chunk Deletion ---
 
         if (m_regionManager) {
             int processed_in_cycle = 0;
