@@ -321,6 +321,11 @@ void World::clearAllChunks() {
     std::queue<glm::ivec3> emptyUnloadQueue;
     m_unloadQueue.swap(emptyUnloadQueue);
 
+    // 4. Reset world state flags for the next game session
+    m_initialChunkGenerationComplete.store(false);
+    m_rebaseOriginChunkCoord = glm::ivec3(0, 0, 0); // Reset rebase origin to default
+    m_rebaseOccurredThisFrame = false;
+
     std::cout << "[World] All chunk data cleared." << std::endl;
 }
 
