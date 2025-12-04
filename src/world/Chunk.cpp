@@ -159,8 +159,6 @@ void Chunk::generate() {
                                                 // Adjust this if your world's "ground" is typically higher or lower.
                                                 // For chunks at y=0, this means surface is around local y=8.
 
-    glm::ivec3 chunkWorldOrigin = getWorldPosition(); // Absolute world coordinates of this chunk's origin (0,0,0 local)
-
     // Temporary storage for block data. CHUNK_VOLUME is typically small enough (e.g., 16*256*16 = 65536)
     // for a std::array<uint16_t, CHUNK_VOLUME> (128KB) to be on the stack.
     // If CHUNK_VOLUME were much larger, std::vector or heap allocation might be preferred.
@@ -170,17 +168,27 @@ void Chunk::generate() {
     //std::cout << "  Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] World Y range: [" << chunkWorldOrigin.y << " to " << chunkWorldOrigin.y + CHUNK_HEIGHT - 1 << "]" << std::endl;
     bool hasNonAirBlock = false;
 
+    // Pre-calculate the chunk's origin contribution to the Perlin input.
+    // This uses 64-bit integers for the multiplication to prevent overflow, then converts
+    // the result to double. This is safe as the result fits within a double's integer precision.
+    glm::dvec2 chunkOriginPerlinInput(
+        static_cast<double>(static_cast<int64_t>(m_chunkCoord.x) * CHUNK_SIDE_LENGTH) * TERRAIN_FREQUENCY,
+        static_cast<double>(static_cast<int64_t>(m_chunkCoord.z) * CHUNK_SIDE_LENGTH) * TERRAIN_FREQUENCY
+    );
+
+    // Also get the absolute Y origin of the chunk using safe 64-bit arithmetic.
+    const int64_t chunkWorldOriginY = static_cast<int64_t>(m_chunkCoord.y) * CHUNK_SIDE_LENGTH;
+
     for (int lx = 0; lx < CHUNK_SIDE_LENGTH; ++lx) {
         for (int lz = 0; lz < CHUNK_SIDE_LENGTH; ++lz) {
-            // Calculate absolute world X and Z for the current block column
-            double absoluteWorldX = static_cast<double>(chunkWorldOrigin.x + lx);
-            double absoluteWorldZ = static_cast<double>(chunkWorldOrigin.z + lz);
-
-            double noiseValue = glm::perlin(glm::dvec2(absoluteWorldX * TERRAIN_FREQUENCY, absoluteWorldZ * TERRAIN_FREQUENCY));
+            // Calculate the final Perlin input by adding the scaled local offset.
+            // This maintains high precision by keeping the floating point values small.
+            glm::dvec2 perlinInput = chunkOriginPerlinInput + glm::dvec2(static_cast<double>(lx) * TERRAIN_FREQUENCY, static_cast<double>(lz) * TERRAIN_FREQUENCY);
+            double noiseValue = glm::perlin(perlinInput);
             int surfaceTopAbsoluteY = baseSurfaceAbsoluteY + static_cast<int>(noiseValue * TERRAIN_AMPLITUDE);
 
             for (int ly = 0; ly < CHUNK_SIDE_LENGTH; ++ly) {
-                int currentBlockAbsoluteY = chunkWorldOrigin.y + ly; // Absolute Y of the current block layer
+                int64_t currentBlockAbsoluteY = chunkWorldOriginY + ly; // Absolute Y of the current block layer
                 uint16_t blockID;
 
                 if (currentBlockAbsoluteY < surfaceTopAbsoluteY) {
