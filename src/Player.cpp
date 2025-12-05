@@ -27,9 +27,10 @@ Player::Player(
       m_acceleration(0.0f),
       m_isGrounded(false), // Assume starting in air; physics/collision will correct this
       m_hasSpawned(false),   // Player has not been spawned initially
+      m_isFlying(false),   // Start in walking mode
       m_moveSpeed(5.0f),
       m_sprintSpeedMultiplier(1.5f), // Matches Camera's SPRINT_MULTIPLIER if it was 2.5, adjust as needed
-      m_wishHorizontalVelocity(0.0f),
+      m_wishVelocity(0.0f),
       m_jumpForce(7.0f)
 {
     if (!m_camera) {
@@ -53,7 +54,7 @@ void Player::update(float deltaTime) {
     }
 
     // Handle input once per frame based on the full deltaTime
-    handleMovementInput(deltaTime); // Sets m_wishHorizontalVelocity and handles jump impulse
+    handleMovementInput(deltaTime); // Sets m_wishVelocity and handles jump impulse
 
     // Reset auto-step flag at the beginning of the update cycle
     m_justAutoStepped = false;
@@ -94,6 +95,11 @@ void Player::update(float deltaTime) {
 void Player::handleMovementInput(float deltaTime) {
     if (!m_inputManager || !m_camera) return;
 
+    // Toggle flying mode on double-press of spacebar
+    if (m_inputManager->wasSpaceDoublePressed()) {
+        m_isFlying = !m_isFlying;
+    }
+
     // Horizontal movement
     glm::vec3 camFront = m_camera->getFront();
     // True horizontal forward vector (ignoring camera pitch)
@@ -107,6 +113,10 @@ void Player::handleMovementInput(float deltaTime) {
     if (m_inputManager->isKeyDown(KeyCode::A)) wishDir -= right;
     if (m_inputManager->isKeyDown(KeyCode::D)) wishDir += right;
 
+    // Vertical movement in flying mode
+    if (m_inputManager->isKeyDown(KeyCode::Space) && m_isFlying) wishDir.y += 1.0f;
+    if (m_inputManager->isKeyDown(KeyCode::LeftShift) && m_isFlying) wishDir.y -= 1.0f;
+
     float currentSpeed = m_moveSpeed;
     // Assuming LeftControl is the sprint key, as it was in Camera.cpp context
     if (m_inputManager->isKeyDown(KeyCode::LeftControl)) {
@@ -117,12 +127,12 @@ void Player::handleMovementInput(float deltaTime) {
         wishDir = glm::normalize(wishDir);
     }
 
-    // Set the desired horizontal velocity. applyPhysics will handle smoothing.
-    m_wishHorizontalVelocity = wishDir * currentSpeed; // Y component will be ignored/zeroed by this
+    // Set the desired velocity. applyPhysics will handle smoothing.
+    m_wishVelocity = wishDir * currentSpeed;
 
     // Jumping (direct impulse to current velocity)
     // Using isKeyDown for now. Ideally, InputManager would provide an `isKeyJustPressed`
-    if (m_inputManager->isKeyDown(KeyCode::Space) && m_isGrounded) {
+    if (m_inputManager->isKeyDown(KeyCode::Space) && m_isGrounded && !m_isFlying) {
         m_velocity.y = m_jumpForce; // Apply an upward impulse
     }
 }
@@ -132,36 +142,44 @@ void Player::applyPhysics(float deltaTime) {
     // determined at the end of the PREVIOUS frame's resolveCollisionsAndMove for some effects (like stronger ground drag),
     // but acceleration towards wish velocity always applies.
 
-    // Horizontal Momentum - Always apply to allow air control
-    m_velocity.x = glm::lerp(m_velocity.x, m_wishHorizontalVelocity.x, HORIZONTAL_SMOOTHING_FACTOR * deltaTime);
-    m_velocity.z = glm::lerp(m_velocity.z, m_wishHorizontalVelocity.z, HORIZONTAL_SMOOTHING_FACTOR * deltaTime); // .y of vec2 is our Z
+    // Momentum - Always apply to allow air control
+    m_velocity.x = glm::lerp(m_velocity.x, m_wishVelocity.x, MOVEMENT_SMOOTHING_FACTOR * deltaTime);
+    m_velocity.z = glm::lerp(m_velocity.z, m_wishVelocity.z, MOVEMENT_SMOOTHING_FACTOR * deltaTime);
+
+    if (m_isFlying) m_velocity.y = glm::lerp(m_velocity.y, m_wishVelocity.y, MOVEMENT_SMOOTHING_FACTOR * deltaTime);
 
     // Apply stronger horizontal drag if grounded and there's no horizontal input wish.
-    if (glm::length(glm::vec2(m_wishHorizontalVelocity.x, m_wishHorizontalVelocity.z)) < glm::epsilon<float>()) {
+    if (glm::length(glm::vec2(m_wishVelocity.x, m_wishVelocity.z)) < glm::epsilon<float>()) {
         float dragMultiplier = 1.0f - glm::clamp(HORIZONTAL_DRAG_FACTOR * deltaTime, 0.0f, 1.0f);
         m_velocity.x *= dragMultiplier;
         m_velocity.z *= dragMultiplier;
     }
 
-    // Determine if gravity should be applied based on the m_isGrounded state from the previous frame.
-    bool applyDownwardGravity;
-    if (m_isGrounded) { // If WAS grounded at the end of the last frame...
-        if (m_velocity.y > glm::epsilon<float>()) { // ...and just jumped (velocity is upwards)...
-            applyDownwardGravity = true; // ...gravity should act against the jump.
-        } else { // ...and is just standing or walking (velocity.y is ~0 or negative from minor adjustments)...
-            applyDownwardGravity = false; // ...no new downward acceleration from gravity.
-            if (m_velocity.y < 0.0f) { // Correct any slight sinking if was grounded.
-                m_velocity.y = 0.0f;
+    if (!m_isFlying) {
+        // --- Gravity Logic (only when not flying) ---
+        // Determine if gravity should be applied based on the m_isGrounded state from the previous frame.
+        bool applyDownwardGravity;
+        if (m_isGrounded) { // If WAS grounded at the end of the last frame...
+            if (m_velocity.y > glm::epsilon<float>()) { // ...and just jumped (velocity is upwards)...
+                applyDownwardGravity = true; // ...gravity should act against the jump.
+            } else { // ...and is just standing or walking (velocity.y is ~0 or negative from minor adjustments)...
+                applyDownwardGravity = false; // ...no new downward acceleration from gravity.
+                if (m_velocity.y < 0.0f) { // Correct any slight sinking if was grounded.
+                    m_velocity.y = 0.0f;
+                }
             }
+        } else { // If WAS in the air at the end of the last frame...
+            applyDownwardGravity = true; // ...gravity continues to apply.
         }
-    } else { // If WAS in the air at the end of the last frame...
-        applyDownwardGravity = true; // ...gravity continues to apply.
-    }
 
-    // Apply acceleration due to gravity (or lack thereof)
-    if (applyDownwardGravity) {
-        m_acceleration.y = -GRAVITY_ACCELERATION;
+        // Apply acceleration due to gravity (or lack thereof)
+        if (applyDownwardGravity) {
+            m_acceleration.y = -GRAVITY_ACCELERATION;
+        } else {
+            m_acceleration.y = 0.0f;
+        }
     } else {
+        // --- No Gravity Logic (when flying) ---
         m_acceleration.y = 0.0f;
     }
 

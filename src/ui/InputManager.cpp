@@ -1,5 +1,6 @@
 #include "InputManager.hpp"
 #include "../render/VulkanCommon.hpp" // Include the GLFW header for glfwGetKey etc.
+#include <GLFW/glfw3.h> // For glfwGetTime
 #include <vector>       // For storing the list of keys to monitor
 #include <stdexcept>    // For throwing exceptions on errors
 
@@ -76,6 +77,9 @@ int InputManager::getGlfwMouseButtonCode(KeyCode button) const {
 void InputManager::update() {
     if (!m_window) return; // Should not happen if constructor throws, but good practice.
 
+    // Reset one-frame flags at the beginning of the update
+    m_spaceDoublePressedThisFrame = false;
+
     // Update keyboard states
     // First, copy the current keyboard states to the previous keyboard states.
     previousKeyStates = currentKeyStates;
@@ -89,6 +93,18 @@ void InputManager::update() {
             // If a KeyCode in monitoredKeyboardKeys doesn't map to a GLFW key,
             // ensure its state is false.
             currentKeyStates[appKey] = false;
+        }
+    }
+
+    // --- Double-press logic for Spacebar ---
+    // This check must happen after the key states have been updated for the current frame.
+    if (isKeyPressed(KeyCode::Space)) {
+        double currentTime = glfwGetTime();
+        if (m_lastSpacePressTime > 0 && (currentTime - m_lastSpacePressTime) < DOUBLE_PRESS_TIME_WINDOW) {
+            m_spaceDoublePressedThisFrame = true;
+            m_lastSpacePressTime = -1.0; // Reset after a successful double press to prevent a triple press from firing it again
+        } else {
+            m_lastSpacePressTime = currentTime;
         }
     }
 
@@ -195,4 +211,8 @@ double InputManager::getMouseDeltaX() const {
 
 double InputManager::getMouseDeltaY() const {
     return m_mouseY - m_lastMouseY; // Y typically increases downwards in window coordinates
+}
+
+bool InputManager::wasSpaceDoublePressed() const {
+    return m_spaceDoublePressedThisFrame;
 }

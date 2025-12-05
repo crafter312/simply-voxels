@@ -48,6 +48,9 @@ public:
     double getMouseDeltaX() const;
     double getMouseDeltaY() const;
 
+    // Check if spacebar was double-pressed THIS frame
+    bool wasSpaceDoublePressed() const;
+
 private:
     GLFWwindow* m_window; // Store the window pointer
     std::map<KeyCode, bool> currentKeyStates;
@@ -61,6 +64,12 @@ private:
     double m_lastMouseX = 0.0;
     double m_lastMouseY = 0.0;
     bool m_firstMouse = true; // To handle initial mouse delta jump
+
+    // Double-press detection for spacebar
+    bool m_spaceDoublePressedThisFrame = false;
+    double m_lastSpacePressTime = -1.0; // Use a negative value to indicate no press yet
+    // The time window in seconds to detect a double press
+    static constexpr double DOUBLE_PRESS_TIME_WINDOW = 0.3;
 
     // Helper to map our KeyCode enum to GLFW's key codes
     int getGlfwKeyboardKeyCode(KeyCode key) const;
