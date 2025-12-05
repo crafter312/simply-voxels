@@ -435,8 +435,10 @@ void HelloVulkanApp::updateInGame(float dt) {
 }
 
 void HelloVulkanApp::renderInGame() {
-    // All ImGui rendering setup for in-game HUD would go here,
-    // ImGui::Render() and renderer->drawFrame() are called in the main render dispatcher.
+    // Draw the XYZ coordinate overlay if the UI manager and player exist.
+    if (!m_uiManager || !player) return;
+    
+    m_uiManager->drawXYZCoordinateOverlay(player->getAbsoluteChunkPos(), player->getLocalPositionInChunk());
 }
 
 void HelloVulkanApp::updatePaused() {
@@ -448,9 +450,12 @@ void HelloVulkanApp::updatePaused() {
 }
 
 void HelloVulkanApp::renderPaused() {
-    if (m_uiManager) {
-        m_uiManager->drawPauseMenu(); // bit of a misnomer, just defines the pause UI
-    }
+    if (!m_uiManager) return;
+    m_uiManager->drawPauseMenu();
+
+    // Also draw the coordinate overlay while paused.
+    if (!player) return;
+    m_uiManager->drawXYZCoordinateOverlay(player->getAbsoluteChunkPos(), player->getLocalPositionInChunk());
 }
 
 void HelloVulkanApp::cleanup() {

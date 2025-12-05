@@ -1,7 +1,9 @@
 #ifndef UI_MANAGER_HPP
 #define UI_MANAGER_HPP
 
+#include <glm/glm.hpp> // For glm::vec3, glm::ivec3
 #include "../render/VulkanCommon.hpp" // Include for GLFW types
+#include <glm/vec3.hpp>
 #include "imgui.h"
 
 // Forward declaration to avoid circular dependencies
@@ -21,6 +23,9 @@ public:
 
     // Draws the loading screen.
     void drawLoadingScreen();
+
+    // Draws a non-interactive overlay with XYZ coordinates.
+    void drawXYZCoordinateOverlay(const glm::ivec3& absoluteChunkPos, const glm::vec3& localPositionInChunk);
 
 private:
     HelloVulkanApp& m_app; // Reference to the main app to interact with game state
