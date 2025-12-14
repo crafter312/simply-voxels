@@ -32,6 +32,11 @@ std::optional<WorldMetadata> UIManager::drawMainMenu() {
             break;
     }
 
+    if (worldToLoad.has_value()) {
+        // Reset to root menu after selecting/creating a world
+        m_currentMenuScreen = MenuScreenState::ROOT;
+    }
+
     return worldToLoad;
 }
 
