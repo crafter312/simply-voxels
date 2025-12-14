@@ -328,7 +328,7 @@ bool HelloVulkanApp::startup() {
     VK_LOG("State: STARTUP -> MAIN_MENU");
 
     // Create the UI Manager
-    m_uiManager = std::make_unique<UIManager>(*this);
+    m_uiManager = std::make_unique<UIManager>(*this, *m_saveGameManager);
 
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for menu
@@ -386,25 +386,14 @@ void HelloVulkanApp::updateMainMenu() {
 }
 
 void HelloVulkanApp::renderMainMenu() {
-    // This is where you will tell ImGui to draw the main menu.
-    // The UIManager will return true if the "Start Game" button is clicked.
-    if (m_uiManager && m_uiManager->drawMainMenu()) { // "Start Game" was clicked
-        VK_LOG("Start Game button clicked. Finding or creating world...");
+    if (!m_uiManager) return;
 
-        WorldMetadata worldToLoad;
-        const auto& availableWorlds = m_saveGameManager->getAvailableWorlds();
+    // Draw main menu, return early if no world selected
+    std::optional<WorldMetadata> worldToLoad = m_uiManager->drawMainMenu();
+    if (!worldToLoad.has_value()) return;
 
-        if (availableWorlds.empty()) {
-            // No worlds exist, create a new one with a default name.
-            // The seed will be generated randomly by the SaveGameManager.
-            worldToLoad = m_saveGameManager->createNewWorld("Default World", std::nullopt);
-        } else {
-            // A world exists, load the most recently played one (which is the first in the sorted list).
-            worldToLoad = availableWorlds[0];
-        }
-        // Call startGame, which will trigger the loading process.
-        startGame(worldToLoad);
-    }
+    VK_LOG("Starting game with new or existing world...");
+    startGame(worldToLoad.value());
 }
 
 void HelloVulkanApp::updateLoading(float dt) {

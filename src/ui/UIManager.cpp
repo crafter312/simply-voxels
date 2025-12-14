@@ -1,28 +1,50 @@
 #include "UIManager.hpp"
 #include "../HelloVulkanApp.hpp" // Include the full definition for implementation
 #include "../world/Chunk.hpp" // For CHUNK_SIDE_LENGTH
+#include "../world/SaveGameManager.hpp" // For to render available worlds in list and create new worlds
 #include <cmath> // For std::floor
 #include <cstdio> // For snprintf
+#include <chrono>
+#include <ctime>
 #include <iomanip> // For std::fixed and std::setprecision
 
 // --- UI Configuration Constants ---
 // Defines how many decimal places to show for the player's world position.
 constexpr unsigned int XYZ_DISPLAY_FRACTIONAL_DIGITS = 4;
 
-UIManager::UIManager(HelloVulkanApp& app) : m_app(app) {}
+UIManager::UIManager(HelloVulkanApp& app, SaveGameManager& saveGameManager)
+    : m_app(app), m_saveGameManager(saveGameManager) {}
 
-bool UIManager::drawMainMenu() {
-    bool startGame = false;
+/******** MAIN MENU FUNCTIONS ********/
 
+std::optional<WorldMetadata> UIManager::drawMainMenu() {
+    std::optional<WorldMetadata> worldToLoad = std::nullopt;
+
+    switch (m_currentMenuScreen) {
+        case MenuScreenState::ROOT:
+            drawMainMenuRoot();
+            break;
+        case MenuScreenState::WORLD_SELECT:
+            worldToLoad = drawMainMenuWorldSelect();
+            break;
+        case MenuScreenState::CREATE_WORLD:
+            worldToLoad = drawMainMenuCreateWorld();
+            break;
+    }
+
+    return worldToLoad;
+}
+
+void UIManager::drawMainMenuRoot() {
     // Use ImGui to create a simple main menu window
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-    ImGui::Begin("Main Menu", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+    ImGui::Begin("Main Menu Root", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() * 0.4f);
     ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
-    if (ImGui::Button("Start Game", ImVec2(150, 50))) {
-        startGame = true;
+    if (ImGui::Button("Select World", ImVec2(150, 50))) {
+        m_currentMenuScreen = MenuScreenState::WORLD_SELECT;
     }
 
     ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
@@ -32,9 +54,108 @@ bool UIManager::drawMainMenu() {
     }
 
     ImGui::End();
-
-    return startGame;
 }
+
+std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
+    std::optional<WorldMetadata> worldToLoad = std::nullopt;
+
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+    ImGui::Begin("World Select", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 200) * 0.5f);
+    if (ImGui::Button("Create New World", ImVec2(200, 40))) {
+        m_currentMenuScreen = MenuScreenState::CREATE_WORLD;
+    }
+
+    ImGui::Separator();
+
+    // Scrollable list of worlds
+    ImGui::BeginChild("WorldList", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 10), true);
+
+    const auto& worlds = m_saveGameManager.getAvailableWorlds();
+    for (const auto& world : worlds) {
+        if (ImGui::Button(world.worldName.c_str(), ImVec2(-1, 60))) {
+            worldToLoad = world;
+        }
+        ImGui::SameLine();
+        ImGui::BeginGroup();
+        ImGui::Text("Seed: %lld", world.seed);
+        ImGui::Text("Last Played: %s", formatTimestamp(world.lastPlayedTimestamp).c_str());
+        ImGui::Text("Created: %s", formatTimestamp(world.creationTimestamp).c_str());
+        ImGui::EndGroup();
+        ImGui::Separator();
+    }
+
+    ImGui::EndChild();
+
+    // Back button at the bottom
+    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
+    if (ImGui::Button("Back", ImVec2(150, 50))) {
+        m_currentMenuScreen = MenuScreenState::ROOT;
+    }
+
+    ImGui::End();
+
+    return worldToLoad;
+}
+
+std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld() {
+    std::optional<WorldMetadata> worldToLoad = std::nullopt;
+
+    static char worldNameBuffer[128] = "New World";
+    static char seedBuffer[64] = "";
+    static bool useRandomSeed = true;
+
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+    ImGui::Begin("Create World", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+    ImGui::SetCursorPosY(ImGui::GetWindowHeight() * 0.3f);
+
+    // Center the content
+    float contentWidth = 300.0f;
+    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - contentWidth) * 0.5f);
+    ImGui::BeginChild("CreateWorldContent", ImVec2(contentWidth, 200), false);
+
+    ImGui::Text("World Name:");
+    ImGui::InputText("##WorldName", worldNameBuffer, sizeof(worldNameBuffer));
+
+    ImGui::Checkbox("Random Seed", &useRandomSeed);
+    if (!useRandomSeed) {
+        ImGui::Text("Seed:");
+        ImGui::InputText("##Seed", seedBuffer, sizeof(seedBuffer), ImGuiInputTextFlags_CharsDecimal);
+    }
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    if (ImGui::Button("Create", ImVec2(contentWidth, 40))) {
+        std::optional<int64_t> seed = std::nullopt;
+        if (!useRandomSeed && strlen(seedBuffer) > 0) {
+            try {
+                seed = std::stoll(seedBuffer);
+            } catch (const std::exception& e) {
+                // Handle invalid seed input, maybe show an error message
+                std::cerr << "Invalid seed format: " << e.what() << std::endl;
+            }
+        }
+        // Create the world and return its metadata to start the game
+        worldToLoad = m_saveGameManager.createNewWorld(worldNameBuffer, seed);
+    }
+
+    if (ImGui::Button("Cancel", ImVec2(contentWidth, 40))) {
+        m_currentMenuScreen = MenuScreenState::WORLD_SELECT;
+    }
+
+    ImGui::EndChild();
+
+    ImGui::End();
+
+    return worldToLoad;
+}
+
+/******** PAUSE MENU FUNCTIONS ********/
 
 void UIManager::drawPauseMenu() {
     // Center the pause menu window
@@ -65,6 +186,8 @@ void UIManager::drawPauseMenu() {
     ImGui::End();
 }
 
+/******** OTHER GUI FUNCTIONS ********/
+
 void UIManager::drawLoadingScreen() {
     // Create a full-screen, non-interactive window for the loading message.
     ImGui::SetNextWindowPos(ImVec2(0, 0));
@@ -78,6 +201,19 @@ void UIManager::drawLoadingScreen() {
     ImGui::Text("%s", loadingText);
 
     ImGui::End();
+}
+
+std::string UIManager::formatTimestamp(int64_t timestamp) const {
+    if (timestamp == 0) {
+        return "Never";
+    }
+    auto tp = std::chrono::system_clock::from_time_t(timestamp);
+    std::time_t time = std::chrono::system_clock::to_time_t(tp);
+    char buffer[26];
+    // Use ctime_s on Windows, ctime_r on POSIX
+    ctime_s(buffer, sizeof(buffer), &time);
+    buffer[strlen(buffer) - 1] = '\0'; // Remove trailing newline
+    return std::string(buffer);
 }
 
 void UIManager::drawXYZCoordinateOverlay(const glm::ivec3& absoluteChunkPos, const glm::vec3& localPositionInChunk) {
