@@ -19,9 +19,8 @@
 
 World::World(std::shared_ptr<Camera> camera)
     : m_camera(camera), m_stopCompactionThread(false), m_initialChunkGenerationComplete(false) {
-    m_regionManager = std::make_unique<WorldSave::RegionManager>("../run/regions/"); // Initialize RegionManager
-    // Initially, enqueue chunks around the starting camera position (which is relative to the initial rebase origin 0,0,0)
-    enqueueChunksNearCamera();
+    // Create the RegionManager, but it remains in a "limbo" state until a world is loaded.
+    m_regionManager = std::make_unique<WorldSave::RegionManager>();
 
     // Start the compaction thread
     m_compactionThread = std::thread(&World::compactionThreadLoop, this);
@@ -285,8 +284,8 @@ const std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator>& World::getC
     return m_chunks;
 }
 
-void World::clearAllChunks() {
-    std::cout << "[World] Clearing all chunks..." << std::endl;
+void World::unload() {
+    std::cout << "[World] Unloading world..." << std::endl;
     std::unique_lock<std::shared_mutex> lock(m_chunks_mutex); // Exclusive lock to modify data structures
 
     // 1. Save any modified chunks before clearing them
@@ -299,7 +298,7 @@ void World::clearAllChunks() {
                 }
             }
         }
-        std::cout << "[World] Saved " << savedCount << " dirty chunks before clearing." << std::endl;
+        std::cout << "[World] Saved " << savedCount << " dirty chunks before unloading." << std::endl;
     }
 
     // 2. Move chunks to a deletion queue instead of clearing them directly.
@@ -325,8 +324,9 @@ void World::clearAllChunks() {
     m_initialChunkGenerationComplete.store(false);
     m_rebaseOriginChunkCoord = glm::ivec3(0, 0, 0); // Reset rebase origin to default
     m_rebaseOccurredThisFrame = false;
+    m_meta.reset(); // Clear the metadata for the unloaded world
 
-    std::cout << "[World] All chunk data cleared." << std::endl;
+    std::cout << "[World] World unloaded and reset to limbo state." << std::endl;
 }
 
 void World::update(float deltaTime) {
@@ -470,7 +470,8 @@ void World::processLoadQueue() {
 
         // Attempt to load from file first
         loadedFromFile = m_regionManager->loadChunkFromFile(*newChunk_sptr);
-        if (!loadedFromFile) newChunk_sptr->generate(); // if not loaded from file, generate it procedurally
+        int64_t seed = m_meta.has_value() ? m_meta->seed : 0;
+        if (!loadedFromFile) newChunk_sptr->generate(seed); // if not loaded from file, generate it procedurally
 
         // Mark its 6 direct neighbors as dirty so they can update their meshes
         // relative to this newly generated and loaded chunk.
@@ -540,6 +541,22 @@ const std::set<glm::ivec3, IVec3Comparator>& World::getChangedChunks() const {
 }
 void World::acknowledgeChunkChangeProcessed(const glm::ivec3& chunkCoord) {
     m_changedChunks.erase(chunkCoord);
+}
+
+void World::loadFromMetadata(const WorldMetadata& meta) {
+    std::cout << "[World] Loading from metadata for world: " << meta.worldName << std::endl;
+
+    // 1. Store the metadata for the current world session
+    m_meta = meta;
+
+    // 2. Configure the RegionManager to point to this world's save directory
+    // The base path for saves is managed by HelloVulkanApp/SaveGameManager.
+    // We construct the path to the specific world's root save directory.
+    std::string worldSavePath = "../run/saves/" + meta.directoryName;
+    m_regionManager->setBasePath(worldSavePath);
+
+    // 3. Begin the chunk loading process now that the world is configured
+    enqueueChunksNearCamera();
 }
 
 void World::markAllChunksDirty() {
@@ -751,5 +768,5 @@ std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {
 }
 
 bool World::isInitialChunkGenerationComplete() const {
-    return m_initialChunkGenerationComplete.load();
+    return m_meta.has_value() && m_initialChunkGenerationComplete.load();
 }

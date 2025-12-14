@@ -18,6 +18,8 @@
 // Forward declaration for Camera
 class Camera;
 
+// Include the full definition of WorldMetadata, as it's used by std::optional
+#include "WorldMetadata.hpp"
 namespace WorldSave { // Forward declare RegionManager in its namespace
 class RegionManager;
 }
@@ -98,8 +100,11 @@ public:
     // Call this periodically to process loading/unloading
     void update(float deltaTime);
 
-    // Clears all loaded chunks from memory, saving dirty ones first.
-    void clearAllChunks();
+    // Prepares the World object to load data from a specific world save.
+    void loadFromMetadata(const WorldMetadata& meta);
+
+    // Unloads the current world data, saves dirty chunks, and resets the world to a "limbo" state.
+    void unload();
 
     // Get the current rebase origin in chunk coordinates
     glm::ivec3 getRebaseOriginChunkCoord() const { return m_rebaseOriginChunkCoord; }
@@ -127,6 +132,7 @@ private:
     std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator> m_chunks;
     std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    
     std::set<glm::ivec3, IVec3Comparator> m_changedChunks; // Set of chunk coordinates that have been modified
+    std::optional<WorldMetadata> m_meta; // Metadata of the currently loaded world
 
     glm::ivec3 m_rebaseOriginChunkCoord = glm::ivec3(0,0,0); // The current origin for rendering
     bool m_rebaseOccurredThisFrame = false; // Flag to indicate a rebase happened in the current update

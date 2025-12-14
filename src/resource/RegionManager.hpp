@@ -10,6 +10,7 @@
 #include <queue>  // For std::queue
 #include <fstream> // For std::fstream
 #include <memory> // For std::unique_ptr
+#include <optional> // For std::optional
 
 // Forward declaration
 class Chunk;
@@ -73,7 +74,7 @@ struct RegionCoordComparator {
 
 class RegionManager {
 public:
-    RegionManager(const std::string& base_save_path);
+    RegionManager();
     ~RegionManager(); // Destructor to close any open files and process queue
 
     // Attempts to load chunk data from a region file.
@@ -95,8 +96,16 @@ public:
     // Returns true if any compaction was performed, false otherwise.
     bool processCompactionQueue(int max_to_process = 1);
 
+    // Sets the base path for the current world's save directory.
+    // This will close all currently open region files and prepare the manager for a new world.
+    void setBasePath(const std::string& world_save_path);
+
 private:
-    std::string m_base_save_path;
+    std::optional<std::string> m_base_save_path; // Path to the specific world save, e.g., "../run/saves/my_world_123/"
+    const std::string m_subdirectory_path = "regions/"; // The subdirectory within a world save where regions are stored
+
+    void closeAllOpenRegionFiles();
+
     std::string getRegionFilePath(const glm::ivec3& region_coord) const;
     size_t getLocalChunkIndex(const glm::ivec3& local_chunk_coord_in_region) const;
     // Helper to get/open a region file stream

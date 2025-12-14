@@ -148,12 +148,7 @@ bool Chunk::isAllAir() const {
     return m_isAllAir; 
 }
 
-void Chunk::generate() {
-    //std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] STARTING generation." << std::endl;
-    // Original Perlin Noise Terrain Generation:
-    // Terrain generation parameters
-    // const double TERRAIN_FREQUENCY = 0.01; // Defined in Chunk.hpp
-    // const double TERRAIN_AMPLITUDE = 20.0; // Defined in Chunk.hpp
+void Chunk::generate(int64_t worldSeed) {
 
     const int baseSurfaceAbsoluteY = CHUNK_SIDE_LENGTH / 2; // An arbitrary "sea level" or average ground height in absolute Y.
                                                 // Adjust this if your world's "ground" is typically higher or lower.
@@ -168,16 +163,37 @@ void Chunk::generate() {
     //std::cout << "  Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] World Y range: [" << chunkWorldOrigin.y << " to " << chunkWorldOrigin.y + CHUNK_HEIGHT - 1 << "]" << std::endl;
     bool hasNonAirBlock = false;
 
-    // Pre-calculate the chunk's origin contribution to the Perlin input.
-    // This uses 64-bit integers for the multiplication to prevent overflow, then converts
+    /******** Pre-calculate a perlin noise offset from the world seed ********/
+
+    // 1. Split the 64-bit world seed into two 32-bit components
+    // This ensures 0 seed results in (0, 0) offset, and different seeds produce different offsets
+    const int32_t gridX = static_cast<int32_t>(worldSeed >> 32);
+    const int32_t gridY = static_cast<int32_t>(worldSeed & 0xFFFFFFFF);
+
+    // 2. Scale these components to get a larger offset, then convert to double and scale by TERRAIN_FREQUENCY
+    // This prevents terrain similarities across different seeds, while also properly preparing to add to
+    // chunk coordinate such that precision loss is minimized.
+    glm::dvec2 seedOffset(
+        static_cast<double>(static_cast<int64_t>(gridX) * SEED_COORD_SCALE) * TERRAIN_FREQUENCY,
+        static_cast<double>(static_cast<int64_t>(gridY) * SEED_COORD_SCALE) * TERRAIN_FREQUENCY
+    );
+
+    /******** Pre-calculate the chunk's origin contribution to the Perlin input ********/
+
+    // 1. This uses 64-bit integers for the multiplication to prevent overflow, then converts
     // the result to double. This is safe as the result fits within a double's integer precision.
     glm::dvec2 chunkOriginPerlinInput(
         static_cast<double>(static_cast<int64_t>(m_chunkCoord.x) * CHUNK_SIDE_LENGTH) * TERRAIN_FREQUENCY,
         static_cast<double>(static_cast<int64_t>(m_chunkCoord.z) * CHUNK_SIDE_LENGTH) * TERRAIN_FREQUENCY
     );
 
+    // 2. Add the seed offset to get the final chunk origin Perlin input
+    chunkOriginPerlinInput += seedOffset;
+
     // Also get the absolute Y origin of the chunk using safe 64-bit arithmetic.
     const int64_t chunkWorldOriginY = static_cast<int64_t>(m_chunkCoord.y) * CHUNK_SIDE_LENGTH;
+
+    /******** LOCAL COORDINATE LOOP ********/
 
     for (int lx = 0; lx < CHUNK_SIDE_LENGTH; ++lx) {
         for (int lz = 0; lz < CHUNK_SIDE_LENGTH; ++lz) {

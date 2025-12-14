@@ -12,6 +12,8 @@
 #include "VulkanDebug.hpp"           // Include the new VulkanDebug header
 
 #include "ui/UIManager.hpp"          // Include the new UIManager header
+#include "world/WorldMetadata.hpp"   // Include WorldMetadata for the new startGame function
+#include "world/SaveGameManager.hpp" // Include the new SaveGameManager header
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -126,9 +128,16 @@ void HelloVulkanApp::initVulkan() {
     Blocks::registerBlockTypes(*blockRegistry);
     std::cout << "BlockRegistry created and populated." << std::endl;
 
+    // --- Initialize Save Game Manager ---
+    // This should be done early, as it scans for worlds on startup.
+    m_saveGameManager = std::make_unique<SaveGameManager>("../run/saves/");
+    if (!m_saveGameManager) throw std::runtime_error("Failed to create SaveGameManager!");
+
     // --- Create World ---
-    // World constructor now only takes the camera
-    world = std::make_unique<World>(camera);
+    // NOTE: This world creation will eventually be moved into the startGame method
+    // and will take WorldMetadata as an argument. For now, we keep it to allow
+    // the application to run without UI interaction.
+    world = std::make_unique<World>(camera); 
     if (!world) throw std::runtime_error("Failed to create World!");
     VK_LOG("World created with initial blocks.");
 
@@ -166,13 +175,29 @@ void HelloVulkanApp::quitToMenu() {
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
-    // Clear world data on both the CPU and GPU
+    // Unload the current world and clear GPU data to return to a clean "limbo" state.
     if (world) {
-        world->clearAllChunks();
+        world->unload(); // Assumes this method exists to save and clear world data.
     }
     renderer->clearWorldRenderDataAndReset();
 }
 
+void HelloVulkanApp::startGame(const WorldMetadata& worldMeta) {
+    VK_LOG("Starting game for world: " << worldMeta.worldName);
+
+    // 1. Change the game state
+    m_currentState = GameState::LOADING;
+
+    // 2. Disable the cursor
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    // 3. Update the last played timestamp for the selected world
+    m_saveGameManager->updateLastPlayed(worldMeta.directoryName);
+
+    // 4. Load the world data using the provided metadata.
+    // This assumes World::loadFromMetadata exists and will prepare the world for loading.
+    world->loadFromMetadata(worldMeta);
+}
 void HelloVulkanApp::createInstance() {
     if (VulkanDebug::enableValidationLayers && !VulkanDebug::checkValidationLayerSupport()) {
         throw std::runtime_error("Validation layers requested, but not available!");
@@ -363,10 +388,22 @@ void HelloVulkanApp::updateMainMenu() {
 void HelloVulkanApp::renderMainMenu() {
     // This is where you will tell ImGui to draw the main menu.
     // The UIManager will return true if the "Start Game" button is clicked.
-    if (m_uiManager && m_uiManager->drawMainMenu()) {
-        VK_LOG("State: MAIN_MENU -> LOADING");
-        m_currentState = GameState::LOADING; // TODO: implement LOADING state later
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if (m_uiManager && m_uiManager->drawMainMenu()) { // "Start Game" was clicked
+        VK_LOG("Start Game button clicked. Finding or creating world...");
+
+        WorldMetadata worldToLoad;
+        const auto& availableWorlds = m_saveGameManager->getAvailableWorlds();
+
+        if (availableWorlds.empty()) {
+            // No worlds exist, create a new one with a default name.
+            // The seed will be generated randomly by the SaveGameManager.
+            worldToLoad = m_saveGameManager->createNewWorld("Default World", std::nullopt);
+        } else {
+            // A world exists, load the most recently played one (which is the first in the sorted list).
+            worldToLoad = availableWorlds[0];
+        }
+        // Call startGame, which will trigger the loading process.
+        startGame(worldToLoad);
     }
 }
 
@@ -467,6 +504,9 @@ void HelloVulkanApp::cleanup() {
 
     // UI Manager is managed by unique_ptr
     m_uiManager.reset();
+
+    // SaveGameManager is managed by unique_ptr
+    m_saveGameManager.reset();
 
     // Player is managed by unique_ptr, will be cleaned up automatically
     player.reset();

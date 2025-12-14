@@ -15,22 +15,12 @@
 
 namespace WorldSave {
 
-RegionManager::RegionManager(const std::string& base_save_path)
-    : m_base_save_path(base_save_path) {
+RegionManager::RegionManager() {
     // Pre-size workspace buffers to maximum possible compressed chunk size
     int uncompressed_size = static_cast<int>(CHUNK_VOLUME * sizeof(uint16_t));
     int max_compressed_size = LZ4_compressBound(uncompressed_size);
     m_compression_workspace.resize(max_compressed_size);
     m_decompression_workspace.resize(uncompressed_size); // Decompression target is uncompressed size
-
-    // Ensure the base save path itself exists (this is now the direct container for region files)
-    std::filesystem::path save_dir_path = std::filesystem::path(m_base_save_path);
-    if (!std::filesystem::exists(save_dir_path)) {
-        if (!std::filesystem::create_directories(save_dir_path)) {
-            std::cerr << "Error: Could not create save directory: " << save_dir_path << std::endl;
-            // Depending on desired strictness, could throw an exception here
-        }
-    }
 }
 
 RegionManager::~RegionManager() {
@@ -42,22 +32,35 @@ RegionManager::~RegionManager() {
     std::cout << "[RegionManager] Destructor: Compaction queue processed." << std::endl;
 
     // Now close any remaining files
-    std::lock_guard<std::mutex> lock(m_openFilesMutex); // Re-acquire lock
-    std::cout << "[RegionManager] Destructor: Closing " << m_openRegionFiles.size() << " (potentially) remaining open region files." << std::endl;
-    for (auto& pair : m_openRegionFiles) {
-        if (pair.second && pair.second->is_open()) {
-            pair.second->close();
-        }
-    }
-    m_openRegionFiles.clear(); // Clear the map
+    closeAllOpenRegionFiles();
     std::cout << "[RegionManager] Destructor finished." << std::endl;
 }
 
+void RegionManager::setBasePath(const std::string& world_save_path) {
+    std::cout << "[RegionManager] Setting new base path to: " << world_save_path << std::endl;
+
+    // 1. Close all currently open region files from the previous world
+    closeAllOpenRegionFiles();
+
+    // 2. Set the new base path
+    m_base_save_path = world_save_path;
+
+    // 3. Ensure the new region subdirectory exists
+    std::filesystem::path region_dir_path = std::filesystem::path(*m_base_save_path) / m_subdirectory_path;
+    try {
+        // create_directories does nothing and returns false if the path already exists.
+        // It only returns true if it created a directory. We don't need to check the return value.
+        std::filesystem::create_directories(region_dir_path);
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Throw an exception only on a true filesystem error.
+        throw std::runtime_error("Filesystem error creating region directory: " + std::string(e.what()));
+    }
+}
+
 std::string RegionManager::getRegionFilePath(const glm::ivec3& region_coord) const {
-    std::filesystem::path file_path = std::filesystem::path(m_base_save_path) /
-                                      ("r." + std::to_string(region_coord.x) + // Region files are directly in m_base_save_path
-                                       "." + std::to_string(region_coord.y) +
-                                       "." + std::to_string(region_coord.z) + ".dat");
+    if (!m_base_save_path) return ""; // Return empty if no path is set
+    std::filesystem::path file_path = std::filesystem::path(*m_base_save_path) / m_subdirectory_path /
+                                      ("r." + std::to_string(region_coord.x) + "." + std::to_string(region_coord.y) + "." + std::to_string(region_coord.z) + ".dat");
     return file_path.string();
 }
 
@@ -322,6 +325,11 @@ std::fstream* RegionManager::getRegionFileStream(const glm::ivec3& region_coord)
 }
 
 bool RegionManager::loadChunkFromFile(Chunk& chunk_ref) {
+    if (!m_base_save_path.has_value()) {
+        std::cerr << "[RegionManager] Error: loadChunkFromFile called but no base path is set." << std::endl;
+        return false;
+    }
+
     glm::ivec3 chunk_coord = chunk_ref.getChunkCoord();
 
     // Calculate region coordinates using integer arithmetic for floored division
@@ -507,6 +515,11 @@ bool RegionManager::loadChunkFromFile(Chunk& chunk_ref) {
 }
 
 bool RegionManager::saveChunkToFile(Chunk& chunk_ref) {
+    if (!m_base_save_path.has_value()) {
+        std::cerr << "[RegionManager] Error: saveChunkToFile called but no base path is set." << std::endl;
+        return false;
+    }
+
     glm::ivec3 chunk_coord = chunk_ref.getChunkCoord();
 
     // Calculate region coordinates using integer arithmetic for floored division
@@ -722,4 +735,16 @@ void RegionManager::notifyChunkUnloaded(const Chunk& unloadedChunk) {
         }
     } // m_countersMutex is released
 }
+
+void RegionManager::closeAllOpenRegionFiles() {
+    std::lock_guard<std::mutex> lock(m_openFilesMutex);
+    for (auto& pair : m_openRegionFiles) {
+        if (pair.second && pair.second->is_open()) {
+            pair.second->close();
+        }
+    }
+    m_openRegionFiles.clear();
+    std::cout << "[RegionManager] All open region files have been closed and cache cleared." << std::endl;
+}
+
 } // namespace WorldSave

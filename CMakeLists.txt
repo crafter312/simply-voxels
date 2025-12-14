@@ -225,6 +225,7 @@ add_executable(SimpleVulkanWindow
     src/world/Chunk.cpp                  # Add Chunk class
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
     src/resource/RegionManager.cpp          # Add RegionManager class
+    src/world/SaveGameManager.cpp        # Add SaveGameManager class
     src/util/Raycaster.cpp               # Add the new Raycaster source file
     src/physics/VoxelShape.cpp           # Add the new VoxelShape source file
     src/physics/WireframeMesher.cpp

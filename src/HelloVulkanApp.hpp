@@ -27,6 +27,7 @@ class Camera;
 class BlockRegistry;
 
 // Forward declare World
+struct WorldMetadata; // Forward declare WorldMetadata
 class World;
 
 // Forward declare Player
@@ -37,6 +38,9 @@ class VulkanDebug;
 
 // Forward declare UIManager
 class UIManager;
+
+// Forward declare SaveGameManager
+class SaveGameManager;
 
 class HelloVulkanApp {
 public:
@@ -49,6 +53,7 @@ public:
     // --- Public State Changers for UI ---
     void resumeGame();
     void quitToMenu();
+    void startGame(const WorldMetadata& worldMeta); // New function to start a game with specific metadata
     GLFWwindow* getWindow() { return window; }
 
 private:
@@ -100,6 +105,9 @@ private:
 
     // --- UI Manager ---
     std::unique_ptr<UIManager> m_uiManager;
+
+    // --- Save Game Manager ---
+    std::unique_ptr<SaveGameManager> m_saveGameManager;
 
     void initWindow();
     void initVulkan();
