@@ -63,36 +63,69 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
     ImGui::Begin("World Select", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
-    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 200) * 0.5f);
-    if (ImGui::Button("Create New World", ImVec2(200, 40))) {
-        m_currentMenuScreen = MenuScreenState::CREATE_WORLD;
-    }
-
-    ImGui::Separator();
-
-    // Scrollable list of worlds
-    ImGui::BeginChild("WorldList", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 10), true);
-
-    const auto& worlds = m_saveGameManager.getAvailableWorlds();
-    for (const auto& world : worlds) {
-        if (ImGui::Button(world.worldName.c_str(), ImVec2(-1, 60))) {
-            worldToLoad = world;
+    // --- Header Section (Fixed) ---
+    {
+        ImGui::BeginChild("Header", ImVec2(0, 50), false, ImGuiWindowFlags_NoScrollbar);
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 200) * 0.5f);
+        if (ImGui::Button("Create New World", ImVec2(200, 40))) {
+            m_currentMenuScreen = MenuScreenState::CREATE_WORLD;
         }
-        ImGui::SameLine();
-        ImGui::BeginGroup();
-        ImGui::Text("Seed: %lld", world.seed);
-        ImGui::Text("Last Played: %s", formatTimestamp(world.lastPlayedTimestamp).c_str());
-        ImGui::Text("Created: %s", formatTimestamp(world.creationTimestamp).c_str());
-        ImGui::EndGroup();
         ImGui::Separator();
+        ImGui::EndChild();
     }
 
-    ImGui::EndChild();
+    // --- Content Section (Scrollable) ---
+    // Calculate the height for the scrollable area, leaving space for the footer.
+    float footerHeight = 70.0f;
+    ImVec2 contentSize = ImVec2(0, -footerHeight);
+    {
+        ImGui::BeginChild("WorldList", contentSize, true);
 
-    // Back button at the bottom
-    ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
-    if (ImGui::Button("Back", ImVec2(150, 50))) {
-        m_currentMenuScreen = MenuScreenState::ROOT;
+        const auto& worlds = m_saveGameManager.getAvailableWorlds();
+        for (int i = 0; i < worlds.size(); ++i) {
+            const auto& world = worlds[i];
+
+            ImGui::PushID(i); // Use index for a unique ID
+
+            // Create a custom button with more complex content
+            ImVec2 buttonSize = ImVec2(-1, 70); // Full width, 80 pixels high
+            if (ImGui::Button("##world_button", buttonSize)) {
+                worldToLoad = world;
+            }
+
+            // Manually draw the content on top of the button we just created
+            ImVec2 rectMin = ImGui::GetItemRectMin();
+            ImVec2 rectMax = ImGui::GetItemRectMax();
+            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+            // World Name (larger font, left-aligned)
+            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5), ImGui::GetColorU32(ImGuiCol_Text), world.worldName.c_str());
+
+            // World Details (smaller font, right-aligned)
+            std::string seed_text = "Seed: " + std::to_string(world.seed);
+            std::string last_played_text = "Last Played: " + formatTimestamp(world.lastPlayedTimestamp);
+            std::string created_text = "Created: " + formatTimestamp(world.creationTimestamp);
+
+            float text_height = ImGui::GetTextLineHeight();
+            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + text_height + 2), ImGui::GetColorU32(ImGuiCol_Text), seed_text.c_str());
+            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + (text_height + 2) * 2), ImGui::GetColorU32(ImGuiCol_Text), created_text.c_str());
+            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + (text_height + 2) * 3), ImGui::GetColorU32(ImGuiCol_Text), last_played_text.c_str());
+
+            ImGui::PopID();
+            ImGui::Separator();
+        }
+
+        ImGui::EndChild();
+    }
+
+    // --- Footer Section (Fixed) ---
+    {
+        ImGui::BeginChild("Footer", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar); // Takes remaining space
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
+        if (ImGui::Button("Back", ImVec2(150, 50))) {
+            m_currentMenuScreen = MenuScreenState::ROOT;
+        }
+        ImGui::EndChild();
     }
 
     ImGui::End();
