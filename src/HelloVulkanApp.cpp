@@ -175,6 +175,8 @@ void HelloVulkanApp::quitToMenu() {
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
+    player->reset();
+
     // Unload the current world and clear GPU data to return to a clean "limbo" state.
     if (world) {
         world->unload(); // Assumes this method exists to save and clear world data.

@@ -439,3 +439,14 @@ void Player::setPosition(const glm::ivec3& absoluteChunkPos, const glm::vec3& lo
     // Ensure the camera is updated to the new position
     updateCameraPosition(false); // On a direct setPosition, no smoothing is needed.
 }
+
+void Player::reset() {
+    m_velocity = glm::vec3(0.0f);
+    m_acceleration = glm::vec3(0.0f);
+    m_isGrounded = false;
+    m_wishVelocity = glm::vec3(0.0f);
+    m_physicsTimeAccumulator = 0.0f;
+    m_hasSpawned = false;
+    m_isFlying = false;
+    m_justAutoStepped = false;
+}

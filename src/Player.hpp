@@ -39,6 +39,7 @@ public:
     glm::vec3 getAABBMax() const;
     static glm::vec3 getDimensions();
     void setPosition(const glm::ivec3& absoluteChunkPos, const glm::vec3& localPositionInChunk);
+    void reset(); // Resets player state for respawning
 
 private:
     void handleBlockInteraction();
