@@ -39,9 +39,6 @@ class VulkanDebug;
 // Forward declare UIManager
 class UIManager;
 
-// Forward declare SaveGameManager
-class SaveGameManager;
-
 class HelloVulkanApp {
 public:
     HelloVulkanApp();
@@ -105,9 +102,6 @@ private:
 
     // --- UI Manager ---
     std::unique_ptr<UIManager> m_uiManager;
-
-    // --- Save Game Manager ---
-    std::unique_ptr<SaveGameManager> m_saveGameManager;
 
     void initWindow();
     void initVulkan();

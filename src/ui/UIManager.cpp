@@ -1,7 +1,6 @@
 #include "UIManager.hpp"
 #include "../HelloVulkanApp.hpp" // Include the full definition for implementation
 #include "../world/Chunk.hpp" // For CHUNK_SIDE_LENGTH
-#include "../world/SaveGameManager.hpp" // For to render available worlds in list and create new worlds
 #include <cmath> // For std::floor
 #include <cstdio> // For snprintf
 #include <chrono>
@@ -12,8 +11,10 @@
 // Defines how many decimal places to show for the player's world position.
 constexpr unsigned int XYZ_DISPLAY_FRACTIONAL_DIGITS = 4;
 
-UIManager::UIManager(HelloVulkanApp& app, SaveGameManager& saveGameManager)
-    : m_app(app), m_saveGameManager(saveGameManager) {}
+UIManager::UIManager(HelloVulkanApp& app) : m_app(app) {
+    m_saveGameManager = std::make_unique<SaveGameManager>("../run/saves/");
+    if (!m_saveGameManager) throw std::runtime_error("Failed to create SaveGameManager!");
+}
 
 /******** MAIN MENU FUNCTIONS ********/
 
@@ -33,8 +34,8 @@ std::optional<WorldMetadata> UIManager::drawMainMenu() {
     }
 
     if (worldToLoad.has_value()) {
-        // Reset to root menu after selecting/creating a world
-        m_currentMenuScreen = MenuScreenState::ROOT;
+        m_currentMenuScreen = MenuScreenState::ROOT; // reset to root menu after selecting/creating a world
+        m_saveGameManager->updateLastPlayed(worldToLoad.value().directoryName); // world is selected to be loaded, update last played timestamp
     }
 
     return worldToLoad;
@@ -86,7 +87,7 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
     {
         ImGui::BeginChild("WorldList", contentSize, true);
 
-        const auto& worlds = m_saveGameManager.getAvailableWorlds();
+        const auto& worlds = m_saveGameManager->getAvailableWorlds();
         for (int i = 0; i < worlds.size(); ++i) {
             const auto& world = worlds[i];
 
@@ -179,7 +180,7 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld() {
             }
         }
         // Create the world and return its metadata to start the game
-        worldToLoad = m_saveGameManager.createNewWorld(worldNameBuffer, seed);
+        worldToLoad = m_saveGameManager->createNewWorld(worldNameBuffer, seed);
     }
 
     if (ImGui::Button("Cancel", ImVec2(contentWidth, 40))) {

@@ -13,7 +13,6 @@
 
 #include "ui/UIManager.hpp"          // Include the new UIManager header
 #include "world/WorldMetadata.hpp"   // Include WorldMetadata for the new startGame function
-#include "world/SaveGameManager.hpp" // Include the new SaveGameManager header
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -128,11 +127,6 @@ void HelloVulkanApp::initVulkan() {
     Blocks::registerBlockTypes(*blockRegistry);
     std::cout << "BlockRegistry created and populated." << std::endl;
 
-    // --- Initialize Save Game Manager ---
-    // This should be done early, as it scans for worlds on startup.
-    m_saveGameManager = std::make_unique<SaveGameManager>("../run/saves/");
-    if (!m_saveGameManager) throw std::runtime_error("Failed to create SaveGameManager!");
-
     // --- Create World ---
     // NOTE: This world creation will eventually be moved into the startGame method
     // and will take WorldMetadata as an argument. For now, we keep it to allow
@@ -192,9 +186,6 @@ void HelloVulkanApp::startGame(const WorldMetadata& worldMeta) {
 
     // 2. Disable the cursor
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-    // 3. Update the last played timestamp for the selected world
-    m_saveGameManager->updateLastPlayed(worldMeta.directoryName);
 
     // 4. Load the world data using the provided metadata.
     // This assumes World::loadFromMetadata exists and will prepare the world for loading.
@@ -330,7 +321,7 @@ bool HelloVulkanApp::startup() {
     VK_LOG("State: STARTUP -> MAIN_MENU");
 
     // Create the UI Manager
-    m_uiManager = std::make_unique<UIManager>(*this, *m_saveGameManager);
+    m_uiManager = std::make_unique<UIManager>(*this);
 
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for menu
@@ -495,9 +486,6 @@ void HelloVulkanApp::cleanup() {
 
     // UI Manager is managed by unique_ptr
     m_uiManager.reset();
-
-    // SaveGameManager is managed by unique_ptr
-    m_saveGameManager.reset();
 
     // Player is managed by unique_ptr, will be cleaned up automatically
     player.reset();

@@ -2,22 +2,24 @@
 #define UI_MANAGER_HPP
 
 #include <optional>
+#include <memory>
+#include <string>
 #include <glm/glm.hpp> // For glm::vec3, glm::ivec3
 #include "../render/VulkanCommon.hpp" // Include for GLFW types
 #include <glm/vec3.hpp>
 #include "imgui.h"
 
 #include "../world/WorldMetadata.hpp"
+#include "../world/SaveGameManager.hpp" // For to render available worlds in list and create new worlds
 
 // Forward declaration to avoid circular dependencies
 class HelloVulkanApp;
-class SaveGameManager;
 // Forward declare GLFWwindow to avoid including the full glfw3.h here
 struct GLFWwindow;
 
 class UIManager {
 public:
-    explicit UIManager(HelloVulkanApp& app, SaveGameManager& saveGameManager);
+    explicit UIManager(HelloVulkanApp& app);
 
     // Draws the main menu and returns the metadata of a world if one is selected to be loaded.
     std::optional<WorldMetadata> drawMainMenu();
@@ -40,7 +42,9 @@ private:
     };
 
     HelloVulkanApp& m_app; // Reference to the main app to interact with game state
-    SaveGameManager& m_saveGameManager; // Reference to SaveGameManager for world data
+
+    // --- Save Game Manager ---
+    std::unique_ptr<SaveGameManager> m_saveGameManager;
 
     MenuScreenState m_currentMenuScreen = MenuScreenState::ROOT;
 
