@@ -48,10 +48,14 @@ private:
 
     MenuScreenState m_currentMenuScreen = MenuScreenState::ROOT;
 
+    // --- World Select Context Menu State ---
+    std::optional<WorldMetadata> m_worldPendingDelete; // Holds metadata for the world awaiting delete confirmation in a modal.
+
     // Private helper functions for drawing different menu screens
     void drawMainMenuRoot();
     std::optional<WorldMetadata> drawMainMenuWorldSelect();
     std::optional<WorldMetadata> drawMainMenuCreateWorld();
+    void drawWorldContextMenu(const WorldMetadata& world);
 
     // Helper to format timestamps
     std::string formatTimestamp(int64_t timestamp) const;

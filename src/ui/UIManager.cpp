@@ -95,8 +95,11 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
 
             // Create a custom button with more complex content
             ImVec2 buttonSize = ImVec2(-1, 70); // Full width, 80 pixels high
-            if (ImGui::Button("##world_button", buttonSize)) {
-                worldToLoad = world;
+            ImGui::Button("##world_button", buttonSize);
+
+            // Normal left-click action to load the world.
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
+                 worldToLoad = world;
             }
 
             // Manually draw the content on top of the button we just created
@@ -117,6 +120,20 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
             draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + (text_height + 2) * 2), ImGui::GetColorU32(ImGuiCol_Text), created_text.c_str());
             draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + (text_height + 2) * 3), ImGui::GetColorU32(ImGuiCol_Text), last_played_text.c_str());
 
+            // Create a unique ID for the popup associated with this specific world item.
+            std::string popup_id = "world_context_menu_" + std::to_string(i);
+
+            // Manually detect right-click to open our custom context menu.
+            // This gives us more control over the popup's lifetime.
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+                ImGui::OpenPopup(popup_id.c_str());
+            }
+
+            // Draw the unique popup if it's open.
+            if (ImGui::BeginPopup(popup_id.c_str())) {
+                drawWorldContextMenu(world);
+                ImGui::EndPopup();
+            }
             ImGui::PopID();
             ImGui::Separator();
         }
@@ -134,9 +151,47 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
         ImGui::EndChild();
     }
 
+    // --- Delete Confirmation Modal ---
+    // This is drawn outside the main world list loop.
+    // It will appear centered on the screen when m_worldPendingDelete has a value.
+    if (m_worldPendingDelete.has_value()) {
+        ImGui::OpenPopup("Delete World?");
+    }
+
+    // Always center this modal.
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Delete World?", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Are you sure you want to delete '%s'?", m_worldPendingDelete->worldName.c_str());
+        ImGui::Text("This action cannot be undone!");
+        ImGui::Separator();
+
+        if (ImGui::Button("Yes", ImVec2(120, 0))) {
+            m_saveGameManager->deleteWorld(m_worldPendingDelete->directoryName);
+            m_worldPendingDelete.reset(); // Clear the state
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No", ImVec2(120, 0))) {
+            m_worldPendingDelete.reset(); // Clear the state
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
     ImGui::End();
 
     return worldToLoad;
+}
+
+void UIManager::drawWorldContextMenu(const WorldMetadata& world) {
+    // Check if this is the world we are confirming to delete
+    std::string deleteLabel = "Delete '" + world.worldName + "'";
+    if (ImGui::MenuItem(deleteLabel.c_str())) {
+        m_worldPendingDelete = world; // Set state to open the confirmation modal
+        // MenuItem closes the context menu by default, which is now the desired behavior.
+    }
 }
 
 std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld() {
