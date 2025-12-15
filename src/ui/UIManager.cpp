@@ -249,8 +249,14 @@ std::string UIManager::formatTimestamp(int64_t timestamp) const {
     auto tp = std::chrono::system_clock::from_time_t(timestamp);
     std::time_t time = std::chrono::system_clock::to_time_t(tp);
     char buffer[26];
-    // Use ctime_s on Windows, ctime_r on POSIX
+    // Use platform-specific thread-safe time-to-string functions
+#if defined(_WIN32)
+    // Use ctime_s on Windows for thread safety
     ctime_s(buffer, sizeof(buffer), &time);
+#else
+    // Use ctime_r on POSIX-compliant systems (like Linux) for thread safety
+    ctime_r(&time, buffer);
+#endif
     buffer[strlen(buffer) - 1] = '\0'; // Remove trailing newline
     return std::string(buffer);
 }
