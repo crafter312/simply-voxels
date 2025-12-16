@@ -1,7 +1,7 @@
 #ifndef VULKAN_DEBUG_HPP
 #define VULKAN_DEBUG_HPP
 
-#include "render/VulkanCommon.hpp" // Centralized header for Volk and GLFW
+#include "../render/VulkanCommon.hpp" // Centralized header for Volk and GLFW
 
 #include <vector>
 #include <string>

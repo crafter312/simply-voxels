@@ -203,7 +203,7 @@ add_executable(SimpleVulkanWindow
     ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp # For std::string support
     # --- Application Source Files ---
     src/HelloVulkanApp.cpp
-    src/VulkanDebug.cpp                  # Add the new VulkanDebug source file
+    src/util/VulkanDebug.cpp                  # Add the new VulkanDebug source file
     src/render/VulkanRenderer.cpp
     src/render/VulkanSwapChain.cpp
     src/render/VulkanDevice.cpp

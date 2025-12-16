@@ -9,7 +9,7 @@
 #include "Camera.hpp"                // Include the Camera header
 #include "world/World.hpp"                 // Include the World header
 #include "Player.hpp"                // Include the Player header
-#include "VulkanDebug.hpp"           // Include the new VulkanDebug header
+#include "util/VulkanDebug.hpp"           // Include the new VulkanDebug header
 
 #include "ui/UIManager.hpp"          // Include the new UIManager header
 #include "world/WorldMetadata.hpp"   // Include WorldMetadata for the new startGame function
