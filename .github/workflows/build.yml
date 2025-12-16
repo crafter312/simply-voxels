@@ -1,0 +1,68 @@
+# This is a GitHub Actions workflow file that defines a set of jobs to be run
+# automatically on certain repository events.
+#
+# Filepath: .github/workflows/build.yml
+
+name: C++ CI Build
+
+# Controls when the workflow will run.
+# - on 'push' to the 'main' branch
+# - on 'pull_request' events targeting the 'main' branch
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The "strategy" matrix will create a separate job for each combination
+    # of OS and C++ compiler. This is how we test on multiple platforms.
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # You could also matrix compilers, e.g., compiler: [gcc, clang]
+
+    # The type of runner that the job will run on, based on the matrix.os value
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    # 1. Check-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # We need to fetch submodules because some dependencies might use them.
+        # It's good practice even if your direct dependencies don't.
+        submodules: 'recursive'
+
+    # 2. Install the Vulkan SDK
+    # This is the key step for handling Vulkan. This action downloads the SDK
+    # and sets up the VULKAN_SDK environment variable, which your find_package()
+    # command will then use.
+    - name: Setup Vulkan SDK
+      uses: j-jorge/setup-vulkan-sdk@v1.3.0
+      with:
+        # The version of the Vulkan SDK to install.
+        vulkan-version: '1.3.268.0'
+        # The component to install. 'SDK' is what we need for development.
+        vulkan-components: 'SDK'
+        # Where to install the SDK.
+        vulkan-install-path: 'vulkan-sdk'
+
+    # 3. Configure CMake
+    # This step runs the `cmake` command to generate the build files.
+    - name: Configure CMake
+      run: cmake -B build -S .
+
+    # 4. Build the project
+    # This step runs the build command. The `--config Release` flag is important
+    # for ensuring you are building an optimized version of your program.
+    - name: Build with CMake
+      run: cmake --build build --config Release
+
+    # 5. (Optional) Run tests if you have any
+    # If you add CTest tests to your project in the future, you can uncomment this.
+    # - name: Run tests
+    #   working-directory: build
+    #   run: ctest -C Release
