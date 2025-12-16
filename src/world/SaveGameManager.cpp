@@ -228,6 +228,26 @@ void SaveGameManager::updateLastPlayed(const std::string& directoryName) {
     });
 }
 
+void SaveGameManager::renameWorld(const std::string& directoryName, const std::string& newWorldName) {
+    // 1. Find the world in our internal list.
+    auto it = std::find_if(m_worlds.begin(), m_worlds.end(),
+        [&directoryName](const WorldMetadata& meta) {
+            return meta.directoryName == directoryName;
+        });
+
+    if (it == m_worlds.end()) {
+        std::cerr << "[SaveGameManager] Warning: Tried to rename a world not in the list: " << directoryName << std::endl;
+        return;
+    }
+
+    // 2. Update the world name and re-save the metadata file.
+    it->worldName = newWorldName;
+    std::filesystem::path metadataPath = std::filesystem::path(m_savesPath) / it->directoryName / "world.meta";
+    WorldSave::saveMetadata(*it, metadataPath.string());
+
+    std::cout << "[SaveGameManager] Renamed world in directory '" << directoryName << "' to new name '" << newWorldName << "'" << std::endl;
+}
+
 /******** PRIVATE MEMBER FUNCTIONS ********/
 
 std::string SaveGameManager::sanitizeNameForDirectory(const std::string& name) {

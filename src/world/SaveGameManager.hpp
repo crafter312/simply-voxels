@@ -41,6 +41,13 @@ public:
      */
     void updateLastPlayed(const std::string& directoryName);
 
+    /**
+     * @brief Renames a world in its metadata file.
+     * @param directoryName The current unique directory name of the world.
+     * @param newWorldName The new user-facing name for the world.
+     */
+    void renameWorld(const std::string& directoryName, const std::string& newWorldName);
+
 private:
     std::string m_savesPath;
     std::vector<WorldMetadata> m_worlds;

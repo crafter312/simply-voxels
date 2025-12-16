@@ -10,6 +10,7 @@
 8. Survival and creative game modes. For survival, will have to implement an inventory of some kind, display the amount of a block when picked to be used/placed. Also, no flying in survival.
 9. For survival mode, figure out crafting system
 10. For creative mode, figure out how to select blocks that do not actually generate in the world (the user should not have to craft blocks to be able to pick them in creative mode). At the same time, though, I would like to avoid extensive use of a GUI, since this is apparently a design choice I have made.
+11. Rework `SaveGameManager` interactions to accept a `size_t` index of the world in the list, instead of a directory name. This will eliminate a search operation that needs to happen, and simplify the `UIManager` member variables and logic a tiny bit.
 
 **List of bugs to fix**
 

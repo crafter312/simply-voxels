@@ -321,7 +321,7 @@ bool HelloVulkanApp::startup() {
     VK_LOG("State: STARTUP -> MAIN_MENU");
 
     // Create the UI Manager
-    m_uiManager = std::make_unique<UIManager>(*this);
+    m_uiManager = std::make_unique<UIManager>(*this, *inputManager);
 
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor for menu

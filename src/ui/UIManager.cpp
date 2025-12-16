@@ -1,17 +1,19 @@
 #include "UIManager.hpp"
 #include "../HelloVulkanApp.hpp" // Include the full definition for implementation
 #include "../world/Chunk.hpp" // For CHUNK_SIDE_LENGTH
+#include "../ui/InputManager.hpp" // Include InputManager definition
 #include <cmath> // For std::floor
 #include <cstdio> // For snprintf
 #include <chrono>
 #include <ctime>
 #include <iomanip> // For std::fixed and std::setprecision
+#include "imgui_stdlib.h" // For std::string support in ImGui::InputText
 
 // --- UI Configuration Constants ---
 // Defines how many decimal places to show for the player's world position.
 constexpr unsigned int XYZ_DISPLAY_FRACTIONAL_DIGITS = 4;
 
-UIManager::UIManager(HelloVulkanApp& app) : m_app(app) {
+UIManager::UIManager(HelloVulkanApp& app, InputManager& inputMgr) : m_app(app), m_inputManager(inputMgr) {
     m_saveGameManager = std::make_unique<SaveGameManager>("../run/saves/");
     if (!m_saveGameManager) throw std::runtime_error("Failed to create SaveGameManager!");
 }
@@ -74,6 +76,9 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
         ImGui::BeginChild("Header", ImVec2(0, 50), false, ImGuiWindowFlags_NoScrollbar);
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 200) * 0.5f);
         if (ImGui::Button("Create New World", ImVec2(200, 40))) {
+            // Cancel any pending rename if user clicks "Create New World"
+            m_worldPendingRename.reset();
+            m_renameBuffer.clear();
             m_currentMenuScreen = MenuScreenState::CREATE_WORLD;
         }
         ImGui::Separator();
@@ -94,21 +99,50 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
             ImGui::PushID(i); // Use index for a unique ID
 
             // Create a custom button with more complex content
-            ImVec2 buttonSize = ImVec2(-1, 70); // Full width, 80 pixels high
+            ImVec2 buttonSize = ImVec2(-1, 60); // Full width, 60 pixels high
             ImGui::Button("##world_button", buttonSize);
 
             // Normal left-click action to load the world.
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
-                 worldToLoad = world;
+                // Cancel any pending rename if user clicks to load a world
+                m_worldPendingRename.reset();
+                m_renameBuffer.clear();
+                worldToLoad = world;
             }
 
-            // Manually draw the content on top of the button we just created
+            // Get the bounding box of the invisible button. We'll use this for positioning and hit-testing.
             ImVec2 rectMin = ImGui::GetItemRectMin();
             ImVec2 rectMax = ImGui::GetItemRectMax();
-            ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-            // World Name (larger font, left-aligned)
-            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5), ImGui::GetColorU32(ImGuiCol_Text), world.worldName.c_str());
+            // Define padding and layout within the button
+            int topMargin = 4;
+            int leftMargin = 10;
+
+            // --- Conditional Rendering: Text or InputText for World Name ---            
+            if (m_worldPendingRename.has_value() && (m_worldPendingRename->directoryName == world.directoryName)) {
+                ImGui::SetCursorScreenPos(ImVec2(rectMin.x + leftMargin - 4, rectMin.y + topMargin - 3));
+                ImGui::PushItemWidth(std::min(rectMax.x - rectMin.x - 20, 300.f)); // Set a reasonable width for the input text
+
+                // Automatically focus the input text field on the first frame it appears
+                ImGui::SetKeyboardFocusHere();
+
+                // Use ImGui::InputText with the std::string buffer
+                if (ImGui::InputText("##Rename", &m_renameBuffer, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+                    // User pressed Enter: commit the rename
+                    m_saveGameManager->renameWorld(world.directoryName, m_renameBuffer);
+                    m_worldPendingRename.reset(); // Finish renaming
+                    m_renameBuffer.clear();
+                } else if ((!ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) || m_inputManager.isKeyPressed(KeyCode::Escape)) {
+                    m_worldPendingRename.reset();
+                    m_renameBuffer.clear();
+                }
+
+                ImGui::PopItemWidth();
+            } else {
+                // Default behavior: just draw the world name using ImGui::Text at a specific position
+                ImGui::SetCursorScreenPos(ImVec2(rectMin.x + leftMargin, rectMin.y + topMargin));
+                ImGui::TextUnformatted(world.worldName.c_str());
+            }
 
             // World Details (smaller font, right-aligned)
             std::string seed_text = "Seed: " + std::to_string(world.seed);
@@ -116,21 +150,28 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
             std::string created_text = "Created: " + formatTimestamp(world.creationTimestamp);
 
             float text_height = ImGui::GetTextLineHeight();
-            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + text_height + 2), ImGui::GetColorU32(ImGuiCol_Text), seed_text.c_str());
-            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + (text_height + 2) * 2), ImGui::GetColorU32(ImGuiCol_Text), created_text.c_str());
-            draw_list->AddText(ImVec2(rectMin.x + 10, rectMin.y + 5 + (text_height + 2) * 3), ImGui::GetColorU32(ImGuiCol_Text), last_played_text.c_str());
+            ImGui::SetCursorScreenPos(ImVec2(rectMin.x + leftMargin, rectMin.y + topMargin + text_height));
+            ImGui::TextUnformatted(seed_text.c_str());
+            ImGui::SetCursorScreenPos(ImVec2(rectMin.x + leftMargin, rectMin.y + topMargin + text_height * 2));
+            ImGui::TextUnformatted(created_text.c_str());
+            ImGui::SetCursorScreenPos(ImVec2(rectMin.x + leftMargin, rectMin.y + topMargin + text_height * 3));
+            ImGui::TextUnformatted(last_played_text.c_str());
 
             // Create a unique ID for the popup associated with this specific world item.
             std::string popup_id = "world_context_menu_" + std::to_string(i);
 
-            // Manually detect right-click to open our custom context menu.
-            // This gives us more control over the popup's lifetime.
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+            // Manually detect a right-click within the button's bounds.
+            // This is more robust than IsItemClicked() as it doesn't rely on the "last item" state.
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ImGui::IsMouseHoveringRect(rectMin, rectMax)) {
+                // If a rename was in progress, cancel it before opening the context menu.
+                m_worldPendingRename.reset();
+                m_renameBuffer.clear();
                 ImGui::OpenPopup(popup_id.c_str());
             }
 
             // Draw the unique popup if it's open.
             if (ImGui::BeginPopup(popup_id.c_str())) {
+                // Pass the index so the context menu can set the rename state
                 drawWorldContextMenu(world);
                 ImGui::EndPopup();
             }
@@ -146,6 +187,9 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
         ImGui::BeginChild("Footer", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar); // Takes remaining space
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
         if (ImGui::Button("Back", ImVec2(150, 50))) {
+            // Cancel any pending rename if user clicks "Back"
+            m_worldPendingRename.reset();
+            m_renameBuffer.clear();
             m_currentMenuScreen = MenuScreenState::ROOT;
         }
         ImGui::EndChild();
@@ -186,11 +230,19 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
 }
 
 void UIManager::drawWorldContextMenu(const WorldMetadata& world) {
-    // Check if this is the world we are confirming to delete
+    // --- Rename Item ---
+    std::string renameLabel = "Rename";
+    if (ImGui::MenuItem(renameLabel.c_str())) {
+        m_worldPendingRename = world;
+        m_renameBuffer = world.worldName;
+        // The context menu closes automatically, which is what we want.
+    }
+
+    // --- Delete Item ---
     std::string deleteLabel = "Delete '" + world.worldName + "'";
     if (ImGui::MenuItem(deleteLabel.c_str())) {
         m_worldPendingDelete = world; // Set state to open the confirmation modal
-        // MenuItem closes the context menu by default, which is now the desired behavior.
+        // The context menu also closes automatically here.
     }
 }
 

@@ -14,12 +14,13 @@
 
 // Forward declaration to avoid circular dependencies
 class HelloVulkanApp;
+class InputManager;
 // Forward declare GLFWwindow to avoid including the full glfw3.h here
 struct GLFWwindow;
 
 class UIManager {
 public:
-    explicit UIManager(HelloVulkanApp& app);
+    explicit UIManager(HelloVulkanApp& app, InputManager& inputMgr);
 
     // Draws the main menu and returns the metadata of a world if one is selected to be loaded.
     std::optional<WorldMetadata> drawMainMenu();
@@ -42,6 +43,7 @@ private:
     };
 
     HelloVulkanApp& m_app; // Reference to the main app to interact with game state
+    InputManager& m_inputManager; // Reference to input manager for handling UI input
 
     // --- Save Game Manager ---
     std::unique_ptr<SaveGameManager> m_saveGameManager;
@@ -50,6 +52,8 @@ private:
 
     // --- World Select Context Menu State ---
     std::optional<WorldMetadata> m_worldPendingDelete; // Holds metadata for the world awaiting delete confirmation in a modal.
+    std::optional<WorldMetadata> m_worldPendingRename; // Holds metadata for the world being renamed.
+    std::string m_renameBuffer;                        // Holds the temporary text for the world being renamed.
 
     // Private helper functions for drawing different menu screens
     void drawMainMenuRoot();
