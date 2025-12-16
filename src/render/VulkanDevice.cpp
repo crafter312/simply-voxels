@@ -1,5 +1,5 @@
 #include "VulkanDevice.hpp"
-#include "../VulkanDebug.hpp" // For VulkanDebug::enableValidationLayers and validationLayers
+#include "../util/VulkanDebug.hpp" // For VulkanDebug::enableValidationLayers and validationLayers
 #include "VulkanSwapChain.hpp" // For SwapChainSupportDetails and querySupport
 
 #include <stdexcept>
