@@ -41,7 +41,7 @@ jobs:
     # and sets up the VULKAN_SDK environment variable, which your find_package()
     # command will then use.
     - name: Setup Vulkan SDK
-      uses: humbletim/setup-vulkan-sdk@v1.3.0
+      uses: humbletim/setup-vulkan-sdk@v1.2.1
       with:
         # The version of the Vulkan SDK to install.
         vulkan-query-version: 1.4.304.1
