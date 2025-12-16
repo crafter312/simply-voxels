@@ -36,6 +36,15 @@ jobs:
         # It's good practice even if your direct dependencies don't.
         submodules: 'recursive'
 
+    # 2. Install Linux-specific dependencies
+    # This step is conditional and only runs on the ubuntu-latest runner.
+    # It installs libraries required by GLFW for windowing and input.
+    - name: Install Linux dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwayland-dev libxkbcommon-dev libwayland-cursor-dev libwayland-egl-dev xorg-dev
+
     # 2. Install the Vulkan SDK
     # This is the key step for handling Vulkan. This action downloads the SDK
     # and sets up the VULKAN_SDK environment variable, which your find_package()
