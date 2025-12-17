@@ -102,17 +102,22 @@ std::optional<WorldMetadata> UIManager::drawMainMenuWorldSelect() {
             ImVec2 buttonSize = ImVec2(-1, 60); // Full width, 60 pixels high
             ImGui::Button("##world_button", buttonSize);
 
+            // Get the bounding box of the invisible button. We'll use this for positioning and hit-testing.
+            ImVec2 rectMin = ImGui::GetItemRectMin();
+            ImVec2 rectMax = ImGui::GetItemRectMax();
+
             // Normal left-click action to load the world.
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup)) {
+            // This is more robust because it checks for a click within the button's specific rectangle.
+            // We also check if the window is hovered, but allow the hover state even if it's blocked
+            // by an active item (like a popup or text input). This prevents the click from firing
+            // when a modal or context menu is the intended target of the click.
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsMouseHoveringRect(rectMin, rectMax) &&
+                ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
                 // Cancel any pending rename if user clicks to load a world
                 m_worldPendingRename.reset();
                 m_renameBuffer.clear();
                 worldToLoad = world;
             }
-
-            // Get the bounding box of the invisible button. We'll use this for positioning and hit-testing.
-            ImVec2 rectMin = ImGui::GetItemRectMin();
-            ImVec2 rectMax = ImGui::GetItemRectMax();
 
             // Define padding and layout within the button
             int topMargin = 4;
