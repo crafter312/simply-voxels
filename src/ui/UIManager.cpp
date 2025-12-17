@@ -1,5 +1,5 @@
 #include "UIManager.hpp"
-#include "../HelloVulkanApp.hpp" // Include the full definition for implementation
+#include "../SimplyVoxelsApp.hpp" // Include the full definition for implementation
 #include "../world/Chunk.hpp" // For CHUNK_SIDE_LENGTH
 #include "../ui/InputManager.hpp" // Include InputManager definition
 #include <cmath> // For std::floor
@@ -13,7 +13,7 @@
 // Defines how many decimal places to show for the player's world position.
 constexpr unsigned int XYZ_DISPLAY_FRACTIONAL_DIGITS = 4;
 
-UIManager::UIManager(HelloVulkanApp& app, InputManager& inputMgr) : m_app(app), m_inputManager(inputMgr) {
+UIManager::UIManager(SimplyVoxelsApp& app, InputManager& inputMgr) : m_app(app), m_inputManager(inputMgr) {
     m_saveGameManager = std::make_unique<SaveGameManager>("../run/saves/");
     if (!m_saveGameManager) throw std::runtime_error("Failed to create SaveGameManager!");
 }
@@ -57,7 +57,7 @@ void UIManager::drawMainMenuRoot() {
 
     ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 150) * 0.5f);
     if (ImGui::Button("Quit", ImVec2(150, 50))) {
-        // You can call a public method on HelloVulkanApp to quit
+        // You can call a public method on SimplyVoxelsApp to quit
         glfwSetWindowShouldClose(m_app.getWindow(), GLFW_TRUE);
     }
 

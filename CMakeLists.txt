@@ -7,7 +7,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 endif()
 
 # Project name and language
-project(SimpleVulkanWindow LANGUAGES CXX)
+project(SimplyVoxels LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -188,7 +188,7 @@ if(NOT GLSLANG_VALIDATOR_EXECUTABLE)
 endif()
 
 # Add executable
-add_executable(SimpleVulkanWindow
+add_executable(SimplyVoxels
     # Volk implementation file. This must be compiled only once.
     src/render/VulkanCommon.cpp
     # Then list the rest of the source files.
@@ -202,7 +202,7 @@ add_executable(SimpleVulkanWindow
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp # For std::string support
     # --- Application Source Files ---
-    src/HelloVulkanApp.cpp
+    src/SimplyVoxelsApp.cpp
     src/util/VulkanDebug.cpp                  # Add the new VulkanDebug source file
     src/render/VulkanRenderer.cpp
     src/render/VulkanSwapChain.cpp
@@ -231,8 +231,8 @@ add_executable(SimpleVulkanWindow
     src/ui/UIManager.cpp                  # Add the new UIManager source file
 )
 
-# Include directories for the SimpleVulkanWindow target
-target_include_directories(SimpleVulkanWindow PRIVATE
+# Include directories for the SimplyVoxels target
+target_include_directories(SimplyVoxels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src # For local headers like "render/VulkanCommon.hpp"
     ${imgui_SOURCE_DIR}             # For imgui.h
     ${imgui_SOURCE_DIR}/backends    # For imgui_impl_*.h
@@ -241,15 +241,15 @@ target_include_directories(SimpleVulkanWindow PRIVATE
 
 # --- Optional Compile Definitions ---
 # Uncomment the following line to enable verbose Vulkan logging via the VK_LOG macro.
-#target_compile_definitions(SimpleVulkanWindow PRIVATE ENABLE_VK_LOG)
+#target_compile_definitions(SimplyVoxels PRIVATE ENABLE_VK_LOG)
 
 # Add compile definition for ImGui to avoid Vulkan symbol conflicts
-target_compile_definitions(SimpleVulkanWindow PRIVATE
+target_compile_definitions(SimplyVoxels PRIVATE
     IMGUI_IMPL_VULKAN_USE_VOLK) # This is the only definition needed when using Volk
 
 # Add compile definitions for tinygltf configuration to the target
 # TINYGLTF_IMPLEMENTATION must remain defined in only one .cpp file (ModelLoader.cpp)
-target_compile_definitions(SimpleVulkanWindow PRIVATE
+target_compile_definitions(SimplyVoxels PRIVATE
     TINYGLTF_NO_STB_IMAGE
     TINYGLTF_NO_STB_IMAGE_WRITE
     TINYGLTF_NO_EXTERNAL_IMAGE)
@@ -307,10 +307,10 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WI
 # Link all libraries. By linking our modern `lz4_lib` target, CMake handles all
 # include paths, library paths, and build dependencies correctly.
 
-target_link_libraries(SimpleVulkanWindow PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_image tinygltf lz4_lib volk_headers)
+target_link_libraries(SimplyVoxels PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_image tinygltf lz4_lib volk_headers)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    target_link_libraries(SimpleVulkanWindow PRIVATE stdc++fs)
+    target_link_libraries(SimplyVoxels PRIVATE stdc++fs)
 endif()
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")

@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "preLaunchTask": "CMake: build", // Run the default CMake build task before launching
-            "program": "${workspaceFolder}/build/SimpleVulkanWindow", // Path to your executable
+            "program": "${workspaceFolder}/build/SimplyVoxels", // Path to your executable
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
@@ -35,7 +35,7 @@
             "type": "cppdbg",
             "request": "launch",
             "preLaunchTask": "CMake: build", // Run the default CMake build task before launching
-            "program": "${workspaceFolder}/build/SimpleVulkanWindow.exe",
+            "program": "${workspaceFolder}/build/SimplyVoxels.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build", // Current working directory

@@ -13,14 +13,14 @@
 #include "../world/SaveGameManager.hpp" // For to render available worlds in list and create new worlds
 
 // Forward declaration to avoid circular dependencies
-class HelloVulkanApp;
+class SimplyVoxelsApp;
 class InputManager;
 // Forward declare GLFWwindow to avoid including the full glfw3.h here
 struct GLFWwindow;
 
 class UIManager {
 public:
-    explicit UIManager(HelloVulkanApp& app, InputManager& inputMgr);
+    explicit UIManager(SimplyVoxelsApp& app, InputManager& inputMgr);
 
     // Draws the main menu and returns the metadata of a world if one is selected to be loaded.
     std::optional<WorldMetadata> drawMainMenu();
@@ -42,7 +42,7 @@ private:
         // Future states like SETTINGS, OPTIONS, CREDITS, etc. can be added here
     };
 
-    HelloVulkanApp& m_app; // Reference to the main app to interact with game state
+    SimplyVoxelsApp& m_app; // Reference to the main app to interact with game state
     InputManager& m_inputManager; // Reference to input manager for handling UI input
 
     // --- Save Game Manager ---

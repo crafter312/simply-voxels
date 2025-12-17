@@ -1,12 +1,12 @@
 // main.cpp
-#include "HelloVulkanApp.hpp"
+#include "SimplyVoxelsApp.hpp"
 
 #include <iostream>
 #include <stdexcept>
 #include <cstdlib>
 
 int main() {
-    HelloVulkanApp app;
+    SimplyVoxelsApp app;
 
     try {
         app.run();

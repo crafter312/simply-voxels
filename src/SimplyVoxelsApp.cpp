@@ -1,4 +1,4 @@
-#include "HelloVulkanApp.hpp"
+#include "SimplyVoxelsApp.hpp"
 #include "util/DebugLog.hpp"
 #include "render/VulkanRenderer.hpp" // Include the new renderer header
 #include "render/VulkanDevice.hpp"   // Include the new VulkanDevice header
@@ -41,22 +41,22 @@ const std::vector<const char*> REQUIRED_DEVICE_EXTENSIONS = { // Renamed for cla
 
 // --- GLFW Framebuffer Resize Callback ---
 
-void HelloVulkanApp::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-    auto app = reinterpret_cast<HelloVulkanApp*>(glfwGetWindowUserPointer(window));
+void SimplyVoxelsApp::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+    auto app = reinterpret_cast<SimplyVoxelsApp*>(glfwGetWindowUserPointer(window));
     if (app->renderer) { // Ensure renderer exists before signaling
         app->renderer->framebufferResized = true;
     }
 }
 
-// --- HelloVulkanApp Method Implementations ---
+// --- SimplyVoxelsApp Method Implementations ---
 
-HelloVulkanApp::HelloVulkanApp() {}
+SimplyVoxelsApp::SimplyVoxelsApp() {}
 
 // Default destructor in implementation file to satisfy completeness requirement of 
 // unique_ptr template type.
-HelloVulkanApp::~HelloVulkanApp() = default;
+SimplyVoxelsApp::~SimplyVoxelsApp() = default;
 
-void HelloVulkanApp::run() {
+void SimplyVoxelsApp::run() {
     VK_LOG("Starting application...");
     // --- Initialize Volk FIRST ---
     // This must be done before any other Vulkan or GLFW calls.
@@ -70,7 +70,7 @@ void HelloVulkanApp::run() {
     cleanup();
 }
 
-void HelloVulkanApp::initWindow() {
+void SimplyVoxelsApp::initWindow() {
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW!");
     }
@@ -79,7 +79,7 @@ void HelloVulkanApp::initWindow() {
     // Allow the window to be resized (GLFW_TRUE is the default, so we could also remove this line)
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    window = glfwCreateWindow(WIDTH, HEIGHT, "Simple Vulkan Window", nullptr, nullptr);
+    window = glfwCreateWindow(WIDTH, HEIGHT, "Simply Voxels", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         throw std::runtime_error("Failed to create GLFW window!");
@@ -96,7 +96,7 @@ void HelloVulkanApp::initWindow() {
     VK_LOG("InputManager initialized.");
 }
 
-void HelloVulkanApp::initVulkan() {
+void SimplyVoxelsApp::initVulkan() {
     // --- Initialize Vulkan Debugging ---
     // Create VulkanDebug instance first, as it contains static configuration
     // like enableValidationLayers used by createInstance().
@@ -160,12 +160,12 @@ void HelloVulkanApp::initVulkan() {
     // Set initial state after all initialization
     m_currentState = GameState::STARTUP;
 }
-void HelloVulkanApp::resumeGame() {
+void SimplyVoxelsApp::resumeGame() {
     m_currentState = GameState::IN_GAME;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 }
 
-void HelloVulkanApp::quitToMenu() {
+void SimplyVoxelsApp::quitToMenu() {
     m_currentState = GameState::MAIN_MENU;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
@@ -178,7 +178,7 @@ void HelloVulkanApp::quitToMenu() {
     renderer->clearWorldRenderDataAndReset();
 }
 
-void HelloVulkanApp::startGame(const WorldMetadata& worldMeta) {
+void SimplyVoxelsApp::startGame(const WorldMetadata& worldMeta) {
     VK_LOG("Starting game for world: " << worldMeta.worldName);
 
     // 1. Change the game state
@@ -191,7 +191,7 @@ void HelloVulkanApp::startGame(const WorldMetadata& worldMeta) {
     // This assumes World::loadFromMetadata exists and will prepare the world for loading.
     world->loadFromMetadata(worldMeta);
 }
-void HelloVulkanApp::createInstance() {
+void SimplyVoxelsApp::createInstance() {
     if (VulkanDebug::enableValidationLayers && !VulkanDebug::checkValidationLayerSupport()) {
         throw std::runtime_error("Validation layers requested, but not available!");
     }
@@ -235,7 +235,7 @@ void HelloVulkanApp::createInstance() {
     volkLoadInstance(instance);
 }
 
-void HelloVulkanApp::createSurface() {
+void SimplyVoxelsApp::createSurface() {
     if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create window surface!");
     }
@@ -243,7 +243,7 @@ void HelloVulkanApp::createSurface() {
 
 // --- Helper Implementations ---
 
-void HelloVulkanApp::mainLoop() {
+void SimplyVoxelsApp::mainLoop() {
     lastFrame = static_cast<float>(glfwGetTime()); // Initialize lastFrame before loop
 
     // Loop for single time game startup state
@@ -315,7 +315,7 @@ void HelloVulkanApp::mainLoop() {
 }
 
 // Game startup dispatcher
-bool HelloVulkanApp::startup() {
+bool SimplyVoxelsApp::startup() {
     // Currently, we just transition to the main menu immediately.
     // You could add splash screen logic or initial loading here.
     VK_LOG("State: STARTUP -> MAIN_MENU");
@@ -329,7 +329,7 @@ bool HelloVulkanApp::startup() {
 }
 
 // Main update dispatcher
-void HelloVulkanApp::update() {
+void SimplyVoxelsApp::update() {
     switch (m_currentState) {
         case GameState::MAIN_MENU:
             updateMainMenu();
@@ -347,7 +347,7 @@ void HelloVulkanApp::update() {
 }
 
 // Main render dispatcher
-void HelloVulkanApp::render() {
+void SimplyVoxelsApp::render() {
     switch (m_currentState) {
         case GameState::MAIN_MENU:
             renderMainMenu();
@@ -372,13 +372,13 @@ void HelloVulkanApp::render() {
     renderer->drawFrame();
 }
 
-void HelloVulkanApp::updateMainMenu() {
+void SimplyVoxelsApp::updateMainMenu() {
     // The logic for button clicks is now handled inside UIManager::drawMainMenu
     // and the renderMainMenu function. We leave this empty for now, but you
     // could add logic for things like menu animations here.
 }
 
-void HelloVulkanApp::renderMainMenu() {
+void SimplyVoxelsApp::renderMainMenu() {
     if (!m_uiManager) return;
 
     // Draw main menu, return early if no world selected
@@ -389,7 +389,7 @@ void HelloVulkanApp::renderMainMenu() {
     startGame(worldToLoad.value());
 }
 
-void HelloVulkanApp::updateLoading(float dt) {
+void SimplyVoxelsApp::updateLoading(float dt) {
     // This is our two-stage check for loading completion.
     // Stage 1: Wait for the world to finish its initial chunk generation pass.
     // Stage 2: Once generation is done, wait for the meshing pipeline to become fully idle.
@@ -431,13 +431,13 @@ void HelloVulkanApp::updateLoading(float dt) {
     }
 }
 
-void HelloVulkanApp::renderLoading() {
+void SimplyVoxelsApp::renderLoading() {
     if (m_uiManager) {
         m_uiManager->drawLoadingScreen(); // bit of a misnomer, just defines the pause UI
     }
 }
 
-void HelloVulkanApp::updateInGame(float dt) {
+void SimplyVoxelsApp::updateInGame(float dt) {
     
     // Handle pause toggle first, as it might affect input processing for camera/player
     if (inputManager->isKeyPressed(KeyCode::Escape)) {
@@ -453,14 +453,14 @@ void HelloVulkanApp::updateInGame(float dt) {
     world->update(dt);
 }
 
-void HelloVulkanApp::renderInGame() {
+void SimplyVoxelsApp::renderInGame() {
     // Draw the XYZ coordinate overlay if the UI manager and player exist.
     if (!m_uiManager || !player) return;
     
     m_uiManager->drawXYZCoordinateOverlay(player->getAbsoluteChunkPos(), player->getLocalPositionInChunk());
 }
 
-void HelloVulkanApp::updatePaused() {
+void SimplyVoxelsApp::updatePaused() {
     if (inputManager->isKeyPressed(KeyCode::Escape)) {
         VK_LOG("State: PAUSED -> IN_GAME");
         m_currentState = GameState::IN_GAME;
@@ -468,7 +468,7 @@ void HelloVulkanApp::updatePaused() {
     }
 }
 
-void HelloVulkanApp::renderPaused() {
+void SimplyVoxelsApp::renderPaused() {
     if (!m_uiManager) return;
     m_uiManager->drawPauseMenu();
 
@@ -477,7 +477,7 @@ void HelloVulkanApp::renderPaused() {
     m_uiManager->drawXYZCoordinateOverlay(player->getAbsoluteChunkPos(), player->getLocalPositionInChunk());
 }
 
-void HelloVulkanApp::cleanup() {
+void SimplyVoxelsApp::cleanup() {
     VK_LOG("Cleaning up...");
 
     // Renderer holds Vulkan objects that depend on the device, so destroy it first.

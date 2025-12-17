@@ -39,10 +39,10 @@ class VulkanDebug;
 // Forward declare UIManager
 class UIManager;
 
-class HelloVulkanApp {
+class SimplyVoxelsApp {
 public:
-    HelloVulkanApp();
-    ~HelloVulkanApp();
+    SimplyVoxelsApp();
+    ~SimplyVoxelsApp();
     
     // Main function to run the application
     void run();
