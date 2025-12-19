@@ -89,7 +89,7 @@ jobs:
         else
           cmake -B build -S . -DPROJECT_VERSION=$VERSION
         fi
-      shell: bash # Use bash for shell consistency across runners
+      shell: bash # Use bash for shell consistency across runners, except on Windows where we need the default (pwsh)
 
     # 4. Build the project
     # This step runs the build command. The `--config Release` flag is important
