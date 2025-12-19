@@ -75,20 +75,25 @@ jobs:
         # Cache the installed SDK to speed up subsequent runs.
         vulkan-use-cache: true
 
-    # 3. Configure CMake
-    # This step runs `cmake`. We add logic to pass the Git tag as the project version.
-    - name: Configure CMake
-      run: |
-        # GITHUB_REF_NAME holds the tag name (e.g., "v1.1.0").
-        # We strip the leading 'v' to get just the version number.
-        VERSION=${{ github.ref_name }}
-        VERSION=${VERSION#v}
-        # If we are not on a tag, default to the version in CMakeLists.txt
-        if [ -z "$VERSION" ]; then
-          cmake -B build -S .
-        else
-          cmake -B build -S . -DPROJECT_VERSION=$VERSION
-        fi
+    # 3a. Set version for tagged builds
+    # This step runs ONLY on tagged builds. It strips the 'v' from the tag
+    # and exports the result as an environment variable for the next step.
+    - name: Set version for tagged builds
+      if: startsWith(github.ref, 'refs/tags/')
+      run: echo "RELEASE_VERSION=${{ github.ref_name#refs/tags/v }}" >> $GITHUB_ENV
+      shell: bash # Use bash for this simple, safe string manipulation
+
+    # 3b. Configure CMake for a tagged release
+    # This step runs ONLY on tagged builds and uses the version from the step above.
+    - name: Configure CMake (Tag Build)
+      if: startsWith(github.ref, 'refs/tags/')
+      run: cmake -B build -S . -DPROJECT_VERSION=${{ env.RELEASE_VERSION }}
+
+    # 3c. Configure CMake for a normal build
+    # This step runs on all builds that are NOT tagged (e.g., push to main).
+    - name: Configure CMake (Default Build)
+      if: "!startsWith(github.ref, 'refs/tags/')"
+      run: cmake -B build -S .
 
     # 4. Build the project
     # This step runs the build command. The `--config Release` flag is important
