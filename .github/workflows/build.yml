@@ -19,6 +19,8 @@ jobs:
   build:
     # The "strategy" matrix will create a separate job for each combination
     # of OS and C++ compiler. This is how we test on multiple platforms.
+    # We'll give the job a descriptive name that includes the OS.
+    name: Build on ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
