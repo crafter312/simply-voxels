@@ -4,27 +4,32 @@
 # Filepath: .github/workflows/build.yml
 
 name: C++ CI Build
-
-# Controls when the workflow will run.
-# - on 'push' to the 'main' branch
-# - on 'pull_request' events targeting the 'main' branch
 on:
   push:
     branches: [ "main" ]
+    # This makes the workflow run when you push a new tag like "v1.0.0"
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main" ]
+
+# Cancels previous in-progress runs on the same branch to save resources.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # This workflow contains a single job called "build"
   build:
-    # The "strategy" matrix will create a separate job for each combination
-    # of OS and C++ compiler. This is how we test on multiple platforms.
-    # We'll give the job a descriptive name that includes the OS.
+    # We define the job name and matrix here at the top level.
     name: Build on ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        # You could also matrix compilers, e.g., compiler: [gcc, clang]
+        include:
+          - os: ubuntu-latest
+            artifact-name: linux-package
+          - os: windows-latest
+            artifact-name: windows-package
 
     # The type of runner that the job will run on, based on the matrix.os value
     runs-on: ${{ matrix.os }}
@@ -37,6 +42,13 @@ jobs:
         # We need to fetch submodules because some dependencies might use them.
         # It's good practice even if your direct dependencies don't.
         submodules: 'recursive'
+
+    # 1.5. Read project version from file
+    # This reads VERSION.txt and sets the version as an environment variable
+    # for the rest of the job to use.
+    - name: Read project version
+      id: version
+      run: echo "VERSION=$(cat VERSION.txt)" >> $GITHUB_ENV
 
     # 2. Install Linux-specific dependencies
     # This step is conditional and only runs on the ubuntu-latest runner.
@@ -51,12 +63,12 @@ jobs:
     # 2. Install the Vulkan SDK
     # This is the key step for handling Vulkan. This action downloads the SDK
     # and sets up the VULKAN_SDK environment variable, which your find_package()
-    # command will then use.
+    # command will then use. I've updated the version to a more common one.
     - name: Setup Vulkan SDK
       uses: humbletim/setup-vulkan-sdk@v1.2.1
       with:
         # The version of the Vulkan SDK to install.
-        vulkan-query-version: 1.4.304.1
+        vulkan-query-version: 1.3.268.0
         # Components needed: Headers, Loader, SPIRV-Tools (a dependency for Glslang),
         # and finally Glslang itself for the shader compiler (glslangValidator).
         vulkan-components: Vulkan-Headers, Vulkan-Loader, SPIRV-Tools, Glslang
@@ -64,15 +76,47 @@ jobs:
         vulkan-use-cache: true
 
     # 3. Configure CMake
-    # This step runs the `cmake` command to generate the build files.
+    # This step runs `cmake`. We add logic to pass the Git tag as the project version.
     - name: Configure CMake
-      run: cmake -B build -S .
+      run: |
+        # GITHUB_REF_NAME holds the tag name (e.g., "v1.1.0").
+        # We strip the leading 'v' to get just the version number.
+        VERSION=${{ github.ref_name }}
+        VERSION=${VERSION#v}
+        # If we are not on a tag, default to the version in CMakeLists.txt
+        if [ -z "$VERSION" ]; then
+          cmake -B build -S .
+        else
+          cmake -B build -S . -DPROJECT_VERSION=$VERSION
+        fi
+      shell: bash # Use bash for shell consistency across runners
 
     # 4. Build the project
     # This step runs the build command. The `--config Release` flag is important
     # for ensuring you are building an optimized version of your program.
     - name: Build with CMake
       run: cmake --build build --config Release
+
+    # 5. Package the application using CPack
+    # This step only runs if the workflow was triggered by a tag.
+    - name: Package with CPack
+      if: startsWith(github.ref, 'refs/tags/')
+      working-directory: build
+      run: cpack -C Release -B ${{ github.workspace }}/build/packages
+
+    # 6. Upload the package as an artifact
+    # This allows other jobs in the workflow to download and use the package.
+    - name: Upload Build Artifact
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact-name }}
+        # We construct the full path to the package file here, using the version
+        # from the VERSION.txt file we read in a previous step.
+        path: |
+          ${{ github.workspace }}/build/packages/SimplyVoxels-${{ env.VERSION }}-Linux-x86_64.deb
+          ${{ github.workspace }}/build/packages/SimplyVoxels-${{ env.VERSION }}-Windows-x64.zip
+        retention-days: 5 # Keep artifacts for a few days
 
     # 5. (Optional) Run tests if you have any
     # If you add CTest tests to your project in the future, you can uncomment this.
