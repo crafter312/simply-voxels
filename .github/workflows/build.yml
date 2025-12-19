@@ -80,7 +80,9 @@ jobs:
     # and exports the result as an environment variable for the next step.
     - name: Set version for tagged builds
       if: startsWith(github.ref, 'refs/tags/')
-      run: echo "RELEASE_VERSION=${{ github.ref_name#refs/tags/v }}" >> $GITHUB_ENV
+      # We pass the full tag name to the shell, and then use bash's native
+      # parameter expansion to strip the leading 'v'.
+      run: echo "RELEASE_VERSION=${{ github.ref_name }}
       shell: bash # Use bash for this simple, safe string manipulation
 
     # 3b. Configure CMake for a tagged release
