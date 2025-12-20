@@ -6,8 +6,17 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
     message(FATAL_ERROR "In-source builds are not allowed. Please create a separate build directory (e.g., 'build') and run cmake from there.")
 endif()
 
+# Read version from VERSION.txt for local builds. This will be overridden by the
+# GitHub Actions workflow for tagged release builds.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.txt" PROJECT_VERSION_FROM_FILE)
+string(STRIP "${PROJECT_VERSION_FROM_FILE}" PROJECT_VERSION_FROM_FILE) # Remove potential trailing newline
+
 # Project name and language
-project(SimplyVoxels LANGUAGES CXX)
+project(SimplyVoxels
+    VERSION ${PROJECT_VERSION_FROM_FILE}
+    DESCRIPTION "A minimalistic voxel game"
+    LANGUAGES CXX
+)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -315,3 +324,46 @@ endif()
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
+
+# --- Installation and Packaging ---
+
+# 1. Install the main executable
+# This command tells CMake to install the SimplyVoxels executable into a 'bin'
+# directory inside our final package.
+install(TARGETS SimplyVoxels
+    RUNTIME DESTINATION bin # For .exe on Windows, executable on Linux
+)
+
+# 2. Install the compiled shaders
+# We need to package the .spv files so the application can find them at runtime.
+# They will be placed in a 'shaders' directory next to the 'bin' directory.
+install(FILES
+    ${VERT_SHADER_SPV}
+    ${FRAG_SHADER_SPV}
+    ${WIREFRAME_VERT_SHADER_SPV}
+    ${WIREFRAME_FRAG_SHADER_SPV}
+    DESTINATION shaders
+)
+
+# 3. Include and configure CPack
+# This section sets up the metadata for our packages and selects the generator.
+
+# Set basic package information from the project() command
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VENDOR "crafter312") # Your name/handle
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/crafter312/simply-voxels") # TODO: Update with your URL
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+
+# Windows-specific CPack configuration (ZIP archive)
+if(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${CPACK_PACKAGE_VERSION}-Windows-x64")
+# Linux-specific CPack configuration (we'll use this as a base for AppImage later)
+else()
+    set(CPACK_GENERATOR "DEB") # Can also be "RPM"
+    set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${CPACK_PACKAGE_VERSION}-Linux-x86_64")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_VENDOR}")
+endif()
+
+include(CPack)
