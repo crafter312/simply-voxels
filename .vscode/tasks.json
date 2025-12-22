@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run CPack",
+            "type": "shell",
+            "command": "cpack",
+            "args": ["-C", "Release"],
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Package",
+            "dependsOn": ["CMake: build", "Run CPack"],
+            "dependsOrder": "sequence",
+            "group": "build"
+        }
+    ]
+}

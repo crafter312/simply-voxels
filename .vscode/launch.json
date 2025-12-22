@@ -8,7 +8,7 @@
             "name": "(gdb Linux) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "preLaunchTask": "CMake: build", // Run the default CMake build task before launching
+            "preLaunchTask": "Build and Package",
             "program": "${workspaceFolder}/build/SimplyVoxels", // Path to your executable
             "args": [],
             "stopAtEntry": false,
@@ -34,7 +34,7 @@
             "name": "(gdb Windows) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "preLaunchTask": "CMake: build", // Run the default CMake build task before launching
+            "preLaunchTask": "Build and Package",
             "program": "${workspaceFolder}/build/SimplyVoxels.exe",
             "args": [],
             "stopAtEntry": false,

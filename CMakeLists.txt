@@ -320,6 +320,11 @@ target_link_libraries(SimplyVoxels PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_im
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_link_libraries(SimplyVoxels PRIVATE stdc++fs)
+    # On Windows with MinGW, link the C++ runtime statically.
+    # This ensures the end user doesn't need libstdc++-6.dll, libgcc_s_seh-1.dll, etc.
+    if(WIN32)
+        target_link_libraries(SimplyVoxels PRIVATE "-static")
+    endif()
 endif()
 
 message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
@@ -327,23 +332,47 @@ message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
 
 # --- Installation and Packaging ---
 
+# Determine where to install the executable.
+# We use "bin" for all platforms. This creates a directory structure (bin/exe)
+# that allows the application to find resources using "../resources", matching
+# the development environment structure (build/../resources).
+set(INSTALL_BIN_DIR "bin")
+
 # 1. Install the main executable
-# This command tells CMake to install the SimplyVoxels executable into a 'bin'
-# directory inside our final package.
 install(TARGETS SimplyVoxels
-    RUNTIME DESTINATION bin # For .exe on Windows, executable on Linux
+    RUNTIME DESTINATION ${INSTALL_BIN_DIR}
 )
 
 # 2. Install the compiled shaders
 # We need to package the .spv files so the application can find them at runtime.
-# They will be placed in a 'shaders' directory next to the 'bin' directory.
+# They are placed inside the bin directory so the executable can find them
+# using the relative path "shaders/".
 install(FILES
     ${VERT_SHADER_SPV}
     ${FRAG_SHADER_SPV}
     ${WIREFRAME_VERT_SHADER_SPV}
     ${WIREFRAME_FRAG_SHADER_SPV}
-    DESTINATION shaders
+    DESTINATION ${INSTALL_BIN_DIR}/shaders
 )
+
+# 3. Install resources
+# The `install(DIRECTORY)` command has a known, frustrating bug on Windows when
+# the source path is in a synced folder like OneDrive, leading to the
+# "cannot find... File exists" error you're seeing.
+#
+# To work around this, we use a more robust two-step process:
+# 1. First, copy the resource directory to the build directory using a custom command.
+#    This happens before the main executable is built. We use `copy_directory_if_different`
+#    for efficiency.
+add_custom_command(
+    TARGET SimplyVoxels PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources" # Source
+        "${CMAKE_CURRENT_BINARY_DIR}/resources"  # Destination in build dir
+)
+# 2. Then, install the directory from the build tree. This path is simple and local,
+#    avoiding the bug. The trailing slash copies the contents into the destination.
+install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources/" DESTINATION "resources")
 
 # 3. Include and configure CPack
 # This section sets up the metadata for our packages and selects the generator.
