@@ -1,4 +1,11 @@
-# Build instructions (using VS Code)
+# Install instructions (Windows)
+
+1. Locate the desired release number on the GitHub repository page (pick the latest one unless you have good reason not to).
+2. Download the x64 ZIP file for Windows, and extract its contents.
+3. Take the directory contained within the ZIP file and move it wherever you please.
+4. Inside this directory, there should be a `bin\` subdirectory containing the `SimplyVoxels.exe` executable. Run this executable to start the program. It will open up a terminal window, in addition to the main program window.
+
+# Build from source instructions (using VS Code)
 
 1. First, try F5 to build and run
 2. If the build returns with non-code errors (i.e. CMake or dependency related or the like), try Ctrl + Shift + P and run the CMake: Clean Rebuild task before using F5 to run the program
