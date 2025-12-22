@@ -136,7 +136,7 @@ jobs:
         tag_name: v${{ env.VERSION }}
         files: ${{ github.workspace }}/build/packages/*
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
 
     # 5. (Optional) Run tests if you have any
     # If you add CTest tests to your project in the future, you can uncomment this.
