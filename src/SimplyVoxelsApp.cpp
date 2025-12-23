@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <cstring> // Required for strcmp
 #include <chrono>
+#include <wasm.h>
 
 
 // --- Constants and Configuration ---
@@ -101,6 +102,16 @@ void SimplyVoxelsApp::initVulkan() {
     // Create VulkanDebug instance first, as it contains static configuration
     // like enableValidationLayers used by createInstance().
     vulkanDebug = std::make_unique<VulkanDebug>();
+
+    // --- Wasmtime Integration Test ---
+    VK_LOG("Testing Wasmtime integration...");
+    wasm_engine_t* engine = wasm_engine_new();
+    if (engine != nullptr) {
+        VK_LOG("SUCCESS: Wasmtime engine created.");
+        wasm_engine_delete(engine);
+    } else {
+        throw std::runtime_error("FAILURE: Could not create Wasmtime engine!");
+    }
 
     createInstance();
     VK_LOG("Vulkan Instance created.");

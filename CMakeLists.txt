@@ -190,6 +190,46 @@ endif()
 add_library(tinygltf INTERFACE)
 target_include_directories(tinygltf INTERFACE ${TINYGLTF_DIR})
 
+# --- Manage Wasmtime ---
+# Download pre-built Wasmtime binaries and headers.
+# We place them in third_party/wasmtime to match other dependencies.
+set(WASMTIME_VERSION "v26.0.0")
+set(WASMTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/wasmtime")
+file(MAKE_DIRECTORY "${WASMTIME_DIR}")
+
+if(WIN32)
+    set(WASMTIME_ASSET "wasmtime-${WASMTIME_VERSION}-x86_64-windows-c-api")
+    set(WASMTIME_ARCHIVE "${WASMTIME_ASSET}.zip")
+elseif(UNIX AND NOT APPLE)
+    set(WASMTIME_ASSET "wasmtime-${WASMTIME_VERSION}-x86_64-linux-c-api")
+    set(WASMTIME_ARCHIVE "${WASMTIME_ASSET}.tar.xz")
+else()
+    message(FATAL_ERROR "Wasmtime integration: Unsupported platform.")
+endif()
+
+set(WASMTIME_ARCHIVE_PATH "${WASMTIME_DIR}/${WASMTIME_ARCHIVE}")
+set(WASMTIME_ROOT "${WASMTIME_DIR}/${WASMTIME_ASSET}")
+
+if(NOT EXISTS "${WASMTIME_ROOT}/include/wasm.h")
+    message(STATUS "Downloading Wasmtime ${WASMTIME_VERSION}...")
+    file(DOWNLOAD "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/${WASMTIME_ARCHIVE}" "${WASMTIME_ARCHIVE_PATH}" SHOW_PROGRESS)
+    message(STATUS "Extracting Wasmtime...")
+    # Ensure the destination directory is clean before extracting to avoid file lock/overwrite errors
+    file(REMOVE_RECURSE "${WASMTIME_ROOT}")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf "${WASMTIME_ARCHIVE_PATH}" WORKING_DIRECTORY "${WASMTIME_DIR}")
+endif()
+
+add_library(wasmtime SHARED IMPORTED)
+target_include_directories(wasmtime INTERFACE "${WASMTIME_ROOT}/include")
+
+if(WIN32)
+    set_target_properties(wasmtime PROPERTIES IMPORTED_IMPLIB "${WASMTIME_ROOT}/lib/wasmtime.dll.lib" IMPORTED_LOCATION "${WASMTIME_ROOT}/lib/wasmtime.dll")
+    set(WASMTIME_RUNTIME_LIB "${WASMTIME_ROOT}/lib/wasmtime.dll")
+else()
+    set_target_properties(wasmtime PROPERTIES IMPORTED_LOCATION "${WASMTIME_ROOT}/lib/libwasmtime.so")
+    set(WASMTIME_RUNTIME_LIB "${WASMTIME_ROOT}/lib/libwasmtime.so")
+endif()
+
 # Find glslc (SPIR-V compiler) - Keep this as is
 find_program(GLSLANG_VALIDATOR_EXECUTABLE glslangValidator HINTS ENV VULKAN_SDK PATHS ENV PATH)
 if(NOT GLSLANG_VALIDATOR_EXECUTABLE)
@@ -308,6 +348,13 @@ add_custom_command(
 # Custom target to group shader compilation
 add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WIREFRAME_VERT_SHADER_SPV} ${WIREFRAME_FRAG_SHADER_SPV})
 
+# Copy Wasmtime runtime library to the executable directory
+add_custom_command(TARGET SimplyVoxels POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${WASMTIME_RUNTIME_LIB}"
+    "$<TARGET_FILE_DIR:SimplyVoxels>"
+    COMMENT "Copying Wasmtime runtime library")
+
 # Link libraries
 # Link Vulkan, GLFW, and the fetched GLM target.
 # The target name provided by FetchContent for GLM is typically 'glm'.
@@ -316,7 +363,7 @@ add_custom_target(Shaders ALL DEPENDS ${VERT_SHADER_SPV} ${FRAG_SHADER_SPV} ${WI
 # Link all libraries. By linking our modern `lz4_lib` target, CMake handles all
 # include paths, library paths, and build dependencies correctly.
 
-target_link_libraries(SimplyVoxels PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_image tinygltf lz4_lib volk_headers)
+target_link_libraries(SimplyVoxels PUBLIC Vulkan::Vulkan PRIVATE glfw glm stb_image tinygltf lz4_lib volk_headers wasmtime)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_link_libraries(SimplyVoxels PRIVATE stdc++fs)
@@ -355,7 +402,12 @@ install(FILES
     DESTINATION ${INSTALL_BIN_DIR}/shaders
 )
 
-# 3. Install resources
+# 3. Install Wasmtime runtime library
+install(FILES "${WASMTIME_RUNTIME_LIB}"
+    DESTINATION ${INSTALL_BIN_DIR}
+)
+
+# 4. Install resources
 # The `install(DIRECTORY)` command has a known, frustrating bug on Windows when
 # the source path is in a synced folder like OneDrive, leading to the
 # "cannot find... File exists" error you're seeing.
