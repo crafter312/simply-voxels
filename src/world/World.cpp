@@ -17,10 +17,17 @@
 #include "../block/Blocks.hpp" // Include the centralized block definitions
 #include "../resource/RegionManager.hpp" // Include RegionManager definition
 
+#include "Chunk.hpp" // Include the Chunk definition
+#include "terrain/ITerrainGenerator.hpp" // Include ITerrainGenerator definition
+#include "terrain/SimplePerlinGenerator.hpp"
+
 World::World(std::shared_ptr<Camera> camera)
     : m_camera(camera), m_stopCompactionThread(false), m_initialChunkGenerationComplete(false) {
     // Create the RegionManager, but it remains in a "limbo" state until a world is loaded.
     m_regionManager = std::make_unique<WorldSave::RegionManager>();
+
+    // Set a default terrain generator. This can be overridden by setTerrainGenerator.
+    m_terrainGenerator = std::make_unique<SimplePerlinGenerator>();
 
     // Start the compaction thread
     m_compactionThread = std::thread(&World::compactionThreadLoop, this);
@@ -471,7 +478,11 @@ void World::processLoadQueue() {
         // Attempt to load from file first
         loadedFromFile = m_regionManager->loadChunkFromFile(*newChunk_sptr);
         int64_t seed = m_meta.has_value() ? m_meta->seed : 0;
-        if (!loadedFromFile) newChunk_sptr->generate(seed); // if not loaded from file, generate it procedurally
+        if (!loadedFromFile) {
+            // If not loaded from file, generate it procedurally using the current terrain generator.
+            // The terrain generator is guaranteed to be set in the World constructor.
+            m_terrainGenerator->generateChunk(*newChunk_sptr, seed);
+        }
 
         // Mark its 6 direct neighbors as dirty so they can update their meshes
         // relative to this newly generated and loaded chunk.
@@ -711,6 +722,10 @@ std::vector<PotentialCollisionBlock> World::getPotentialCollisionBlocks(
         }
     }
     return potentialBlocks;
+}
+
+void World::setTerrainGenerator(std::unique_ptr<ITerrainGenerator> generator) {
+    m_terrainGenerator = std::move(generator);
 }
 
 std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {

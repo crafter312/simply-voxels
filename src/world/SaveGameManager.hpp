@@ -5,7 +5,7 @@
 #include <memory>
 #include <optional>
 
-#include "WorldMetadata.hpp"
+struct WorldMetadata;
 
 /**
  * @brief Manages the discovery, creation, and deletion of world save files.

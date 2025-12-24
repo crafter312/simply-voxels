@@ -252,7 +252,7 @@ add_executable(SimplyVoxels
     ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp # For std::string support
     # --- Application Source Files ---
     src/SimplyVoxelsApp.cpp
-    src/util/VulkanDebug.cpp                  # Add the new VulkanDebug source file
+    src/util/VulkanDebug.cpp             # Add the new VulkanDebug source file
     src/render/VulkanRenderer.cpp
     src/render/VulkanSwapChain.cpp
     src/render/VulkanDevice.cpp
@@ -266,18 +266,20 @@ add_executable(SimplyVoxels
     src/ui/InputManager.cpp 
     src/Player.cpp                       # Add the new Player source file
     src/Camera.cpp                       # Add the new Camera source file
-    src/block/Block.cpp                        # Source file for the Block class
-    src/block/Blocks.cpp                       # Source file for the Blocks namespace (e.g., registration)
-    src/block/BlockRegistry.cpp                # Add BlockRegistry class
+    src/block/Block.cpp                  # Source file for the Block class
+    src/block/Blocks.cpp                 # Source file for the Blocks namespace (e.g., registration)
+    src/block/BlockRegistry.cpp          # Add BlockRegistry class
     src/world/World.cpp                  # Add World class
     src/world/Chunk.cpp                  # Add Chunk class
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
-    src/resource/RegionManager.cpp          # Add RegionManager class
+    src/world/terrain/SimplePerlinGenerator.cpp  # Add SimplePerlinGenerator class
+    src/world/terrain/WasmTerrainGenerator.cpp   # Add WasmTerrainGenerator class
+    src/resource/RegionManager.cpp       # Add RegionManager class
     src/world/SaveGameManager.cpp        # Add SaveGameManager class
     src/util/Raycaster.cpp               # Add the new Raycaster source file
     src/physics/VoxelShape.cpp           # Add the new VoxelShape source file
     src/physics/WireframeMesher.cpp
-    src/ui/UIManager.cpp                  # Add the new UIManager source file
+    src/ui/UIManager.cpp                 # Add the new UIManager source file
 )
 
 # Include directories for the SimplyVoxels target

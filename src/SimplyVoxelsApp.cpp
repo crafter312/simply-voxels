@@ -12,7 +12,7 @@
 #include "util/VulkanDebug.hpp"           // Include the new VulkanDebug header
 
 #include "ui/UIManager.hpp"          // Include the new UIManager header
-#include "world/WorldMetadata.hpp"   // Include WorldMetadata for the new startGame function
+#include "resource/json/WorldMetadata.hpp"   // Include WorldMetadata for the new startGame function
 #include <iostream>
 #include <vector>
 #include <stdexcept>

@@ -13,13 +13,18 @@
 #include <chrono> // For std::chrono
 #include <shared_mutex> // For std::shared_mutex
 #include <condition_variable> // For std::condition_variable
-#include "Chunk.hpp" // Include the Chunk definition
 
 // Forward declaration for Camera
 class Camera;
 
+// Forward declaration for Chunk
+class Chunk;
+
+// Forward declaration for ITerrainGenerator
+class ITerrainGenerator;
+
 // Include the full definition of WorldMetadata, as it's used by std::optional
-#include "WorldMetadata.hpp"
+#include "../resource/json/WorldMetadata.hpp"
 namespace WorldSave { // Forward declare RegionManager in its namespace
 class RegionManager;
 }
@@ -128,6 +133,8 @@ public:
     // Checks if the initial wave of chunk generation is complete.
     bool isInitialChunkGenerationComplete() const;
 
+    void setTerrainGenerator(std::unique_ptr<ITerrainGenerator> generator);
+
 private:
     std::map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Comparator> m_chunks;
     std::shared_ptr<Camera> m_camera; // Store a pointer to the camera    
@@ -146,6 +153,8 @@ private:
 
     std::unique_ptr<WorldSave::RegionManager> m_regionManager; // Instance of RegionManager, using unique_ptr
     std::atomic<bool> m_initialChunkGenerationComplete; // Flag for initial world load
+
+    std::unique_ptr<ITerrainGenerator> m_terrainGenerator; // Terrain generator for this world
 
     // Background compaction thread
     std::thread m_compactionThread;

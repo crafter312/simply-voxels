@@ -23,13 +23,6 @@ typedef VkDeviceMemory_T* VkDeviceMemory;
 constexpr int CHUNK_SIDE_LENGTH = 16;
 constexpr int CHUNK_VOLUME = CHUNK_SIDE_LENGTH * CHUNK_SIDE_LENGTH * CHUNK_SIDE_LENGTH; // 4096
 
-constexpr int SEED_COORD_SCALE = 10000; // Scale factor for chunk seed offset calculation
-
-// Terrain generation parameters
-constexpr double TERRAIN_FREQUENCY = 0.01; // Controls the "zoom" of the noise. Smaller = larger features.
-constexpr double TERRAIN_AMPLITUDE = 20.0; // Controls the height variation of the terrain.
-constexpr int DIRT_LAYER_THICKNESS = 3;   // Number of dirt blocks on top of stone.
-
 class Chunk {
 public:
     Chunk(glm::ivec3 chunkCoord); // Parameter now represents chunk coordinates
@@ -53,7 +46,6 @@ public:
     bool isAllAir() const;
     // Methods for thread-safe data access for meshing
     glm::ivec3 getChunkCoord() const { return m_chunkCoord; }
-    void generate(int64_t worldSeed); // method for procedural generation
     bool isGenerated() const { 
         bool genStatus = m_isGenerated.load(std::memory_order_acquire); 
         // std::cout << "Chunk [" << m_chunkCoord.x << "," << m_chunkCoord.y << "," << m_chunkCoord.z << "] isGenerated() called, returning: " << genStatus << std::endl; // Can be very verbose

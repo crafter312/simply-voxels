@@ -9,7 +9,7 @@
 #include <glm/vec3.hpp>
 #include "imgui.h"
 
-#include "../world/WorldMetadata.hpp"
+#include "../resource/json/WorldMetadata.hpp"
 #include "../world/SaveGameManager.hpp" // For to render available worlds in list and create new worlds
 
 // Forward declaration to avoid circular dependencies

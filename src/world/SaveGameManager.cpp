@@ -1,86 +1,14 @@
 #include "SaveGameManager.hpp"
-#include "WorldMetadata.hpp"
+#include "../resource/json/WorldMetadata.hpp"
 
 #include <filesystem> // For directory operations
-#include <fstream>
-#include <iostream>
 #include <optional>
 #include <chrono>     // For timestamps
 #include <random>     // For random seed generation
 #include <regex>      // For sanitizing world name
 #include <algorithm>  // For std::sort
 #include <string>
-
-// This header is already available via your CMakeLists.txt (as a dependency of tinygltf)
-// It provides a modern and easy-to-use JSON library.
-#include "json.hpp"
-
-// For convenience
-using json = nlohmann::json;
-
-/**
- * @brief Provides serialization from WorldMetadata to JSON.
- * nlohmann::json will automatically use this function when you convert a WorldMetadata object to json.
- */
-void to_json(json& j, const WorldMetadata& meta) {
-    j = json{
-        {"worldName", meta.worldName},
-        {"directoryName", meta.directoryName},
-        {"seed", meta.seed},
-        {"lastPlayedTimestamp", meta.lastPlayedTimestamp},
-        {"creationTimestamp", meta.creationTimestamp}
-    };
-}
-
-/**
- * @brief Provides deserialization from JSON to WorldMetadata.
- * nlohmann::json will automatically use this function when you extract a WorldMetadata object from json.
- */
-void from_json(const json& j, WorldMetadata& meta) {
-    j.at("worldName").get_to(meta.worldName);
-    j.at("directoryName").get_to(meta.directoryName);
-    j.at("seed").get_to(meta.seed);
-    j.at("lastPlayedTimestamp").get_to(meta.lastPlayedTimestamp);
-    j.at("creationTimestamp").get_to(meta.creationTimestamp);
-}
-
-namespace WorldSave {
-
-    // These functions can be part of a utility namespace or static members of SaveGameManager.
-    // For now, a dedicated namespace is clean.
-
-    bool saveMetadata(const WorldMetadata& metadata, const std::string& path) {
-        try {
-            json j = metadata; // This automatically calls our to_json function
-            std::ofstream file(path);
-            if (!file.is_open()) {
-                std::cerr << "Error: Could not open file for writing: " << path << std::endl;
-                return false;
-            }
-            file << j.dump(4); // pretty-print with 4-space indent
-            return true;
-        } catch (const std::exception& e) {
-            std::cerr << "Error saving metadata to " << path << ": " << e.what() << std::endl;
-            return false;
-        }
-    }
-
-    std::optional<WorldMetadata> loadMetadata(const std::string& path) {
-        try {
-            std::ifstream file(path);
-            if (!file.is_open()) {
-                return std::nullopt; // File not found is not an error, just means no metadata.
-            }
-            json j;
-            file >> j;
-            return j.get<WorldMetadata>(); // This automatically calls our from_json function
-        } catch (const std::exception& e) {
-            std::cerr << "Error loading metadata from " << path << ": " << e.what() << std::endl;
-            return std::nullopt;
-        }
-    }
-
-} // namespace WorldSave
+#include <iostream>
 
 /******** PUBLIC MEMBER FUNCTIONS ********/
 
