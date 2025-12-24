@@ -13,6 +13,8 @@
 
 #include "ui/UIManager.hpp"          // Include the new UIManager header
 #include "resource/json/WorldMetadata.hpp"   // Include WorldMetadata for the new startGame function
+#include "world/terrain/TerrainGeneratorManager.hpp"
+#include "world/terrain/ITerrainGenerator.hpp"
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -113,6 +115,11 @@ void SimplyVoxelsApp::initVulkan() {
         throw std::runtime_error("FAILURE: Could not create Wasmtime engine!");
     }
 
+    // --- Initialize Terrain Generator Manager ---
+    m_terrainGeneratorManager = std::make_unique<TerrainGeneratorManager>();
+    m_terrainGeneratorManager->initialize();
+    VK_LOG("TerrainGeneratorManager initialized.");
+
     createInstance();
     VK_LOG("Vulkan Instance created.");
     // Setup debug messenger after instance creation
@@ -191,6 +198,20 @@ void SimplyVoxelsApp::quitToMenu() {
 
 void SimplyVoxelsApp::startGame(const WorldMetadata& worldMeta) {
     VK_LOG("Starting game for world: " << worldMeta.worldName);
+
+    // 0. Configure Terrain Generator
+    // We must do this before loading the world, as chunk generation might happen during load.
+    std::string genId = worldMeta.generatorId;
+    if (genId.empty()) {
+        genId = "default"; // Fallback for legacy saves or empty IDs
+    }
+
+    if (!m_terrainGeneratorManager || !m_terrainGeneratorManager->hasGenerator(genId)) {
+        std::cerr << "CRITICAL ERROR: World requires missing terrain generator: '" << genId << "'" << std::endl;
+        return; // Abort load, remain in Main Menu
+    }
+
+    world->setTerrainGenerator(m_terrainGeneratorManager->createGenerator(genId));
 
     // 1. Change the game state
     m_currentState = GameState::LOADING;
@@ -509,6 +530,9 @@ void SimplyVoxelsApp::cleanup() {
 
     // World is managed by unique_ptr, will be cleaned up automatically
     world.reset();
+
+    // TerrainGeneratorManager must be destroyed after World, as World's generator might depend on it (e.g. Wasm Engine)
+    m_terrainGeneratorManager.reset();
 
     // VulkanDevice's destructor will handle destroying the logical device.
     vulkanDevice.reset();

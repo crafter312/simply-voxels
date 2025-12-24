@@ -272,8 +272,9 @@ add_executable(SimplyVoxels
     src/world/World.cpp                  # Add World class
     src/world/Chunk.cpp                  # Add Chunk class
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
-    src/world/terrain/SimplePerlinGenerator.cpp  # Add SimplePerlinGenerator class
-    src/world/terrain/WasmTerrainGenerator.cpp   # Add WasmTerrainGenerator class
+    src/world/terrain/TerrainGeneratorManager.cpp # Add TerrainGeneratorManager class
+    src/world/terrain/SimplePerlinGenerator.cpp   # Add SimplePerlinGenerator class
+    src/world/terrain/WasmTerrainGenerator.cpp    # Add WasmTerrainGenerator class
     src/resource/RegionManager.cpp       # Add RegionManager class
     src/world/SaveGameManager.cpp        # Add SaveGameManager class
     src/util/Raycaster.cpp               # Add the new Raycaster source file

@@ -37,6 +37,10 @@ const std::vector<TerrainGeneratorEntry>& TerrainGeneratorManager::getAvailableG
     return m_availableGenerators;
 }
 
+bool TerrainGeneratorManager::hasGenerator(const std::string& id) const {
+    return m_idToIndexMap.find(id) != m_idToIndexMap.end();
+}
+
 std::unique_ptr<ITerrainGenerator> TerrainGeneratorManager::createGenerator(const std::string& id) {
     auto it = m_idToIndexMap.find(id);
     if (it == m_idToIndexMap.end()) {

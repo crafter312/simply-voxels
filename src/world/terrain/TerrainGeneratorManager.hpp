@@ -29,6 +29,9 @@ public:
     // Get list of all registered generators
     const std::vector<TerrainGeneratorEntry>& getAvailableGenerators() const;
 
+    // Check if a generator with the given ID exists
+    bool hasGenerator(const std::string& id) const;
+
     // Factory method to create a generator instance
     std::unique_ptr<ITerrainGenerator> createGenerator(const std::string& id);
 

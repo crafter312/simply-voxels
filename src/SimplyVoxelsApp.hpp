@@ -39,6 +39,9 @@ class VulkanDebug;
 // Forward declare UIManager
 class UIManager;
 
+// Forward declare TerrainGeneratorManager
+class TerrainGeneratorManager;
+
 class SimplyVoxelsApp {
 public:
     SimplyVoxelsApp();
@@ -83,6 +86,9 @@ private:
 
     // --- Block Definitions ---
     std::unique_ptr<BlockRegistry> blockRegistry;
+
+    // --- Terrain Generator Manager ---
+    std::unique_ptr<TerrainGeneratorManager> m_terrainGeneratorManager;
 
     // --- World Data ---
     std::unique_ptr<World> world;

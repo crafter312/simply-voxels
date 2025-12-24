@@ -10,6 +10,7 @@
 8. For survival mode, figure out crafting system
 9. For creative mode, figure out how to select blocks that do not actually generate in the world (the user should not have to craft blocks to be able to pick them in creative mode). At the same time, though, I would like to avoid extensive use of a GUI, since this is apparently a design choice I have made.
 10. Rework `SaveGameManager` interactions to accept a `size_t` index of the world in the list, instead of a directory name. This will eliminate a search operation that needs to happen, and simplify the `UIManager` member variables and logic a tiny bit.
+11. Add GUI warning screen for when the generator ID in a world is empty, giving the user a chance to abort if desired.
 
 **List of bugs to fix**
 
