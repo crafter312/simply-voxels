@@ -414,7 +414,7 @@ void SimplyVoxelsApp::renderMainMenu() {
     if (!m_uiManager) return;
 
     // Draw main menu, return early if no world selected
-    std::optional<WorldMetadata> worldToLoad = m_uiManager->drawMainMenu();
+    std::optional<WorldMetadata> worldToLoad = m_uiManager->drawMainMenu(m_terrainGeneratorManager ? m_terrainGeneratorManager->getAvailableGenerators() : std::vector<TerrainGeneratorEntry>());
     if (!worldToLoad.has_value()) return;
 
     VK_LOG("Starting game with new or existing world...");

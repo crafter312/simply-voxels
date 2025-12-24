@@ -3,6 +3,7 @@
 
 #include <optional>
 #include <memory>
+#include <vector>
 #include <string>
 #include <glm/glm.hpp> // For glm::vec3, glm::ivec3
 #include "../render/VulkanCommon.hpp" // Include for GLFW types
@@ -15,6 +16,7 @@
 // Forward declaration to avoid circular dependencies
 class SimplyVoxelsApp;
 class InputManager;
+struct TerrainGeneratorEntry;
 // Forward declare GLFWwindow to avoid including the full glfw3.h here
 struct GLFWwindow;
 
@@ -23,7 +25,9 @@ public:
     explicit UIManager(SimplyVoxelsApp& app, InputManager& inputMgr);
 
     // Draws the main menu and returns the metadata of a world if one is selected to be loaded.
-    std::optional<WorldMetadata> drawMainMenu();
+    // Draws the main menu and returns the metadata of a world if one is selected to be loaded.
+    // Requires the available terrain generators to display in the Create World flow.
+    std::optional<WorldMetadata> drawMainMenu(const std::vector<TerrainGeneratorEntry>& generators);
 
     // Draws the pause menu.
     void drawPauseMenu();
@@ -58,7 +62,8 @@ private:
     // Private helper functions for drawing different menu screens
     void drawMainMenuRoot();
     std::optional<WorldMetadata> drawMainMenuWorldSelect();
-    std::optional<WorldMetadata> drawMainMenuCreateWorld();
+    // Accepts the available generator entries and sets world metadata.generatorId on create.
+    std::optional<WorldMetadata> drawMainMenuCreateWorld(const std::vector<TerrainGeneratorEntry>& generators);
     void drawWorldContextMenu(const WorldMetadata& world);
 
     // Helper to format timestamps

@@ -2,6 +2,7 @@
 #include "../SimplyVoxelsApp.hpp" // Include the full definition for implementation
 #include "../world/Chunk.hpp" // For CHUNK_SIDE_LENGTH
 #include "../ui/InputManager.hpp" // Include InputManager definition
+#include "../world/terrain/TerrainGeneratorManager.hpp"
 #include <cmath> // For std::floor
 #include <cstdio> // For snprintf
 #include <chrono>
@@ -20,7 +21,7 @@ UIManager::UIManager(SimplyVoxelsApp& app, InputManager& inputMgr) : m_app(app),
 
 /******** MAIN MENU FUNCTIONS ********/
 
-std::optional<WorldMetadata> UIManager::drawMainMenu() {
+std::optional<WorldMetadata> UIManager::drawMainMenu(const std::vector<TerrainGeneratorEntry>& generators) {
     std::optional<WorldMetadata> worldToLoad = std::nullopt;
 
     switch (m_currentMenuScreen) {
@@ -31,7 +32,7 @@ std::optional<WorldMetadata> UIManager::drawMainMenu() {
             worldToLoad = drawMainMenuWorldSelect();
             break;
         case MenuScreenState::CREATE_WORLD:
-            worldToLoad = drawMainMenuCreateWorld();
+            worldToLoad = drawMainMenuCreateWorld(generators);
             break;
     }
 
@@ -251,12 +252,14 @@ void UIManager::drawWorldContextMenu(const WorldMetadata& world) {
     }
 }
 
-std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld() {
+std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld(const std::vector<TerrainGeneratorEntry>& generators) {
     std::optional<WorldMetadata> worldToLoad = std::nullopt;
 
     static char worldNameBuffer[128] = "New World";
     static char seedBuffer[64] = "";
     static bool useRandomSeed = true;
+    // Selected generator index persists between frames while in the create-world flow
+    static int selectedGeneratorIndex = 0;
 
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
@@ -271,6 +274,61 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld() {
 
     ImGui::Text("World Name:");
     ImGui::InputText("##WorldName", worldNameBuffer, sizeof(worldNameBuffer));
+
+    // --- Terrain Generator Selection ---
+    ImGui::Spacing();
+    ImGui::Text("Terrain Generator:");
+
+    // Preview label for the combo
+    std::string preview = "Default";
+    if (!generators.empty()) {
+        if (selectedGeneratorIndex < 0 || selectedGeneratorIndex >= static_cast<int>(generators.size())) selectedGeneratorIndex = 0;
+        preview = generators[selectedGeneratorIndex].metadata.name + " (" + generators[selectedGeneratorIndex].metadata.id + ")";
+    }
+
+    if (ImGui::BeginCombo("##GeneratorCombo", preview.c_str())) {
+        // Maximum description characters to display per option
+        const size_t MAX_DESC_CHARS = 200;
+        // Wrap width inside each option (leave some padding)
+        float maxOptionWrapWidth = std::max(120.0f, contentWidth - 20.0f);
+
+        for (int i = 0; i < static_cast<int>(generators.size()); ++i) {
+            const auto& gen = generators[i];
+
+            std::string title = gen.metadata.name;
+            std::string authorVer = gen.metadata.author + " v" + gen.metadata.version;
+            std::string desc = gen.metadata.description;
+            if (desc.size() > MAX_DESC_CHARS) {
+                desc = desc.substr(0, MAX_DESC_CHARS - 3) + "...";
+            }
+
+            // Measure wrapped text heights
+            ImVec2 titleSize = ImGui::CalcTextSize(title.c_str(), nullptr, false, maxOptionWrapWidth);
+            ImVec2 authorSize = ImGui::CalcTextSize(authorVer.c_str(), nullptr, false, maxOptionWrapWidth);
+            ImVec2 descSize = ImGui::CalcTextSize(desc.c_str(), nullptr, false, maxOptionWrapWidth);
+
+            float totalH = titleSize.y + authorSize.y + descSize.y + 12.0f; // padding
+
+            // Unique id for selectable
+            std::string selectableId = "##gen_select_" + std::to_string(i);
+            if (ImGui::Selectable(selectableId.c_str(), selectedGeneratorIndex == i, 0, ImVec2(0, totalH))) {
+                selectedGeneratorIndex = i;
+            }
+
+            // Draw the generator metadata inside the selectable rectangle
+            ImVec2 rectMin = ImGui::GetItemRectMin();
+            ImVec2 drawPos = ImVec2(rectMin.x + 6.0f, rectMin.y + 6.0f);
+            ImGui::SetCursorScreenPos(drawPos);
+            ImGui::PushTextWrapPos(rectMin.x + maxOptionWrapWidth);
+            ImGui::TextUnformatted(title.c_str());
+            ImGui::TextUnformatted(authorVer.c_str());
+            ImGui::TextWrapped(desc.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::Separator();
+        }
+
+        ImGui::EndCombo();
+    }
 
     ImGui::Checkbox("Random Seed", &useRandomSeed);
     if (!useRandomSeed) {
