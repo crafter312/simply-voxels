@@ -8,6 +8,7 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip> // For std::fixed and std::setprecision
+#include <sstream>
 #include "imgui_stdlib.h" // For std::string support in ImGui::InputText
 
 // --- UI Configuration Constants ---
@@ -296,34 +297,130 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld(const std::vecto
             const auto& gen = generators[i];
 
             std::string title = gen.metadata.name;
-            std::string authorVer = gen.metadata.author + " v" + gen.metadata.version;
+            std::string authorVer = gen.metadata.author + ", v" + gen.metadata.version;
             std::string desc = gen.metadata.description;
             if (desc.size() > MAX_DESC_CHARS) {
                 desc = desc.substr(0, MAX_DESC_CHARS - 3) + "...";
             }
 
-            // Measure wrapped text heights
-            ImVec2 titleSize = ImGui::CalcTextSize(title.c_str(), nullptr, false, maxOptionWrapWidth);
-            ImVec2 authorSize = ImGui::CalcTextSize(authorVer.c_str(), nullptr, false, maxOptionWrapWidth);
-            ImVec2 descSize = ImGui::CalcTextSize(desc.c_str(), nullptr, false, maxOptionWrapWidth);
+            // Compute available width inside popup and wrap width
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            const ImGuiStyle& style = ImGui::GetStyle();
+            const float innerPadX = style.FramePadding.x + 6.0f; // symmetric horizontal padding
+            // Calculate wrap width consistently from availWidth and horizontal padding
+            float wrapWidth = std::max(120.0f, availWidth - (innerPadX * 2.0f));
+            // Small epsilon to avoid a 1-pixel rounding mismatch between CalcTextSize and
+            // TextWrapped which can produce an extra empty line when text hits the wrap boundary.
+            const float WRAP_EPS = 1.0f;
+            float measuredWrap = std::max(8.0f, wrapWidth - WRAP_EPS);
 
-            float totalH = titleSize.y + authorSize.y + descSize.y + 12.0f; // padding
+            // Measure text heights. Title/author are single-line (no wrap).
+            ImVec2 titleSize = ImGui::CalcTextSize(title.c_str(), nullptr, false, 0.0f);
+            ImVec2 authorSize = ImGui::CalcTextSize(authorVer.c_str(), nullptr, false, 0.0f);
 
-            // Unique id for selectable
-            std::string selectableId = "##gen_select_" + std::to_string(i);
-            if (ImGui::Selectable(selectableId.c_str(), selectedGeneratorIndex == i, 0, ImVec2(0, totalH))) {
-                selectedGeneratorIndex = i;
+            // Deterministic word-wrap for the description so measured and rendered
+            // heights always match (avoids TextWrapped/CalcTextSize rounding mismatch).
+            auto wrap_words = [&](const std::string &text, float maxWidth) {
+                std::vector<std::string> lines;
+                std::istringstream iss(text);
+                std::string word;
+                std::string line;
+                while (iss >> word) {
+                    std::string test = line.empty() ? word : line + " " + word;
+                    ImVec2 sz = ImGui::CalcTextSize(test.c_str());
+                    if (sz.x > maxWidth && !line.empty()) {
+                        lines.push_back(line);
+                        line = word;
+                    } else {
+                        line = test;
+                    }
+                }
+                if (!line.empty()) lines.push_back(line);
+                return lines;
+            };
+
+            std::vector<std::string> descLines = wrap_words(desc, measuredWrap);
+            ImVec2 descSize = ImVec2(0, 0);
+            for (const auto &ln : descLines) {
+                ImVec2 s = ImGui::CalcTextSize(ln.c_str(), nullptr, false, 0.0f);
+                descSize.y += s.y;
+                descSize.x = std::max(descSize.x, s.x);
             }
 
-            // Draw the generator metadata inside the selectable rectangle
-            ImVec2 rectMin = ImGui::GetItemRectMin();
-            ImVec2 drawPos = ImVec2(rectMin.x + 6.0f, rectMin.y + 6.0f);
-            ImGui::SetCursorScreenPos(drawPos);
-            ImGui::PushTextWrapPos(rectMin.x + maxOptionWrapWidth);
+            // Add style padding and spacing to ensure reserved height matches rendered content
+            float itemSpacingY = style.ItemSpacing.y;
+            float separatorH = 1.0f;
+            // Use symmetric vertical padding (top & bottom). Slightly reduce the top inset
+            // so the visual text block appears vertically centered within each option box.
+            float padTop = style.FramePadding.y + 2.0f;
+            float padBottom = style.FramePadding.y + 2.0f;
+            // Reduce vertical spacing a bit because we add small fractional gaps while rendering
+            float totalH = titleSize.y + authorSize.y + descSize.y + padTop + padBottom + (itemSpacingY * 0.5f) + separatorH;
+
+            // Reserve layout space and handle clicks explicitly to avoid overlap
+            std::string itemId = "gen_item_" + std::to_string(i);
+            ImGui::PushID(itemId.c_str());
+
+            // Compute item rect from current cursor and measured total height
+            ImVec2 rectMin = ImGui::GetCursorScreenPos();
+            ImVec2 rectMax = ImVec2(rectMin.x + availWidth, rectMin.y + totalH);
+
+            // Detect hover/click by checking mouse against the rect directly
+            ImVec2 mousePos = ImGui::GetMousePos();
+            bool isHoveredRect = (mousePos.x >= rectMin.x && mousePos.x <= rectMax.x && mousePos.y >= rectMin.y && mousePos.y <= rectMax.y) && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+            bool wasClicked = isHoveredRect && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+
+            // Draw highlight/background only for the hovered item (avoid constant highlight on selected)
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImU32 bgCol = ImGui::GetColorU32(ImGuiCol_FrameBg);
+            if (isHoveredRect) {
+                bgCol = ImGui::GetColorU32(ImGuiCol_HeaderHovered);
+            }
+            drawList->AddRectFilled(rectMin, rectMax, bgCol, style.FrameRounding);
+
+            // Handle click (select and close the combo popup)
+            if (wasClicked) {
+                selectedGeneratorIndex = i;
+                ImGui::CloseCurrentPopup();
+            }
+
+
+            // Render text into the reserved rectangle with precise positioning so all lines align
+            float leftX = rectMin.x + innerPadX;
+            float wrapPosX = rectMax.x - innerPadX;
+
+            float y = rectMin.y + padTop;
+
+            // Title (single-line)
+            ImVec2 titleSz = ImGui::CalcTextSize(title.c_str(), nullptr, false, 0.0f);
+            ImGui::SetCursorScreenPos(ImVec2(leftX, y));
             ImGui::TextUnformatted(title.c_str());
+            y += titleSz.y;
+
+            // Small vertical gap
+            y += style.ItemSpacing.y * 0.25f;
+
+            // Author/version line (aligned with title)
+            ImVec2 authorSz = ImGui::CalcTextSize(authorVer.c_str(), nullptr, false, wrapPosX - leftX);
+            ImGui::SetCursorScreenPos(ImVec2(leftX, y));
             ImGui::TextUnformatted(authorVer.c_str());
-            ImGui::TextWrapped(desc.c_str());
-            ImGui::PopTextWrapPos();
+            y += authorSz.y;
+
+            // Small vertical gap before description
+            y += style.ItemSpacing.y * 0.25f;
+
+            // Description (may wrap to multiple lines). Render lines produced by the
+            // deterministic wrapper so heights match measured values exactly.
+            for (const auto &ln : descLines) {
+                ImVec2 lnSz = ImGui::CalcTextSize(ln.c_str(), nullptr, false, 0.0f);
+                ImGui::SetCursorScreenPos(ImVec2(leftX, y));
+                ImGui::TextUnformatted(ln.c_str());
+                y += lnSz.y;
+            }
+
+            // Advance layout cursor to the end of the reserved rect so next item is placed correctly
+            ImGui::SetCursorScreenPos(rectMax);
+            ImGui::PopID();
             ImGui::Separator();
         }
 
@@ -351,6 +448,10 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld(const std::vecto
         }
         // Create the world and return its metadata to start the game
         worldToLoad = m_saveGameManager->createNewWorld(worldNameBuffer, seed);
+        if (worldToLoad.has_value() && !generators.empty()) {
+            if (selectedGeneratorIndex < 0 || selectedGeneratorIndex >= static_cast<int>(generators.size())) selectedGeneratorIndex = 0;
+            worldToLoad->generatorId = generators[selectedGeneratorIndex].metadata.id;
+        }
     }
 
     if (ImGui::Button("Cancel", ImVec2(contentWidth, 40))) {

@@ -6,6 +6,7 @@
 
 #include "ITerrainGenerator.hpp"
 #include "SimplePerlinGenerator.hpp"
+#include "SimpleFlatGenerator.hpp"
 #include "WasmTerrainGenerator.hpp"
 
 namespace fs = std::filesystem;
@@ -72,11 +73,22 @@ void TerrainGeneratorManager::registerBuiltInGenerators() {
     defaultEntry.metadata.name = "Simple Perlin (Built-in)";
     defaultEntry.metadata.description = "Standard CPU-based Perlin noise generator.";
     defaultEntry.metadata.version = "1.0";
-    defaultEntry.metadata.author = "Simply Voxels";
+    defaultEntry.metadata.author = "crafter312";
     defaultEntry.isBuiltIn = true;
 
     m_availableGenerators.push_back(defaultEntry);
     m_idToIndexMap[defaultEntry.metadata.id] = m_availableGenerators.size() - 1;
+
+    TerrainGeneratorEntry simpleFlatGenerator;
+    simpleFlatGenerator.metadata.id = "simpleFlatGenerator";
+    simpleFlatGenerator.metadata.name = "Simple Flat (Built-in)";
+    simpleFlatGenerator.metadata.description = "Basic flat world generator.";
+    simpleFlatGenerator.metadata.version = "1.0";
+    simpleFlatGenerator.metadata.author = "crafter312";
+    simpleFlatGenerator.isBuiltIn = true;
+
+    m_availableGenerators.push_back(simpleFlatGenerator);
+    m_idToIndexMap[simpleFlatGenerator.metadata.id] = m_availableGenerators.size() - 1;
 }
 
 void TerrainGeneratorManager::scanForWasmGenerators() {
