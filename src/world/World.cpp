@@ -742,10 +742,14 @@ std::optional<glm::i64vec3> World::getPlayerSpawnPos() const {
     int spawnChunkX = static_cast<int>(std::round(radius_in_chunks * std::cos(angle)));
     int spawnChunkZ = static_cast<int>(std::round(radius_in_chunks * std::sin(angle)));
 
-    // Check if the chosen chunk column (at a representative Y level, e.g., Y=0) is generated.
-    // Terrain generation is primarily XZ dependent, so checking one chunk in the column is usually sufficient.
-    // If your world has distinct generation patterns at different Y chunk levels, you might need a more sophisticated check.
-    glm::ivec3 representativeChunkCoordForGenCheck(spawnChunkX, 0, spawnChunkZ); // Using Y=0 as representative
+    // Check if the chosen chunk column is generated.
+    // Use the camera's current chunk Y as the representative vertical level so we check
+    // the same vertical band that the world is currently loading around the camera.
+    int representativeY = 0;
+    if (m_camera) {
+        representativeY = m_camera->getAbsoluteChunkPos().y;
+    }
+    glm::ivec3 representativeChunkCoordForGenCheck(spawnChunkX, representativeY, spawnChunkZ);
     if (getChunkGeneratedStatus(representativeChunkCoordForGenCheck) != ChunkGenStatus::LOADED_AND_GENERATED) {
         return std::nullopt; // Chosen spawn chunk area is not yet generated
     }
