@@ -198,6 +198,7 @@ void SimplyVoxelsApp::quitToMenu() {
 
 void SimplyVoxelsApp::startGame(const WorldMetadata& worldMeta) {
     VK_LOG("Starting game for world: " << worldMeta.worldName);
+    VK_LOG("Requested terrain generator id: '" << worldMeta.generatorId << "'");
 
     // 0. Configure Terrain Generator
     // We must do this before loading the world, as chunk generation might happen during load.

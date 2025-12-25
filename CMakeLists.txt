@@ -274,6 +274,7 @@ add_executable(SimplyVoxels
     src/world/ChunkMesher.cpp            # Add ChunkMesher namespace/functions
     src/world/terrain/TerrainGeneratorManager.cpp # Add TerrainGeneratorManager class
     src/world/terrain/SimplePerlinGenerator.cpp   # Add SimplePerlinGenerator class
+    src/world/terrain/SimpleFlatGenerator.cpp     # Add SimpleFlatGenerator class
     src/world/terrain/WasmTerrainGenerator.cpp    # Add WasmTerrainGenerator class
     src/resource/RegionManager.cpp       # Add RegionManager class
     src/world/SaveGameManager.cpp        # Add SaveGameManager class

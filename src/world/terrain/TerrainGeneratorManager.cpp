@@ -55,6 +55,9 @@ std::unique_ptr<ITerrainGenerator> TerrainGeneratorManager::createGenerator(cons
         if (entry.metadata.id == "default") {
             return std::make_unique<SimplePerlinGenerator>();
         }
+        else if (entry.metadata.id == "simpleFlatGenerator") {
+            return std::make_unique<SimpleFlatGenerator>();
+        }
         // Future built-in generators can be added here
     } else {
         if (m_engine) {
