@@ -285,8 +285,33 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld(const std::vecto
     if (!generators.empty()) {
         if (selectedGeneratorIndex < 0 || selectedGeneratorIndex >= static_cast<int>(generators.size())) selectedGeneratorIndex = 0;
         preview = generators[selectedGeneratorIndex].metadata.name + " (" + generators[selectedGeneratorIndex].metadata.id + ")";
+
+        // Keep the full, un-truncated preview for tooltip display
+        std::string fullPreview = preview;
+
+        // If the preview text is wider than the combo width, truncate with an ellipsis.
+        const ImGuiStyle& _style_local = ImGui::GetStyle();
+        float innerPadX_local = _style_local.FramePadding.x + 6.0f;
+        float maxPreviewW = std::max(40.0f, contentWidth - innerPadX_local * 2.0f);
+        auto ellipsize = [&](const std::string &s, float maxW) {
+            if (ImGui::CalcTextSize(s.c_str()).x <= maxW) return s;
+            const std::string ell = "...";
+            std::string out = s;
+            // Trim until the ellipsized string fits. This is simple and robust.
+            while (!out.empty() && ImGui::CalcTextSize((out + ell).c_str()).x > maxW) out.pop_back();
+            return out + ell;
+        };
+
+        preview = ellipsize(preview, maxPreviewW);
+        // store fullPreview in an outer scope variable by moving it out
+        // (we'll use it after the combo to show the tooltip)
+        // Note: fullPreview already contains the unmodified preview string.
     }
 
+    // Make the combo and its popup match the content width so the right edge lines up
+    // with the other buttons in this child. We push an item width that controls the
+    // overall combo widget width used by ImGui.
+    ImGui::PushItemWidth(contentWidth);
     if (ImGui::BeginCombo("##GeneratorCombo", preview.c_str())) {
         // Maximum description characters to display per option
         const size_t MAX_DESC_CHARS = 200;
@@ -303,8 +328,10 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld(const std::vecto
                 desc = desc.substr(0, MAX_DESC_CHARS - 3) + "...";
             }
 
-            // Compute available width inside popup and wrap width
-            float availWidth = ImGui::GetContentRegionAvail().x;
+            // Compute available width inside popup and wrap width. Use the
+            // `contentWidth` so the popup doesn't become narrower than the
+            // surrounding controls and lines up on the right edge.
+            float availWidth = contentWidth;
             const ImGuiStyle& style = ImGui::GetStyle();
             const float innerPadX = style.FramePadding.x + 6.0f; // symmetric horizontal padding
             // Calculate wrap width consistently from availWidth and horizontal padding
@@ -425,6 +452,22 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld(const std::vecto
         }
 
         ImGui::EndCombo();
+    }
+    ImGui::PopItemWidth();
+
+    // Show full un-truncated preview as a tooltip when hovering the combo preview.
+    // Older ImGui versions may not define delay flags; use the basic hovered check here.
+    if (!preview.empty() && ImGui::IsItemHovered()) {
+        // If we truncated earlier, reconstruct the fullPreview from generators
+        std::string fullPreviewTooltip = "";
+        if (!generators.empty() && selectedGeneratorIndex >= 0 && selectedGeneratorIndex < static_cast<int>(generators.size())) {
+            fullPreviewTooltip = generators[selectedGeneratorIndex].metadata.name + " (" + generators[selectedGeneratorIndex].metadata.id + ")";
+        }
+        if (!fullPreviewTooltip.empty()) {
+            ImGui::BeginTooltip();
+            ImGui::TextUnformatted(fullPreviewTooltip.c_str());
+            ImGui::EndTooltip();
+        }
     }
 
     ImGui::Checkbox("Random Seed", &useRandomSeed);
