@@ -98,19 +98,31 @@ void TerrainGeneratorManager::scanForWasmGenerators() {
     const fs::path generatorsDir = "resources/terrain_generators";
 
     if (!fs::exists(generatorsDir) || !fs::is_directory(generatorsDir)) {
+        std::cerr << "[TerrainGeneratorManager] Directory '" << generatorsDir << "' does not exist or is not a directory." << std::endl;
         return;
     }
 
+    std::cout << "[TerrainGeneratorManager] Scanning for WASM terrain generators in '" << generatorsDir << "'..." << std::endl;
     for (const auto& entry : fs::directory_iterator(generatorsDir)) {
-        if (!entry.is_directory()) continue;
+        std::cout << "[TerrainGeneratorManager] Checking entry: " << entry.path() << std::endl;
+        if (!entry.is_directory()) {
+            std::cerr << "[TerrainGeneratorManager] Skipping non-directory entry: " << entry.path() << std::endl;
+            continue;
+        }
 
         fs::path metadataPath = entry.path() / "metadata.json";
         fs::path wasmPath = entry.path() / "generator.wasm";
 
-        if (!fs::exists(metadataPath) || !fs::exists(wasmPath)) continue;
+        if (!fs::exists(metadataPath) || !fs::exists(wasmPath)) {
+            std::cerr << "[TerrainGeneratorManager] Skipping entry without required files: " << entry.path() << std::endl;
+            continue;
+        }
 
         auto metaOpt = GeneratorSave::loadMetadata(metadataPath.string());
-        if (!metaOpt) continue;
+        if (!metaOpt) {
+            std::cerr << "[TerrainGeneratorManager] Failed to load metadata for generator at: " << entry.path() << std::endl;
+            continue;
+        }
 
         TerrainGeneratorEntry genEntry;
         genEntry.metadata = *metaOpt;
@@ -122,5 +134,6 @@ void TerrainGeneratorManager::scanForWasmGenerators() {
 
         m_availableGenerators.push_back(genEntry);
         m_idToIndexMap[genEntry.metadata.id] = m_availableGenerators.size() - 1;
+        std::cout << "[TerrainGeneratorManager] Registered WASM generator: " << genEntry.metadata.name << " (ID: " << genEntry.metadata.id << ")" << std::endl;
     }
 }

@@ -16,6 +16,17 @@
             "dependsOn": ["CMake: build", "Run CPack"],
             "dependsOrder": "sequence",
             "group": "build"
+        },
+        {
+            "label": "Build WASM Generators (Windows)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceFolder}/scripts/build_wasm.ps1"
+            ],
+            "group": "build",
+            "problemMatcher": ["$gcc"]
         }
     ]
 }

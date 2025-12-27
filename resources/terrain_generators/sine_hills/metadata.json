@@ -1,0 +1,6 @@
+{
+    "author": "crafter312",
+    "description": "A terrain generator that creates simple hills using sine waves combined with Perlin noise for detail.",
+    "name": "Sine Hills",
+    "version": "1.0" 
+}
