@@ -4,7 +4,7 @@
 # Configuration
 $WASI_SDK = "C:/wasi-sdk"
 $GLM_PATH = "./build/_deps/glm-src"
-$SRC_DIR = "./src/wasm"
+$SRC_DIR = "./src/world/terrain/wasm"
 $OUT_DIR = "./resources/terrain_generators"
 
 # Compiler paths
