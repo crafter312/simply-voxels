@@ -95,7 +95,7 @@ void TerrainGeneratorManager::registerBuiltInGenerators() {
 }
 
 void TerrainGeneratorManager::scanForWasmGenerators() {
-    const fs::path generatorsDir = "resources/terrain_generators";
+    const fs::path generatorsDir = "../resources/terrain_generators";
 
     if (!fs::exists(generatorsDir) || !fs::is_directory(generatorsDir)) {
         std::cerr << "[TerrainGeneratorManager] Directory '" << generatorsDir << "' does not exist or is not a directory." << std::endl;

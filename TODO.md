@@ -15,7 +15,6 @@
 
 1. Wireframe mesh remains on screen sometimes when quitting back to the main menu from inside a world
 2. Game crashes when minimized (something about zero window size or something, I think)
-3. Fix persistence issue with WASM-based terrain generators (if you make a new world, generate some chunks, close the world, and then rejoin and generate more chunks, you'll see a noticable chunk boundary)
-4. Investigate why WASM-based terrain generators seem to be slower than build-in terrain generators
+3. Fix chunk boarder issue with WASM-based terrain generators (if you make a new world, generate some chunks, close the world, and then rejoin and generate more chunks, you'll see a noticable chunk boundary). Well, either this, or new chunks refuse to generate entirely. In the latter case, freshly deactivated regions seem to enter some kind of loop where they are continuously "added to queue for compaction." At this point, I have not done enough testing to really understand what is going on here.
 
 **It is also important to spend more time testing my program so that I can find more bugs.**
