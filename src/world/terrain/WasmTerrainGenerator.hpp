@@ -33,13 +33,24 @@ private:
     struct WasmInstanceDeleter { void operator()(wasm_instance_t* p) const { wasm_instance_delete(p); } };
     struct WasmFuncDeleter { void operator()(wasm_func_t* p) const { wasm_func_delete(p); } };
 
+    // IMPORTANT: Declaration order matters! C++ destroys members in reverse order.
+    // The instance holds references to the WASI stubs (as imports), so the instance
+    // must be destroyed BEFORE the WASI stubs. The module and store must be destroyed
+    // after everything that depends on them.
+    //
+    // Correct destruction order: instance -> wasiProcExit -> wasiRandomGet -> module -> store
+    // Therefore declaration order must be: store -> module -> wasiRandomGet -> wasiProcExit -> instance
+
     std::unique_ptr<wasm_store_t, WasmStoreDeleter> m_store;
     std::unique_ptr<wasm_module_t, WasmModuleDeleter> m_module;
-    std::unique_ptr<wasm_instance_t, WasmInstanceDeleter> m_instance;
 
-    // WASI stub functions (we own these)
+    // WASI stub functions (we own these) - must be declared BEFORE instance
+    // because the instance imports them and holds references to them
     std::unique_ptr<wasm_func_t, WasmFuncDeleter> m_wasiRandomGet;
     std::unique_ptr<wasm_func_t, WasmFuncDeleter> m_wasiProcExit;
+
+    // Instance must be declared LAST among WASM objects so it's destroyed FIRST
+    std::unique_ptr<wasm_instance_t, WasmInstanceDeleter> m_instance;
 
     // Pointers to exports (owned by the instance/store)
     const wasm_func_t* m_generateFunc = nullptr;

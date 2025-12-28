@@ -26,7 +26,7 @@ public:
      */
     const std::vector<WorldMetadata>& getAvailableWorlds() const { return m_worlds; }
 
-    WorldMetadata createNewWorld(const std::string& worldName, std::optional<int64_t> seed);
+    WorldMetadata createNewWorld(const std::string& worldName, const std::string& generatorId, std::optional<int64_t> seed);
 
     /**
      * @brief Deletes a world from the filesystem.

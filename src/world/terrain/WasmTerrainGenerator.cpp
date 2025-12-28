@@ -277,12 +277,18 @@ WasmTerrainGenerator::WasmTerrainGenerator(wasm_engine_t* engine, const std::str
             std::cout << "[WASM]       -> Kept as memory" << std::endl;
         }
 
-        if (!kept) {
-            wasm_extern_delete(item); // Release unneeded exports
-        }
+        // Note: We do NOT delete individual exports here. The individual export
+        // objects (wasm_extern_t*) are owned by the instance, not by us.
+        // We just keep pointers to the ones we need.
         std::cout.flush();
     }
     wasm_exporttype_vec_delete(&export_types);
+    // NOTE: We intentionally do NOT call wasm_extern_vec_delete(&exports) here.
+    // Although the documentation says we "own" the vector, calling
+    // wasm_extern_vec_delete would delete the wasm_extern_t* objects inside,
+    // which would invalidate our pointers (m_generateFunc, m_initializeFunc,
+    // m_memory). The exports are managed by the instance and will be cleaned
+    // up when the instance is destroyed.
 
     std::cout << "[WASM] Step 7: generate=" << (m_generateFunc ? "YES" : "NO")
               << " _initialize=" << (m_initializeFunc ? "YES" : "NO")
@@ -374,11 +380,17 @@ WasmTerrainGenerator::WasmTerrainGenerator(wasm_engine_t* engine, const std::str
 }
 
 WasmTerrainGenerator::~WasmTerrainGenerator() {
-    // Clean up the exports we took ownership of
-    if (m_generateFunc) wasm_func_delete(const_cast<wasm_func_t*>(m_generateFunc));
-    if (m_initializeFunc) wasm_func_delete(const_cast<wasm_func_t*>(m_initializeFunc));
-    if (m_memory) wasm_memory_delete(m_memory);
-    // Note: m_wasiRandomGet and m_wasiProcExit are cleaned up by unique_ptr
+    // Clear the global memory pointer if it points to our memory
+    if (g_wasmMemoryForCallback == m_memory) {
+        g_wasmMemoryForCallback = nullptr;
+    }
+    // Note: m_generateFunc, m_initializeFunc, and m_memory are NOT owned by us.
+    // They are owned by the wasm_instance_t (m_instance) and will be cleaned up
+    // when m_instance is destroyed by its unique_ptr deleter.
+    // We must NOT call wasm_func_delete() or wasm_memory_delete() on them.
+
+    // m_wasiRandomGet and m_wasiProcExit ARE owned by us (we created them with
+    // wasm_func_new_with_env) and are cleaned up by their unique_ptr deleters.
 }
 
 void WasmTerrainGenerator::createWasiStubs() {

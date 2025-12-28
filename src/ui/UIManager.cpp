@@ -489,12 +489,14 @@ std::optional<WorldMetadata> UIManager::drawMainMenuCreateWorld(const std::vecto
                 std::cerr << "Invalid seed format: " << e.what() << std::endl;
             }
         }
-        // Create the world and return its metadata to start the game
-        worldToLoad = m_saveGameManager->createNewWorld(worldNameBuffer, seed);
-        if (worldToLoad.has_value() && !generators.empty()) {
+        // Determine the generator ID to use
+        std::string generatorId = "default";
+        if (!generators.empty()) {
             if (selectedGeneratorIndex < 0 || selectedGeneratorIndex >= static_cast<int>(generators.size())) selectedGeneratorIndex = 0;
-            worldToLoad->generatorId = generators[selectedGeneratorIndex].metadata.id;
+            generatorId = generators[selectedGeneratorIndex].metadata.id;
         }
+        // Create the world and return its metadata to start the game
+        worldToLoad = m_saveGameManager->createNewWorld(worldNameBuffer, generatorId, seed);
     }
 
     if (ImGui::Button("Cancel", ImVec2(contentWidth, 40))) {

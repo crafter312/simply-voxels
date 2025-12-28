@@ -43,30 +43,45 @@ bool TerrainGeneratorManager::hasGenerator(const std::string& id) const {
 }
 
 std::unique_ptr<ITerrainGenerator> TerrainGeneratorManager::createGenerator(const std::string& id) {
+    std::cout << "[TerrainGeneratorManager] createGenerator called with id: '" << id << "'" << std::endl;
+
     auto it = m_idToIndexMap.find(id);
     if (it == m_idToIndexMap.end()) {
-        std::cerr << "Generator ID '" << id << "' not found. Falling back to default." << std::endl;
+        std::cerr << "[TerrainGeneratorManager] Generator ID '" << id << "' not found. Falling back to default." << std::endl;
         return std::make_unique<SimplePerlinGenerator>();
     }
 
     const auto& entry = m_availableGenerators[it->second];
+    std::cout << "[TerrainGeneratorManager] Found entry: isBuiltIn=" << entry.isBuiltIn
+              << ", metadata.id='" << entry.metadata.id << "'" << std::endl;
 
     if (entry.isBuiltIn) {
         if (entry.metadata.id == "default") {
+            std::cout << "[TerrainGeneratorManager] Creating SimplePerlinGenerator (default)" << std::endl;
             return std::make_unique<SimplePerlinGenerator>();
         }
         else if (entry.metadata.id == "simpleFlatGenerator") {
+            std::cout << "[TerrainGeneratorManager] Creating SimpleFlatGenerator" << std::endl;
             return std::make_unique<SimpleFlatGenerator>();
         }
         // Future built-in generators can be added here
     } else {
+        std::cout << "[TerrainGeneratorManager] WASM generator path: " << entry.wasmPath.string() << std::endl;
+        std::cout << "[TerrainGeneratorManager] m_engine = " << (void*)m_engine << std::endl;
         if (m_engine) {
-            return std::make_unique<WasmTerrainGenerator>(m_engine, entry.wasmPath.string());
+            try {
+                std::cout << "[TerrainGeneratorManager] Creating WasmTerrainGenerator..." << std::endl;
+                return std::make_unique<WasmTerrainGenerator>(m_engine, entry.wasmPath.string());
+            } catch (const std::exception& e) {
+                std::cerr << "[TerrainGeneratorManager] Failed to create WASM generator '" << id << "': " << e.what() << std::endl;
+                std::cerr << "[TerrainGeneratorManager] Falling back to default generator." << std::endl;
+            }
         } else {
-            std::cerr << "Cannot create WASM generator: Engine not initialized." << std::endl;
+            std::cerr << "[TerrainGeneratorManager] Cannot create WASM generator: Engine not initialized." << std::endl;
         }
     }
 
+    std::cout << "[TerrainGeneratorManager] Falling back to SimplePerlinGenerator" << std::endl;
     return std::make_unique<SimplePerlinGenerator>();
 }
 

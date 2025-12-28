@@ -51,7 +51,7 @@ SaveGameManager::SaveGameManager(const std::string& savesPath) : m_savesPath(sav
     }
 }
 
-WorldMetadata SaveGameManager::createNewWorld(const std::string& worldName, std::optional<int64_t> seed) {
+WorldMetadata SaveGameManager::createNewWorld(const std::string& worldName, const std::string& generatorId, std::optional<int64_t> seed) {
     // 1. Generate timestamps and seed
     const auto now = std::chrono::system_clock::now();
     const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
@@ -83,6 +83,7 @@ WorldMetadata SaveGameManager::createNewWorld(const std::string& worldName, std:
     WorldMetadata newWorldMeta;
     newWorldMeta.worldName = worldName;
     newWorldMeta.directoryName = directoryName;
+    newWorldMeta.generatorId = generatorId;
     newWorldMeta.seed = worldSeed;
     newWorldMeta.creationTimestamp = timestamp;
     newWorldMeta.lastPlayedTimestamp = timestamp; // It's being played right now
