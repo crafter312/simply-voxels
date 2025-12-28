@@ -8,6 +8,7 @@
 #include "SimplePerlinGenerator.hpp"
 #include "SimpleFlatGenerator.hpp"
 #include "WasmTerrainGenerator.hpp"
+#include "../../util/DebugLog.hpp"
 
 namespace fs = std::filesystem;
 
@@ -43,7 +44,7 @@ bool TerrainGeneratorManager::hasGenerator(const std::string& id) const {
 }
 
 std::unique_ptr<ITerrainGenerator> TerrainGeneratorManager::createGenerator(const std::string& id) {
-    std::cout << "[TerrainGeneratorManager] createGenerator called with id: '" << id << "'" << std::endl;
+    VK_LOG("[TerrainGeneratorManager] createGenerator called with id: '" << id << "'");
 
     auto it = m_idToIndexMap.find(id);
     if (it == m_idToIndexMap.end()) {
@@ -52,25 +53,25 @@ std::unique_ptr<ITerrainGenerator> TerrainGeneratorManager::createGenerator(cons
     }
 
     const auto& entry = m_availableGenerators[it->second];
-    std::cout << "[TerrainGeneratorManager] Found entry: isBuiltIn=" << entry.isBuiltIn
-              << ", metadata.id='" << entry.metadata.id << "'" << std::endl;
+    VK_LOG("[TerrainGeneratorManager] Found entry: isBuiltIn=" << entry.isBuiltIn
+              << ", metadata.id='" << entry.metadata.id << "'");
 
     if (entry.isBuiltIn) {
         if (entry.metadata.id == "default") {
-            std::cout << "[TerrainGeneratorManager] Creating SimplePerlinGenerator (default)" << std::endl;
+            VK_LOG("[TerrainGeneratorManager] Creating SimplePerlinGenerator (default)");
             return std::make_unique<SimplePerlinGenerator>();
         }
         else if (entry.metadata.id == "simpleFlatGenerator") {
-            std::cout << "[TerrainGeneratorManager] Creating SimpleFlatGenerator" << std::endl;
+            VK_LOG("[TerrainGeneratorManager] Creating SimpleFlatGenerator");
             return std::make_unique<SimpleFlatGenerator>();
         }
         // Future built-in generators can be added here
     } else {
-        std::cout << "[TerrainGeneratorManager] WASM generator path: " << entry.wasmPath.string() << std::endl;
-        std::cout << "[TerrainGeneratorManager] m_engine = " << (void*)m_engine << std::endl;
+        VK_LOG("[TerrainGeneratorManager] WASM generator path: " << entry.wasmPath.string());
+        VK_LOG("[TerrainGeneratorManager] m_engine = " << (void*)m_engine);
         if (m_engine) {
             try {
-                std::cout << "[TerrainGeneratorManager] Creating WasmTerrainGenerator..." << std::endl;
+                VK_LOG("[TerrainGeneratorManager] Creating WasmTerrainGenerator...");
                 return std::make_unique<WasmTerrainGenerator>(m_engine, entry.wasmPath.string());
             } catch (const std::exception& e) {
                 std::cerr << "[TerrainGeneratorManager] Failed to create WASM generator '" << id << "': " << e.what() << std::endl;
@@ -119,7 +120,7 @@ void TerrainGeneratorManager::scanForWasmGenerators() {
 
     std::cout << "[TerrainGeneratorManager] Scanning for WASM terrain generators in '" << generatorsDir << "'..." << std::endl;
     for (const auto& entry : fs::directory_iterator(generatorsDir)) {
-        std::cout << "[TerrainGeneratorManager] Checking entry: " << entry.path() << std::endl;
+        VK_LOG("[TerrainGeneratorManager] Checking entry: " << entry.path());
         if (!entry.is_directory()) {
             std::cerr << "[TerrainGeneratorManager] Skipping non-directory entry: " << entry.path() << std::endl;
             continue;

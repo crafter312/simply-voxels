@@ -1,5 +1,6 @@
 #include "SaveGameManager.hpp"
 #include "../resource/json/WorldMetadata.hpp"
+#include "../util/DebugLog.hpp"
 
 #include <filesystem> // For directory operations
 #include <optional>
@@ -174,7 +175,7 @@ void SaveGameManager::renameWorld(const std::string& directoryName, const std::s
     std::filesystem::path metadataPath = std::filesystem::path(m_savesPath) / it->directoryName / "world.meta";
     WorldSave::saveMetadata(*it, metadataPath.string());
 
-    std::cout << "[SaveGameManager] Renamed world in directory '" << directoryName << "' to new name '" << newWorldName << "'" << std::endl;
+    VK_LOG("[SaveGameManager] Renamed world in directory '" << directoryName << "' to new name '" << newWorldName << "'");
 }
 
 /******** PRIVATE MEMBER FUNCTIONS ********/
